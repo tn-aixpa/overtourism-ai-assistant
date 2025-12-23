@@ -6,6 +6,9 @@ def empty_state():
     return AgentState(
         user_message="",
         simulation_id=None,
+        simulation_data = None,
+        simulation_data_loaded_at=None,
+        interact_blocked_until=None,
         sim1=None,
         sim2=None,
         pending_inputs={},

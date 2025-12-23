@@ -30,11 +30,51 @@ Router (LangGraph conditional edges)
 &nbsp;&nbsp;├── Simulation Creation (multi-step)  
 &nbsp;&nbsp;└── *... possible other nodes*
 
-## Choice motivation
+## Agent frameworks vs custom build
 
-LangX vs custom build.
+Custo build agentic systems are recommanded when: 
+- You need strict data control (GDPR, audits)
+- You want transparent logs & reasoning
+- You're integrating deeply with internal systems
+- You want long-term maintainability
 
-Still using ollama run locally.
+However, framworks have several advantages:
+- They are faster to implement and better during first experimental phases
+- They are recommended in case of multi-agent orchestration
+- No need to maintain infra
+
+The hidden cost of agent frameworks are:
+- hide state transitions
+- introduce non-determinism
+- change APIs frequently
+
+# interact_simulation pipeline
+
+User question → Expert applicability check (per expert) → Expert answers (parallel, independent) → Answer merger → Final response
+
+Each expert:
+- Sees the same data
+- Has a clearly defined scope
+- Can explicitly say "not applicable"
+
+Example experts:
+- Data Scientist
+    - Statistics
+    - Trends
+    - Anomalies
+    - Correlations
+
+- Mobility Expert
+    - Traffic flow
+    - Congestion
+    - Travel times
+    - Mode choice
+
+- Environment Expert
+    - Emissions
+    - Pollution
+    - Energy consumption
+    - Sustainability indicators
 
 ## Useful material
 
@@ -43,6 +83,7 @@ Links:
 - https://docs.langchain.com/oss/python/langgraph/agentic-rag
 - https://github.com/langchain-ai/langgraph?tab=readme-ov-file
 - https://medium.com/@lorevanoudenhove/how-to-build-ai-agents-with-langgraph-a-step-by-step-guide-5d84d9c7e832
+- https://learn.deeplearning.ai/courses/ai-agents-in-langgraph/lesson/qyrpc/introduction
 
 
 Considering following this course:
