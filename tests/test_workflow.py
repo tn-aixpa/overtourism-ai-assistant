@@ -3,9 +3,8 @@ from graph import app
 def test_full_workflow():
     state = {
         "user_message": "Run a simulation with model X and duration 100",
-        "simulation_id": None,
-        "sim1": None,
-        "sim2": None,
+        "sim1_id": None,
+        "sim2_id": None,
         "pending_inputs": {},
         "missing_inputs": [],
         "awaiting_confirmation": False,

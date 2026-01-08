@@ -11,15 +11,14 @@ class SimulationInputs(TypedDict, total=False):
 class AgentState(TypedDict):
     user_message: str
 
-    # Interact-simulation variables
-    simulation_id: Optional[str]
+    sim1_id: Optional[str]
+    sim2_id: Optional[str]
+
     simulation_data: Optional[Dict[str, Any]]
     simulation_data_loaded_at: Optional[datetime]
 
     interact_blocked_until: Optional[datetime]
 
-    sim1: Optional[str]
-    sim2: Optional[str]
 
     pending_inputs: SimulationInputs
     missing_inputs: List[str]

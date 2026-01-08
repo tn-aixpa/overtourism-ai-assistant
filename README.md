@@ -32,7 +32,7 @@ Router (LangGraph conditional edges)
 
 ## Agent frameworks vs custom build
 
-Custo build agentic systems are recommanded when: 
+Custom build agentic systems are recommanded when: 
 - You need strict data control (GDPR, audits)
 - You want transparent logs & reasoning
 - You're integrating deeply with internal systems
@@ -91,7 +91,7 @@ Considering following this course:
 
 ## TODO
 
-- Implement node code
+- Implement nodes code
 - Decide how to deal with memory in each node
     - Simple version: memory stored in LangGraph’s state;
     - Improved version: LangChain Memory objects (e.g. ConversationBufferMemory).

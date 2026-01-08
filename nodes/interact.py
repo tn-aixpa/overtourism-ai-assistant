@@ -12,7 +12,7 @@ def interact_simulation(state: AgentState) -> AgentState:
     # load data if needed
     if state["simulation_data"] is None:
         try:
-            data = load_simulation_data(state["simulation_id"])
+            data = load_simulation_data(state["sim1_id"])
             state["simulation_data"] = data
             state["simulation_data_loaded_at"] = now
         except Exception:
@@ -46,14 +46,14 @@ def blocked_message(until: datetime) -> str:
         f"Please try again after {readable_time}."
     )
 
-def load_simulation_data(simulation_id: str) -> dict:
+def load_simulation_data(sim1_id: str) -> dict:
     """
     Retrieve simulation data associated with a simulation ID.
 
     Raises:
         RuntimeError if data cannot be retrieved.
     """
-    if simulation_id is None:
+    if sim1_id is None:
         raise RuntimeError("No simulation_id provided")
 
     # Placeholder: replace with real download logic
@@ -63,7 +63,7 @@ def load_simulation_data(simulation_id: str) -> dict:
             "co2_emissions": [100, 120, 130],
         },
         "metadata": {
-            "simulation_id": simulation_id,
+            "sim1_id": sim1_id,
         },
     }
 

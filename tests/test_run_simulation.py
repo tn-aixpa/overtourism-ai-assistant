@@ -18,5 +18,5 @@ def test_confirm(empty_state):
 def test_run_simulation(empty_state):
     empty_state["pending_inputs"] = {"model": "X", "duration": 100, "parameters": {}}
     state = run_simulation(empty_state)
-    assert state["simulation_id"] is not None
+    assert state["sim1_id"] is not None
     assert state["running_simulation"] is False
