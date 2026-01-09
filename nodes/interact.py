@@ -1,12 +1,12 @@
 from state import AgentState
-from datetime import datetime, timedelta
+from datetime import datetime
 
 def interact_simulation(state: AgentState) -> AgentState:
     now = datetime.now()
 
-    # block guard
-    if state.interact_blocked_until and now < state.interact_blocked_until:
-        state.response = blocked_message(state.interact_blocked_until)
+    # check state
+    if state.sim1_id is None:
+        state.response = "Something went wrong. No simulation is available to interact with."
         return state
 
     # load data if needed
@@ -16,8 +16,7 @@ def interact_simulation(state: AgentState) -> AgentState:
             state.simulation_data = data
             state.simulation_data_loaded_at = now
         except Exception:
-            state.interact_blocked_until = now + timedelta(hours=2)
-            state.response = "Simulation data is not available right now. Please try again later."
+            state.response = f"Simulation data for id {state.sim1_id} is not available right now. Please try again later."
             return state
 
     # answer user question
@@ -35,16 +34,6 @@ def interact_simulation(state: AgentState) -> AgentState:
     )
 
     return state
-
-def blocked_message(until: datetime) -> str:
-    """
-    Return a user-facing message explaining that interaction is blocked.
-    """
-    readable_time = until.strftime("%Y-%m-%d %H:%M")
-    return (
-        "Simulation data for this run is currently unavailable.\n"
-        f"Please try again after {readable_time}."
-    )
 
 def load_simulation_data(sim1_id: str) -> dict:
     """
@@ -80,7 +69,7 @@ def question_answerable(question: str, data: dict) -> bool:
     if not question or not data:
         return False
 
-    # TODO: define logic: e.g with keywords
+    # TODO: define logic for different experts: e.g with keywords
 
     return True
 

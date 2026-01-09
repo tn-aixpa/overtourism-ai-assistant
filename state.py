@@ -19,8 +19,6 @@ class AgentState:
     simulation_data: Optional[Dict[str, Any]] = None
     simulation_data_loaded_at: Optional[datetime] = None
 
-    interact_blocked_until: Optional[datetime] = None
-
     pending_inputs: Dict[str, Any] = None
     missing_inputs: List[str] = None
     awaiting_confirmation: bool = False
