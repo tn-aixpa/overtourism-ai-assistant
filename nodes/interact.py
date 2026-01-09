@@ -5,32 +5,32 @@ def interact_simulation(state: AgentState) -> AgentState:
     now = datetime.now()
 
     # block guard
-    if state["interact_blocked_until"] and now < state["interact_blocked_until"]:
-        state["response"] = blocked_message(state["interact_blocked_until"])
+    if state.interact_blocked_until and now < state.interact_blocked_until:
+        state.response = blocked_message(state.interact_blocked_until)
         return state
 
     # load data if needed
-    if state["simulation_data"] is None:
+    if state.simulation_data is None:
         try:
-            data = load_simulation_data(state["sim1_id"])
-            state["simulation_data"] = data
-            state["simulation_data_loaded_at"] = now
+            data = load_simulation_data(state.sim1_id)
+            state.simulation_data = data
+            state.simulation_data_loaded_at = now
         except Exception:
-            state["interact_blocked_until"] = now + timedelta(hours=2)
-            state["response"] = "Simulation data is not available right now. Please try again later."
+            state.interact_blocked_until = now + timedelta(hours=2)
+            state.response = "Simulation data is not available right now. Please try again later."
             return state
 
     # answer user question
-    if not question_answerable(state["user_message"], state["simulation_data"]):
-        state["response"] = (
+    if not question_answerable(state.user_message, state.simulation_data):
+        state.response = (
             "I can’t answer this question based on the available data "
             "or my expertise as a data analyst."
         )
         return state
 
-    state["response"] = answer_question(
-        question=state["user_message"],
-        data=state["simulation_data"],
+    state.response = answer_question(
+        question=state.user_message,
+        data=state.simulation_data,
         role="data analyst",
     )
 

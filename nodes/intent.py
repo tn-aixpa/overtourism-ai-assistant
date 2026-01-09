@@ -2,7 +2,7 @@ from utils.llm import classify_intent
 from state import AgentState
 
 def intent_node(state: AgentState) -> AgentState:
-    active_sims = [s for s in [state["sim1_id"], state["sim2_id"]] if s]
+    active_sims = state.get_active_simulations()
 
     prompt = f"""
 You are an intent classifier.
@@ -24,12 +24,12 @@ Decision rules:
 Context: overtourism in New York.
 The Context provides background but does not override the intent rules.
 
-User request: {state['user_message']}
+User request: {state.user_message}
 Active simulations: {active_sims or "none"}
 
 Return only the action name.
 
 """
        
-    state["next_action"] = classify_intent(prompt)
+    state.next_action = classify_intent(prompt)
     return state

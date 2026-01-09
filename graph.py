@@ -50,7 +50,7 @@ graph.add_edge("intent", "validate_intent")
 
 graph.add_conditional_edges(
     "validate_intent",
-    lambda s: s["next_action"],
+    lambda s: s.next_action,
     {
         "INTERACT_SIMULATION": "interact",
         "COMPARE_SIMULATIONS": "compare",
@@ -62,7 +62,7 @@ graph.add_conditional_edges(
 
 graph.add_conditional_edges(
     "extract",
-    lambda s: "missing" if s["missing_inputs"] else "ready",
+    lambda s: "missing" if s.missing_inputs else "ready",
     {
         "missing": "ask_missing",
         "ready": "confirm",
