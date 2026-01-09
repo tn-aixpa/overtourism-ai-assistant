@@ -1,4 +1,4 @@
-from state import AgentState
+from ..state import AgentState
 
 def validate_intent_node(state: AgentState) -> AgentState:
     """

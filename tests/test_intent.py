@@ -1,9 +1,9 @@
 import pytest
 from dataclasses import replace
 
-from nodes.intent import intent_node
-from nodes.validate_intent import validate_intent_node
-from state import AgentState
+from app.agent.nodes.intent import intent_node
+from app.agent.nodes.validate_intent import validate_intent_node
+from app.agent.state import AgentState
 
 
 @pytest.mark.parametrize(

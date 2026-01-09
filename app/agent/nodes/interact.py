@@ -1,4 +1,4 @@
-from state import AgentState
+from ..state import AgentState
 from datetime import datetime
 
 def interact_simulation(state: AgentState) -> AgentState:

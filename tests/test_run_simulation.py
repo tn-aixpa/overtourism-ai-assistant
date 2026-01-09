@@ -1,4 +1,4 @@
-from nodes.run_simulation import extract_inputs, ask_missing, confirm, run_simulation
+from app.agent.nodes.run_simulation import extract_inputs, ask_missing, confirm, run_simulation
 
 def test_extract_inputs(empty_state):
     empty_state.user_message = "Run with model X and duration 100"

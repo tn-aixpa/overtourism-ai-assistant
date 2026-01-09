@@ -1,5 +1,5 @@
-from utils.llm import classify_intent
-from state import AgentState
+from app.utils.llm import classify_intent
+from ..state import AgentState
 
 def intent_node(state: AgentState) -> AgentState:
     active_sims = state.get_active_simulations()

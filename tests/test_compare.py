@@ -1,4 +1,4 @@
-from nodes.compare import compare_simulations
+from app.agent.nodes.compare import compare_simulations
 
 def test_compare(empty_state):
     empty_state.sim1_id = "simA"

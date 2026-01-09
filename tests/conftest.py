@@ -1,5 +1,5 @@
 import pytest
-from state import AgentState
+from app.agent.state import AgentState
 
 @pytest.fixture
 def empty_state():

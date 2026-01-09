@@ -1,4 +1,4 @@
-from graph import app
+from app.agent.graph import app
 
 def test_full_workflow():
     state = {

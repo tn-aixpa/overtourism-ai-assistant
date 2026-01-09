@@ -1,4 +1,4 @@
-from state import AgentState
+from ..state import AgentState
 
 def error_recovery_node(state: AgentState, error_message: str = None) -> AgentState:
     """

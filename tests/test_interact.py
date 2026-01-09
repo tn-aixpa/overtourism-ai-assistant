@@ -1,4 +1,4 @@
-from nodes.interact import interact_simulation
+from app.agent.nodes.interact import interact_simulation
 
 def test_interact(empty_state):
     empty_state.sim1_id = "sim123"

@@ -1,5 +1,5 @@
-from state import AgentState
-from tools.simulation_tool import run_external_simulation
+from ..state import AgentState
+from app.tools.simulation_tool import run_external_simulation
 
 REQUIRED_FIELDS = ["model", "duration", "parameters"]
 

@@ -1,17 +1,17 @@
 from langgraph.graph import StateGraph, END
-from state import AgentState
+from .state import AgentState
 
-from nodes.intent import intent_node
-from nodes.validate_intent import validate_intent_node
-from nodes.interact import interact_simulation
-from nodes.compare import compare_simulations
-from nodes.run_simulation import (
+from .nodes.intent import intent_node
+from .nodes.validate_intent import validate_intent_node
+from .nodes.interact import interact_simulation
+from .nodes.compare import compare_simulations
+from .nodes.run_simulation import (
     extract_inputs,
     ask_missing,
     confirm,
     run_simulation,
 )
-from nodes.error_recovery import error_recovery_node
+from .nodes.error_recovery import error_recovery_node
 
 def safe_extract_inputs(state):
     try:

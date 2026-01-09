@@ -1,8 +1,8 @@
-from graph import app
+from app.agent.graph import app
 
 state = {
     "user_message": "Please, summarize the simulation results.",
-    "sim1_id": None,
+    "sim1_id": "sim1",
     "sim2_id": None,
     "simulation_data": None,
     "simulation_data_loaded_at": None,

@@ -1,4 +1,4 @@
-from state import AgentState
+from ..state import AgentState
 
 def compare_simulations(state: AgentState) -> AgentState:
     state.response = (
