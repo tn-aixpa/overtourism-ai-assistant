@@ -24,6 +24,7 @@ def test_interact(empty_state, file_name, message, check):
     state.sim1_id = file_name
     state.simulation_data_loaded_at = datetime.now()
     state.next_action = "INTERACT_SIMULATION"
+    state.role = "Data Analyst"
 
     with open(f"tests/data/{file_name}", "r") as f:
         state.simulation_data = json.loads(f.read())

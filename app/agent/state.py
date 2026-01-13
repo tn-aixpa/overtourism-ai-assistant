@@ -1,5 +1,5 @@
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from typing_extensions import TypedDict
 from datetime import datetime
@@ -23,6 +23,9 @@ class AgentState:
     missing_inputs: List[str] = None
     awaiting_confirmation: bool = False
     running_simulation: bool = False
+
+    selected_roles: List[str] = field(default_factory=list)
+    expert_answers: Dict[str, str] = field(default_factory=dict)
 
     next_action: Optional[str] = None
     response: str = ""

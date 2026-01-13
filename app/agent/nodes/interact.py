@@ -1,10 +1,7 @@
 from ollama import Client
 
 from ..state import AgentState
-
-# TODO: consider moving to config
-OLLAMA_HOST = "http://localhost:11434"
-MODEL_NAME = "mistral"
+from app.config import OLLAMA_HOST, MODEL_NAME
 
 def interact_simulation(state: AgentState) -> AgentState:
 
@@ -20,14 +17,20 @@ def interact_simulation(state: AgentState) -> AgentState:
         state.response = f"Simulation data for id {state.sim1_id} is not available right now. Please try again later."
         return state
 
-    role="data analyst"
+    state.expert_answers = {}
 
     # answer user question
-    state.response = answer_question(
-        question=state.user_message,
-        data=state.simulation_data,
-        role=role,
-    )
+    for role in state.selected_roles:
+
+        answer = answer_question(
+            question=state.user_message,
+            data=state.simulation_data,
+            role=role,
+        )
+        state.expert_answers[role] = answer
+    
+    if len(state.selected_roles) == 1:
+        state.response = next(iter(state.expert_answers.values()))
 
     return state
 

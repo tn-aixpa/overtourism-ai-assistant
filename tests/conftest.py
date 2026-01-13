@@ -13,6 +13,8 @@ def empty_state():
         missing_inputs=[],
         awaiting_confirmation=False,
         running_simulation=False,
+        selected_roles=["Data Analyst"],
+        expert_answers={},
         next_action=None,
         response="",
     )
