@@ -101,6 +101,3 @@ Considering following this course:
     - Improved version: LangChain Memory objects (e.g. ConversationBufferMemory).
     - Decide what need to be in long and short term memory and the scope of memory: per session, per simulation, or global for all users.
 - Error recovery might be improved with retries logic, especially for simulations
-
-Open points:
-- who changes state sim_id?

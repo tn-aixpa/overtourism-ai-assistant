@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "name": "validation-overtourism-002-scenario-base",
+    "id": "validation-overtourism-002-scenario-base",
+    "description": "Scenario base"
+  },
+  "data": {
+    "x_max": 10000,
+    "y_max": 10000,
+    "kpis": {
+      "overtourism_level": {
+        "level": 39.0841,
+        "confidence": 2.0937
+      },
+      "critical constraint": {
+        "name": "parcheggi",
+        "level": 34.6982,
+        "confidence": 2.1096
+      },
+      "constraint level parcheggi": {
+        "level": 34.6982,
+        "confidence": 2.1096
+      },
+      "constraint level spiaggia": {
+        "level": 4.6915,
+        "confidence": 0.718
+      },
+      "constraint level alberghi": {
+        "level": 14.2832,
+        "confidence": 1.1767
+      },
+      "constraint level ristoranti": {
+        "level": 0.0006,
+        "confidence": 0.001
+      }
+    },
+    "capacity_mean": 100.0,
+    "capacity_mean_by_constraint": {
+      "parcheggi": 400.0,
+      "spiaggia": 6500.0,
+      "alberghi": 5039.21548603224,
+      "ristoranti": 2800.0
+    }
+  }
+}

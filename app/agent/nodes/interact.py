@@ -1,77 +1,62 @@
+from ollama import Client
+
 from ..state import AgentState
-from datetime import datetime
+
+# TODO: consider moving to config
+OLLAMA_HOST = "http://localhost:11434"
+MODEL_NAME = "mistral"
 
 def interact_simulation(state: AgentState) -> AgentState:
-    now = datetime.now()
 
     # check state
     if state.sim1_id is None:
         state.response = "Something went wrong. No simulation is available to interact with."
         return state
+    
 
     # load data if needed
     if state.simulation_data is None:
-        try:
-            data = load_simulation_data(state.sim1_id)
-            state.simulation_data = data
-            state.simulation_data_loaded_at = now
-        except Exception:
-            state.response = f"Simulation data for id {state.sim1_id} is not available right now. Please try again later."
-            return state
-
-    # answer user question
-    if not question_answerable(state.user_message, state.simulation_data):
-        state.response = (
-            "I can’t answer this question based on the available data "
-            "or my expertise as a data analyst."
-        )
+        # TODO: implement fallback to try to load data
+        state.response = f"Simulation data for id {state.sim1_id} is not available right now. Please try again later."
         return state
 
+    role="data analyst"
+
+    # answer user question
     state.response = answer_question(
         question=state.user_message,
         data=state.simulation_data,
-        role="data analyst",
+        role=role,
     )
 
     return state
 
-def load_simulation_data(sim1_id: str) -> dict:
+
+def answer_question(question: str, data: dict, role: str) -> str:
     """
-    Retrieve simulation data associated with a simulation ID.
-
-    Raises:
-        RuntimeError if data cannot be retrieved.
+    Calls a local Ollama instance with Mistral to answer questions over simulation data.
     """
-    if sim1_id is None:
-        raise RuntimeError("No simulation_id provided")
 
-    # Placeholder: replace with real download logic
-    data = {
-        "metrics": {
-            "travel_time": [10, 12, 15],
-            "co2_emissions": [100, 120, 130],
-        },
-        "metadata": {
-            "sim1_id": sim1_id,
-        },
-    }
+    prompt = f"""
+You are a {role}. Your task is to answer the user's question based strictly on the provided simulation data.
 
-    if not data:
-        raise RuntimeError("Simulation data not found")
+Follow these rules:
+- Answer with the minimum amount of text necessary.
+- Do not add explanations, interpretations, or conclusions unless explicitly requested in the question.
+- Include only the information needed to directly answer the question.
+- When numerical values are included, round them to 2 decimal places.
 
-    return data
+Simulation Data: {data}
+Question: {question}
+"""
 
-def question_answerable(question: str, data: dict) -> bool:
-    """
-    Check whether the question can be answered using available data
-    and the expertise of the agent.
-    """
-    if not question or not data:
-        return False
-
-    # TODO: define logic for different experts: e.g with keywords
-
-    return True
-
-def answer_question(question: str, data: dict, role: str):
-    return f"Interacting with simulation. (Mock reasoning over results)"
+    try:
+        client = Client(host=OLLAMA_HOST)
+        messages = [
+            {"role": "system", "content": f"You are a {role}."},
+            {"role": "user", "content": prompt}
+        ]
+        response = client.chat(model=MODEL_NAME, messages=messages)
+        return response["message"]["content"]
+    except Exception as e:
+        return f"Error connecting to Ollama: {e}"
