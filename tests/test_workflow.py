@@ -49,8 +49,59 @@ def test_full_workflow_interact():
     assert result["response"] != "" and "not able to handle this request" not in result["response"]
     
 
-def test_full_workflow_compare(empty_state):
-    pass
+def test_full_workflow_compare():
+    MOCK_SIMULATION_DATA = {
+        "sim_001": {    
+            "visitors": {
+                "monthly_average": 120000,
+                "peak_month": "August",
+                "capacity": 90000
+            },
+            "infrastructure": {
+                "parking_spaces": 3000,
+                "public_transport_load": 0.92
+            },
+            "environment": {
+                "co2_index": 1.35,
+                "protected_area_pressure": "high"
+            }
+        },
+        "sim_002": {    
+            "visitors": {
+                "monthly_average": 80000,
+                "peak_month": "August",
+                "capacity": 90000
+            },
+            "infrastructure": {
+                "parking_spaces": 2500,
+                "public_transport_load": 0.92
+            },
+            "environment": {
+                "co2_index": 0.35,
+                "protected_area_pressure": "high"
+            }
+        }
+    }
+        
+    state = AgentState(
+        user_message="What are the impacts of reducing the number of parking spaces? How will this impact mobility and environment?",
+        sim1_id="sim_001",
+        sim2_id="sim_002",
+        simulation_data=MOCK_SIMULATION_DATA,
+        simulation_data_loaded_at="2024-01-01T10:00:00Z",
+        pending_inputs={},
+        missing_inputs=[],
+        awaiting_confirmation=False,
+        running_simulation=False,
+        expert_answers={},
+        next_action=None,
+        response="",
+    )
+
+    result = app.invoke(state)
+    assert result["next_action"] == "COMPARE_SIMULATIONS"
+    assert len(result["selected_roles"]) > 1
+    assert result["response"] != "" and "not able to handle this request" not in result["response"]
 
 def test_full_workflow_run_simulation(empty_state):
     pass

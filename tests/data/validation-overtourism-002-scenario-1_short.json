@@ -12,11 +12,6 @@
         "level": 18.0403,
         "confidence": 1.3952
       },
-      "critical constraint": {
-        "name": "alberghi",
-        "level": 14.2333,
-        "confidence": 1.1782
-      },
       "constraint level parcheggi": {
         "level": 5.1732,
         "confidence": 0.7858

@@ -12,11 +12,6 @@
         "level": 28.1437,
         "confidence": 1.8487
       },
-      "critical constraint": {
-        "name": "parcheggi",
-        "level": 21.2003,
-        "confidence": 1.7799
-      },
       "constraint level parcheggi": {
         "level": 21.2003,
         "confidence": 1.7799

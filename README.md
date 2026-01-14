@@ -102,3 +102,9 @@ Considering following this course:
     - Decide what need to be in long and short term memory and the scope of memory: per session, per simulation, or global for all users.
 - Error recovery might be improved with retries logic, especially for simulations
 - Uniform LLM usage
+- Allow multiple simulations, not only two
+
+PROBLEMS:
+- test with real data
+- stardard data format (to prevent errors in computations) + finetuning (both for computations and for synonims)
+- mixed language
