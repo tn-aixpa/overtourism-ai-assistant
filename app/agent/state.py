@@ -16,11 +16,11 @@ class AgentState:
     sim1_id: Optional[str] = None
     sim2_id: Optional[str] = None
 
-    simulation_data: Optional[Dict[str, Any]] = None
+    simulation_data: Dict[str, Any] = field(default_factory=dict)
     simulation_data_loaded_at: Optional[datetime] = None
 
-    pending_inputs: Dict[str, Any] = None
-    missing_inputs: List[str] = None
+    pending_inputs: Dict[str, Any] = field(default_factory=dict)
+    missing_inputs: List[str] = field(default_factory=list)
     awaiting_confirmation: bool = False
     running_simulation: bool = False
 

@@ -4,6 +4,16 @@ This projects aims at collecting useful information for the development of a fir
 
 It will also contain the prototype, for now there is only a basic structure.
 
+## Usage
+
+You can run the agentic system as a service with the following command
+
+```
+uvicorn app.main:app --reload --port 9000
+```
+
+A different port can be used, just change it so that it does not conflic with overtourism, ollama or other services.
+
 ## Core idea
 
 Model the system as a separate service exposing APIs that can be called both from a UX (e.g, webpage) or programattically.
