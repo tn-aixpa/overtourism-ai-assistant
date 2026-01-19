@@ -33,7 +33,6 @@ def confirm(state: AgentState) -> AgentState:
 def run_simulation(state: AgentState) -> AgentState:
     state.running_simulation = True
     sim_id = run_external_simulation(state.pending_inputs)
-    state.sim1_id = sim_id
     state.running_simulation = False
     state.awaiting_confirmation = False
     state.pending_inputs = {}

@@ -5,8 +5,7 @@ from app.agent.state import AgentState
 def run_agent(request) -> AgentState:
     initial_state = AgentState(
         user_message=request.user_message,
-        sim1_id=request.sim1_id,
-        sim2_id=request.sim2_id,
+        _id=request.sim_ids,
         running_simulation=request.running_simulation,
 
         # 🔹 Preserve incoming simulation_data and timestamp

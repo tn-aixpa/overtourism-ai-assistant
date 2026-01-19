@@ -5,8 +5,7 @@ from app.agent.state import AgentState
 def empty_state():
     return AgentState(
         user_message="",
-        sim1_id=None,
-        sim2_id=None,
+        sim_ids=None,
         simulation_data=None,
         simulation_data_loaded_at=None,
         pending_inputs={},

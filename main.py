@@ -3,8 +3,7 @@ from app.agent.graph import app
 def test():
     state = {
         "user_message": "Please, summarize the simulation results.",
-        "sim1_id": "sim1",
-        "sim2_id": None,
+        "sim_ids": ["sim1"],
         "simulation_data": None,
         "simulation_data_loaded_at": None,
         "pending_inputs": {},

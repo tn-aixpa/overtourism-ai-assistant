@@ -5,15 +5,16 @@ from ..state import AgentState
 
 def compare_simulations(state: AgentState) -> AgentState:
     # check state
-    if state.sim1_id is None or state.sim2_id is None:
-        state.response = "Something went wrong. There are not two active simulations."
+    if len(state.sim_ids) < 2:
+        state.response = f"Something went wrong. There are {len(state.sim_ids)} simulations."
         return state
     
 
     # load data if needed
-    if state.simulation_data is None:
+    unavailable = [sim for sim in state.sim_ids if sim not in state.simulation_data]
+    if len(unavailable):
         # TODO: implement fallback to try to load data
-        state.response = f"Simulation data for id {state.sim1_id} or {state.sim2_id} is not available right now. Please try again later."
+        state.response = f"Simulation data for id {unavailable} is not available right now. Please try again later."
         return state
 
     state.expert_answers = {}

@@ -17,8 +17,7 @@ async def run_agent_endpoint(request: AgentRequest):
     # Convert Pydantic model to AgentState dataclass
     agent_state = AgentState(
         user_message=request.user_message,
-        sim1_id=request.sim1_id,
-        sim2_id=request.sim2_id,
+        sim_ids=request.sim_ids,
         running_simulation=request.running_simulation,
 
         # 🔹 Preserve incoming simulation data and timestamp

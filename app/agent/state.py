@@ -13,8 +13,7 @@ class SimulationInputs(TypedDict, total=False):
 class AgentState:
     user_message: str
 
-    sim1_id: Optional[str] = None
-    sim2_id: Optional[str] = None
+    sim_ids: List[str] = field(default_factory=list)
 
     simulation_data: Dict[str, Any] = field(default_factory=dict)
     simulation_data_loaded_at: Optional[datetime] = None
@@ -31,4 +30,4 @@ class AgentState:
     response: str = ""
 
     def get_active_simulations(self) -> list[str]:
-        return [s for s in (self.sim1_id, self.sim2_id) if s]
+        return self.sim_ids

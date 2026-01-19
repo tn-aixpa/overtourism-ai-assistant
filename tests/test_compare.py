@@ -19,8 +19,7 @@ def test_interact(empty_state, file_name1, file_name2, message, check):
 
     state = replace(empty_state)
     
-    state.sim1_id = file_name1
-    state.sim2_id = file_name2
+    state.sim_ids = [file_name1, file_name2]
     state.simulation_data_loaded_at = datetime.now()
     state.next_action = "INTERACT_SIMULATION"
     state.role = "Data Analyst"

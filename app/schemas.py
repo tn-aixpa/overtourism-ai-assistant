@@ -5,8 +5,7 @@ from typing import Optional, Dict, Any
 
 class AgentRequest(BaseModel):
     user_message: str
-    sim1_id: str | None = None
-    sim2_id: str | None = None
+    sim_ids: list[str] = []
     simulation_data: Dict[str, Any] | None = None
     simulation_data_loaded_at: str | None = None
     pending_inputs: Dict[str, Any] = {}
