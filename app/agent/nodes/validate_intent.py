@@ -17,7 +17,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
 
     # --- INTERACT_SIMULATION ---
     if intent == "INTERACT_SIMULATION":
-        if not state.sim_ids:
+        if not state.scenario_ids:
             state.next_action = "NOT_ALLOWED"
             state.response = (
                 "I understand you want to interact with a simulation, "
@@ -25,7 +25,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
             )
             return state
 
-        if len(state.sim_ids) > 1:
+        if len(state.scenario_ids) > 1:
             state.next_action = "COMPARE_SIMULATIONS"
             return state
 

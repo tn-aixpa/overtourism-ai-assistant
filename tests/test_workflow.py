@@ -12,7 +12,7 @@ def test_full_workflow_invalid(empty_state):
     assert result["response"] == "I'm not able to handle this request with the current system capabilities."
     
 def test_full_workflow_interact():
-    MOCK_SIMULATION_DATA = {"sim_001" :{
+    MOCK_data = {"sim_001" :{
         "visitors": {
             "monthly_average": 120000,
             "peak_month": "August",
@@ -30,16 +30,16 @@ def test_full_workflow_interact():
         
     state = AgentState(
         user_message="Analyze the simulation and propose policies with environmental impacts and infrastructure changes.",
-        sim_ids=["sim_001"],
-        simulation_data=MOCK_SIMULATION_DATA,
-        simulation_data_loaded_at="2024-01-01T10:00:00Z",
-        pending_inputs={},
-        missing_inputs=[],
+        next_action=None,
+        response="",
+        problem_id="",
+        scenario_ids=["sim_001"],
+        data=MOCK_data,
+        data_loaded_at="2024-01-01T10:00:00Z",
+        current_input={},
         awaiting_confirmation=False,
         running_simulation=False,
         expert_answers={},
-        next_action=None,
-        response="",
     )
 
     result = app.invoke(state)
@@ -49,7 +49,7 @@ def test_full_workflow_interact():
     
 
 def test_full_workflow_compare():
-    MOCK_SIMULATION_DATA = {
+    MOCK_data = {
         "sim_001": {    
             "visitors": {
                 "monthly_average": 120000,
@@ -84,16 +84,16 @@ def test_full_workflow_compare():
         
     state = AgentState(
         user_message="What are the impacts of reducing the number of parking spaces? How will this impact mobility and environment?",
-        sim_ids=["sim_001", "sim_002"],
-        simulation_data=MOCK_SIMULATION_DATA,
-        simulation_data_loaded_at="2024-01-01T10:00:00Z",
-        pending_inputs={},
-        missing_inputs=[],
+        next_action=None,
+        response="",
+        problem_id="",
+        scenario_ids=["sim_001", "sim_002"],
+        data=MOCK_data,
+        data_loaded_at="2024-01-01T10:00:00Z",
+        current_input={},
         awaiting_confirmation=False,
         running_simulation=False,
         expert_answers={},
-        next_action=None,
-        response="",
     )
 
     result = app.invoke(state)

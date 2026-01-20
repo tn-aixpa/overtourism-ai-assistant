@@ -3,13 +3,13 @@ from ...utils.llm import answer_question_comparison
 
 def compare_simulations(state: AgentState) -> AgentState:
     # check state
-    if len(state.sim_ids) < 2:
-        state.response = f"Something went wrong. There are {len(state.sim_ids)} simulations."
+    if len(state.scenario_ids) < 2:
+        state.response = f"Something went wrong. There are {len(state.scenario_ids)} simulations."
         return state
     
 
     # load data if needed
-    unavailable = [sim for sim in state.sim_ids if sim not in state.simulation_data]
+    unavailable = [sim for sim in state.scenario_ids if sim not in state.data]
     if len(unavailable):
         # TODO: implement fallback to try to load data
         state.response = f"Simulation data for id {unavailable} is not available right now. Please try again later."
@@ -22,7 +22,7 @@ def compare_simulations(state: AgentState) -> AgentState:
 
         answer = answer_question_comparison(
             question=state.user_message,
-            data=state.simulation_data,
+            data=state.data,
             role=role,
         )
         state.expert_answers[role] = answer

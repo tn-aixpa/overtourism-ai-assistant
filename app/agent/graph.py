@@ -92,7 +92,7 @@ graph.add_conditional_edges(
 
 graph.add_conditional_edges(
     "extract",
-    lambda s: "missing" if s.missing_inputs else "ready",
+    lambda s: "ready" if s.current_input else "missing",
     {
         "missing": "ask_missing",
         "ready": "confirm",

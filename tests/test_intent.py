@@ -43,7 +43,7 @@ def test_intent_classification(empty_state: AgentState, user_message, active_sim
 
     # Set active simulations
     if active_simulations:
-        state.sim_ids = active_simulations
+        state.scenario_ids = active_simulations
 
     # Run nodes
     state = intent_node(state)

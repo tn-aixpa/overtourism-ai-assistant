@@ -4,30 +4,34 @@ from datetime import datetime
 import json
 
 from app.agent.nodes.interact import interact_simulation
+from app.utils.data import parse_data
 
 @pytest.mark.parametrize(
-    "file_name, message, check",
+    "file_name, id,  message, check",
     [
-        ("validation-overtourism-002-scenario-1_short.json",
+        ("test_1.json",
+         "model_3",
          "What is the most critical constraint?",
-         "alberghi"),
-        ("validation-overtourism-002-scenario-base-short.json",
+         "parking"),
+        ("test_base.json",
+         "model_0",
          "What is the most critical constraint?",
-         "parcheggi"),
+         "parking"),
     ],
 )
 
-def test_interact(empty_state, file_name, message, check):
+def test_interact(empty_state, file_name, id, message, check):
 
     state = replace(empty_state)
     
-    state.sim_ids = [file_name]
-    state.simulation_data_loaded_at = datetime.now()
+    state.problem_id = "parcheggi_200"
+    state.scenario_ids = [id]
+    state.data_loaded_at = datetime.now()
     state.next_action = "INTERACT_SIMULATION"
     state.role = "Data Analyst"
 
     with open(f"tests/data/{file_name}", "r") as f:
-        state.simulation_data = {file_name: json.loads(f.read())}
+        state = parse_data(state, json.loads(f.read()))
 
     state.user_message = message
     state = interact_simulation(state)

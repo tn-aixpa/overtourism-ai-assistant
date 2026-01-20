@@ -1,19 +1,26 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 
 
 class AgentRequest(BaseModel):
     user_message: str
-    sim_ids: list[str] = []
-    simulation_data: Dict[str, Any] | None = None
-    simulation_data_loaded_at: str | None = None
-    pending_inputs: Dict[str, Any] = {}
-    missing_inputs: list[str] = []
-    awaiting_confirmation: bool = False
-    running_simulation: bool = False
     next_action: str | None = None
     response: str = ""
+    
+    problem_id: str = ""
+    scenario_ids: list[str] = []
+
+    data: Dict[str, Any] | None = None
+    data_loaded_at: str | None = None
+    
+    current_input: Dict[str, Any] = {}
+    awaiting_confirmation: bool = False
+    running_simulation: bool = False
+
+    selected_roles: list[str] = []
+    expert_answers: Dict[str, Any] | None = None
+
 
     class Config:
         extra = "allow"
@@ -27,3 +34,4 @@ class AgentResponse(BaseModel):
 
     class Config:
         extra = "allow"
+        

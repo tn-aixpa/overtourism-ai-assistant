@@ -11,20 +11,19 @@ class SimulationInputs(TypedDict, total=False):
 
 @dataclass
 class AgentState:
-    user_message: str
-
-    sim_ids: List[str] = field(default_factory=list)
-
-    simulation_data: Dict[str, Any] = field(default_factory=dict)
-    simulation_data_loaded_at: Optional[datetime] = None
-
-    pending_inputs: Dict[str, Any] = field(default_factory=dict)
-    missing_inputs: List[str] = field(default_factory=list)
-    awaiting_confirmation: bool = False
-    running_simulation: bool = False
-
-    selected_roles: List[str] = field(default_factory=list)
-    expert_answers: Dict[str, str] = field(default_factory=dict)
-
+    session_id: str = ""
+    user_message: str = ""
     next_action: Optional[str] = None
     response: str = ""
+
+    problem_id: str = ""
+    scenario_ids: List[str] = field(default_factory=list)
+
+    data: Dict[str, Any] = field(default_factory=dict)
+    data_loaded_at: Optional[datetime] = None
+
+    current_input: Dict[str, Any] = field(default_factory=dict)
+    awaiting_confirmation: bool = False
+    running_simulation: bool = False
+    selected_roles: List[str] = field(default_factory=list)
+    expert_answers: Dict[str, str] = field(default_factory=dict)

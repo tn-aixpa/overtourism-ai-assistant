@@ -5,15 +5,14 @@ from app.agent.state import AgentState
 def run_agent(request) -> AgentState:
     initial_state = AgentState(
         user_message=request.user_message,
-        _id=request.sim_ids,
+        _id=request.scenario_ids,
         running_simulation=request.running_simulation,
 
-        # 🔹 Preserve incoming simulation_data and timestamp
-        simulation_data=request.simulation_data,
-        simulation_data_loaded_at=request.simulation_data_loaded_at,
+        # 🔹 Preserve incoming data and timestamp
+        data=request.data,
+        data_loaded_at=request.data_loaded_at,
 
-        pending_inputs=request.pending_inputs or {},
-        missing_inputs=request.missing_inputs or [],
+        current_input=request.current_input or {},
         awaiting_confirmation=request.awaiting_confirmation or False,
 
         next_action=None,

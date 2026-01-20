@@ -11,21 +11,20 @@ router = APIRouter()
 async def run_agent_endpoint(request: AgentRequest):
     """
     Endpoint to send a user message and simulation data to the agent.
-    Preserves all fields including simulation_data.
+    Preserves all fields including data.
     """
 
     # Convert Pydantic model to AgentState dataclass
     agent_state = AgentState(
         user_message=request.user_message,
-        sim_ids=request.sim_ids,
+        scenario_ids=request.scenario_ids,
         running_simulation=request.running_simulation,
 
         # 🔹 Preserve incoming simulation data and timestamp
-        simulation_data=request.simulation_data or {},
-        simulation_data_loaded_at=request.simulation_data_loaded_at,
+        data=request.data or {},
+        data_loaded_at=request.data_loaded_at,
 
-        pending_inputs=request.pending_inputs or {},
-        missing_inputs=request.missing_inputs or [],
+        current_input=request.current_input or {},
         awaiting_confirmation=request.awaiting_confirmation or False,
 
         next_action=None,
@@ -33,8 +32,8 @@ async def run_agent_endpoint(request: AgentRequest):
     )
 
     # Optional debug prints
-    print("=== AgentState.simulation_data keys ===")
-    print(list(agent_state.simulation_data.keys()) if agent_state.simulation_data else None)
+    print("=== AgentState.data keys ===")
+    print(list(agent_state.data.keys()) if agent_state.data else None)
 
     # Call the agent
     final_state = agent_app.invoke(agent_state)
