@@ -6,7 +6,6 @@ def validate_intent_node(state: AgentState) -> AgentState:
     Adjust the next_action and response if needed based on the current state.
     """
     intent = state.next_action
-    active = state.get_active_simulations()
 
     # --- INVALID intent ---
     if intent == "INVALID":
@@ -18,7 +17,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
 
     # --- INTERACT_SIMULATION ---
     if intent == "INTERACT_SIMULATION":
-        if not active:
+        if not state.sim_ids:
             state.next_action = "NOT_ALLOWED"
             state.response = (
                 "I understand you want to interact with a simulation, "
@@ -26,7 +25,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
             )
             return state
 
-        if len(active) > 1:
+        if len(state.sim_ids) > 1:
             state.next_action = "COMPARE_SIMULATIONS"
             return state
 

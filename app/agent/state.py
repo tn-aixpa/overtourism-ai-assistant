@@ -28,6 +28,3 @@ class AgentState:
 
     next_action: Optional[str] = None
     response: str = ""
-
-    def get_active_simulations(self) -> list[str]:
-        return self.sim_ids
