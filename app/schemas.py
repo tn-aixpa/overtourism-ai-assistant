@@ -4,12 +4,14 @@ from typing import Dict, Any
 
 
 class AgentRequest(BaseModel):
+    problem_id: str = ""
+    scenario_ids: list[str] = []
+    session_id: str = "000"
+
     user_message: str
     next_action: str | None = None
     response: str = ""
     
-    problem_id: str = ""
-    scenario_ids: list[str] = []
 
     data: Dict[str, Any] | None = None
     data_loaded_at: str | None = None

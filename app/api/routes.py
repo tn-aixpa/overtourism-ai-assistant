@@ -1,50 +1,88 @@
-# app/api/routes.py
-from fastapi import APIRouter
+# SPDX-License-Identifier: Apache-2.0
+
+from fastapi import APIRouter, HTTPException
+import logging
+
 from app.schemas import AgentRequest, AgentResponse
 from app.agent.state import AgentState
-from app.services.agent_service import agent_app  # or however you import it
+from app.agent.graph import app as agent_app
+from app.agent.memory import make_key, load_state, save_state
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 @router.post("/agent", response_model=AgentResponse)
-async def run_agent_endpoint(request: AgentRequest):
+async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
     """
-    Endpoint to send a user message and simulation data to the agent.
-    Preserves all fields including data.
+    Main entrypoint for the AI agent.
+
+    Responsibilities:
+    - Resolve memory scope using (session_id, problem_id, scenario_ids)
+    - Load existing AgentState or create a new one
+    - Inject the new user message and data
+    - Run LangGraph
+    - Persist updated state
+    - Return structured response
     """
 
-    # Convert Pydantic model to AgentState dataclass
-    agent_state = AgentState(
-        user_message=request.user_message,
-        scenario_ids=request.scenario_ids,
-        running_simulation=request.running_simulation,
+    try:
+        # build conversation memory key
+        # if not request.session_id:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail="session_id is required for agent memory scoping",
+        #     )
 
-        # 🔹 Preserve incoming simulation data and timestamp
-        data=request.data or {},
-        data_loaded_at=request.data_loaded_at,
+        key = make_key(
+            session_id=request.session_id,
+            problem_id=request.problem_id,
+            scenario_ids=request.scenario_ids,
+        )
 
-        current_input=request.current_input or {},
-        awaiting_confirmation=request.awaiting_confirmation or False,
+        # load or initialize agent state
+        state = load_state(key)
 
-        next_action=None,
-        response="",
-    )
+        # update state with incoming request
+        state.session_id = request.session_id
+        state.problem_id = request.problem_id or ""
+        state.scenario_ids = request.scenario_ids or []
+        state.user_message = request.user_message
+        if request.data is not None:
+            state.data = request.data
+            state.data_loaded_at = request.data_loaded_at
+        state.current_input = request.current_input or state.current_input
+        state.awaiting_confirmation = request.awaiting_confirmation or False
+        state.running_simulation = request.running_simulation or False
 
-    # Optional debug prints
-    print("=== AgentState.data keys ===")
-    print(list(agent_state.data.keys()) if agent_state.data else None)
+        # reset per-turn outputs
+        state.response = ""
+        state.next_action = None
 
-    # Call the agent
-    final_state = agent_app.invoke(agent_state)
+        logger.info(
+            "Running agent | session=%s problem=%s scenarios=%s",
+            request.session_id,
+            request.problem_id,
+            request.scenario_ids,
+        )
 
-    print("=== FINAL STATE RETURNED FROM AGENT ===")
-    print(final_state)
+        # run the LangGraph agent, persist and return state
+        final_state = AgentState(**agent_app.invoke(state))
+        save_state(key, final_state)
+        return AgentResponse(
+            action=final_state.next_action,
+            response=final_state.response,
+            blocked=getattr(final_state, "blocked", None),
+            state=final_state.__dict__,  # full state for debugging / UI
+        )
 
-    # Return response
-    return AgentResponse(
-        action=final_state.get("next_action"),
-        response=final_state.get("response"),
-        blocked=final_state.get("blocked"),
-        state=final_state,  # optional full agent state
-    )
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.exception("Agent execution failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Agent execution failed: {str(e)}",
+        )

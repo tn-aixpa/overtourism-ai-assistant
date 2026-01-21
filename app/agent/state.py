@@ -12,12 +12,13 @@ class SimulationInputs(TypedDict, total=False):
 @dataclass
 class AgentState:
     session_id: str = ""
+    problem_id: str = ""
+    scenario_ids: List[str] = field(default_factory=list)
+    
     user_message: str = ""
     next_action: Optional[str] = None
     response: str = ""
 
-    problem_id: str = ""
-    scenario_ids: List[str] = field(default_factory=list)
 
     data: Dict[str, Any] = field(default_factory=dict)
     data_loaded_at: Optional[datetime] = None
