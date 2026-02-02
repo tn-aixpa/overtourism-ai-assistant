@@ -1,10 +1,10 @@
 from ..state import AgentState
 from ...utils.llm import answer_question_comparison
 
-def compare_simulations(state: AgentState) -> AgentState:
+def compare_scenarios(state: AgentState) -> AgentState:
     # check state
     if len(state.scenario_ids) < 2:
-        state.response = f"Something went wrong. There are {len(state.scenario_ids)} simulations."
+        state.response = f"Something went wrong. Number of active scenarios: {len(state.scenario_ids)}."
         return state
     
 
@@ -12,7 +12,7 @@ def compare_simulations(state: AgentState) -> AgentState:
     unavailable = [sim for sim in state.scenario_ids if sim not in state.data]
     if len(unavailable):
         # TODO: implement fallback to try to load data
-        state.response = f"Simulation data for id {unavailable} is not available right now. Please try again later."
+        state.response = f"Scenario data for id {unavailable} is not available right now. Please try again later."
         return state
 
     state.expert_answers = {}

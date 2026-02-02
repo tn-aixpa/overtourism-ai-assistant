@@ -4,11 +4,6 @@ from typing import Optional, Dict, Any, List
 from typing_extensions import TypedDict
 from datetime import datetime
 
-class SimulationInputs(TypedDict, total=False):
-    model: str
-    duration: int
-    parameters: Dict[str, Any]
-
 @dataclass
 class AgentState:
     session_id: str = ""
@@ -25,6 +20,6 @@ class AgentState:
 
     current_input: Dict[str, Any] = field(default_factory=dict)
     awaiting_confirmation: bool = False
-    running_simulation: bool = False
+    running_scenario: bool = False
     selected_roles: List[str] = field(default_factory=list)
     expert_answers: Dict[str, str] = field(default_factory=dict)

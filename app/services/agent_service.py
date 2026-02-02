@@ -6,7 +6,7 @@ def run_agent(request) -> AgentState:
     initial_state = AgentState(
         user_message=request.user_message,
         _id=request.scenario_ids,
-        running_simulation=request.running_simulation,
+        running_scenario=request.running_scenario,
 
         # 🔹 Preserve incoming data and timestamp
         data=request.data,

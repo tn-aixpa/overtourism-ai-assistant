@@ -29,7 +29,7 @@ def test_full_workflow_interact():
     }}
         
     state = AgentState(
-        user_message="Analyze the simulation and propose policies with environmental impacts and infrastructure changes.",
+        user_message="Analyze the scenario and propose policies with environmental impacts and infrastructure changes.",
         next_action=None,
         response="",
         problem_id="",
@@ -38,12 +38,12 @@ def test_full_workflow_interact():
         data_loaded_at="2024-01-01T10:00:00Z",
         current_input={},
         awaiting_confirmation=False,
-        running_simulation=False,
+        running_scenario=False,
         expert_answers={},
     )
 
     result = app.invoke(state)
-    assert result["next_action"] == "INTERACT_SIMULATION"
+    assert result["next_action"] == "INTERACT_SCENARIO"
     assert len(result["selected_roles"]) > 1
     assert result["response"] != "" and "not able to handle this request" not in result["response"]
     
@@ -92,14 +92,14 @@ def test_full_workflow_compare():
         data_loaded_at="2024-01-01T10:00:00Z",
         current_input={},
         awaiting_confirmation=False,
-        running_simulation=False,
+        running_scenario=False,
         expert_answers={},
     )
 
     result = app.invoke(state)
-    assert result["next_action"] == "COMPARE_SIMULATIONS"
+    assert result["next_action"] == "COMPARE_SCENARIOS"
     assert len(result["selected_roles"]) > 1
     assert result["response"] != "" and "not able to handle this request" not in result["response"]
 
-def test_full_workflow_run_simulation(empty_state):
+def test_full_workflow_run_scenario(empty_state):
     pass

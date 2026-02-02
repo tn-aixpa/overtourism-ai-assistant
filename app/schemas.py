@@ -18,7 +18,7 @@ class AgentRequest(BaseModel):
     
     current_input: Dict[str, Any] = {}
     awaiting_confirmation: bool = False
-    running_simulation: bool = False
+    running_scenario: bool = False
 
     selected_roles: list[str] = []
     expert_answers: Dict[str, Any] | None = None

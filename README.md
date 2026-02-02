@@ -35,9 +35,9 @@ Intent & Context Interpreter (LLM)
 Router (LangGraph conditional edges)  
 &nbsp;&nbsp;↓  
 [Action Nodes]  
-&nbsp;&nbsp;├── Simulation Interaction  
-&nbsp;&nbsp;├── Simulation Comparison  
-&nbsp;&nbsp;├── Simulation Creation (multi-step)  
+&nbsp;&nbsp;├── Scenario Interaction  
+&nbsp;&nbsp;├── Scenario Comparison  
+&nbsp;&nbsp;├── Scenario Creation (multi-step)  
 &nbsp;&nbsp;└── *... possible other nodes*
 
 Current graph
@@ -62,7 +62,7 @@ The hidden cost of agent frameworks are:
 - introduce non-determinism
 - change APIs frequently
 
-# interact_simulation pipeline
+# interact_scenario pipeline
 
 User question → Expert applicability check (per expert) → Expert answers (parallel, independent) → Answer merger → Final response
 
@@ -109,8 +109,8 @@ Considering following this course:
 - Decide how to deal with memory in each node
     - Simple version: memory stored in LangGraph’s state;
     - Improved version: LangChain Memory objects (e.g. ConversationBufferMemory).
-    - Decide what need to be in long and short term memory and the scope of memory: per session, per simulation, or global for all users.
-- Error recovery might be improved with retries logic, especially for simulations
+    - Decide what need to be in long and short term memory and the scope of memory: per session, per scenario, or global for all users.
+- Error recovery might be improved with retries logic, especially for scenario
 
 PROBLEMS:
 - test with real data

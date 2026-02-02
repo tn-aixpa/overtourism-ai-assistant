@@ -13,7 +13,7 @@ def empty_state():
         data_loaded_at=None,
         current_input={},
         awaiting_confirmation=False,
-        running_simulation=False,
+        running_scenario=False,
         selected_roles=["Data Analyst"],
         expert_answers={},
     )

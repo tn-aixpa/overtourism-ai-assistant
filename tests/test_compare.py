@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import datetime
 import json
 
-from app.agent.nodes.compare import compare_simulations
+from app.agent.nodes.compare import compare_scenarios
 from app.utils.data import parse_data
 
 @pytest.mark.parametrize(
@@ -26,7 +26,7 @@ def test_interact(empty_state, problem_id, file_name1, id1, file_name2, id2, mes
     state.problem_id = problem_id
     state.scenario_ids = [id1, id2]
     state.data_loaded_at = datetime.now()
-    state.next_action = "INTERACT_SIMULATION"
+    state.next_action = "INTERACT_SCENARIO"
     state.role = "Data Analyst"
 
     state.data = {}
@@ -36,7 +36,7 @@ def test_interact(empty_state, problem_id, file_name1, id1, file_name2, id2, mes
         state = parse_data(state, json.loads(f.read()))
 
     state.user_message = message
-    state = compare_simulations(state)
+    state = compare_scenarios(state)
 
     correct = False
     if any(string in state.response.lower() for string in check):

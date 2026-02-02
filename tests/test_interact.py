@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import datetime
 import json
 
-from app.agent.nodes.interact import interact_simulation
+from app.agent.nodes.interact import interact_scenario
 from app.utils.data import parse_data
 
 @pytest.mark.parametrize(
@@ -27,13 +27,13 @@ def test_interact(empty_state, file_name, id, message, check):
     state.problem_id = "parcheggi_200"
     state.scenario_ids = [id]
     state.data_loaded_at = datetime.now()
-    state.next_action = "INTERACT_SIMULATION"
+    state.next_action = "INTERACT_SCENARIO"
     state.role = "Data Analyst"
 
     with open(f"tests/data/{file_name}", "r") as f:
         state = parse_data(state, json.loads(f.read()))
 
     state.user_message = message
-    state = interact_simulation(state)
+    state = interact_scenario(state)
 
     assert check in state.response

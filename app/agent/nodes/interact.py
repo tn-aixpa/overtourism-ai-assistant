@@ -1,22 +1,22 @@
 from ..state import AgentState
 from ...utils.llm import answer_question
 
-def interact_simulation(state: AgentState) -> AgentState:
+def interact_scenario(state: AgentState) -> AgentState:
 
     # check state
     if len(state.scenario_ids) == 0:
-        state.response = "Something went wrong. No simulation is available to interact with."
+        state.response = "Something went wrong. No scenario is available to interact with."
         return state
     
     if len(state.scenario_ids) > 1:
-        state.response = "Something went wrong. More than one active simulation"
+        state.response = "Something went wrong. More than one active scenario found."
         return state
     
 
     # load data if needed
     if state.scenario_ids[0] not in state.data:
         # TODO: implement fallback to try to load data
-        state.response = f"Simulation data for id {state.scenario_ids[0]} is not available right now. Please try again later."
+        state.response = f"Scenario data for id {state.scenario_ids[0]} is not available right now. Please try again later."
         return state
 
     state.expert_answers = {}

@@ -1,5 +1,5 @@
 from ..state import AgentState
-from app.tools.simulation_tool import run_external_simulation
+from app.tools.scenario_tool import run_external_scenario
 
 REQUIRED_FIELDS = ["model", "duration", "parameters"]
 
@@ -15,7 +15,7 @@ def confirm(state: AgentState) -> AgentState:
     #TODO implement
     return state
 
-def run_simulation(state: AgentState) -> AgentState:
+def run_scenario(state: AgentState) -> AgentState:
     #TODO implement
-    state.response = f"Simulation started"
+    state.response = f"Scenario started"
     return state

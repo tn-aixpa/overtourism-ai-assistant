@@ -2,7 +2,7 @@ from app.agent.graph import app
 
 def test():
     state = {
-        "user_message": "Please, summarize the simulation results.",
+        "user_message": "Please, summarize the scenario results.",
         "scenario_ids": ["sim1"],
         "data": None,
         "data_loaded_at": None,
@@ -19,3 +19,4 @@ def draw():
 
 
 draw()
+# use https://mermaid.live/ to visualize the output

@@ -42,7 +42,7 @@ def test_single_roles(question, expected_role):
     [
         ("Which of the proposed solutions minimizes costs while improving sustainability?"),
 
-        ("Analyze the simulation and propose policies with environmental impacts and infrastructure changes."),
+        ("Analyze the scenario and propose policies with environmental impacts and infrastructure changes."),
     ],
 )
 def test_multi_roles(question):

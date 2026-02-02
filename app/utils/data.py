@@ -44,7 +44,7 @@ def parse_data(state, data: dict):
         state.data[data["scenario_id"]] = cleaned_data
 
 
-    # use later to run simulations
+    # use later to run scenarios
     editable_indexes =  data["editable_indexes"]
     editable_indexes_with_limits = {}
     for group, indexes in data["widgets"].items():

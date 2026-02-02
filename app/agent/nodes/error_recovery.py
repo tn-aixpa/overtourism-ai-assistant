@@ -8,7 +8,7 @@ def error_recovery_node(state: AgentState, error_message: str = None) -> AgentSt
         print(f"[ERROR] {error_message}")  # Logging for debug/tracing
 
     # Reset critical flags to avoid unsafe operations
-    state.running_simulation = False
+    state.running_scenario = False
     state.awaiting_confirmation = False
     state.next_action = None
 
