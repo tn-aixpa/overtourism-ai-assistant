@@ -37,7 +37,8 @@ Router (LangGraph conditional edges)
 [Action Nodes]  
 &nbsp;&nbsp;├── Scenario Interaction  
 &nbsp;&nbsp;├── Scenario Comparison  
-&nbsp;&nbsp;├── Scenario Creation (multi-step)  
+&nbsp;&nbsp;├── Problem creation  
+&nbsp;&nbsp;├── Scenario Creatio  
 &nbsp;&nbsp;└── *... possible other nodes*
 
 Current graph

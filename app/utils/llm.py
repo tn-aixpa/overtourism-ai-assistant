@@ -18,12 +18,15 @@ def llm_interaction(prompt: str) -> str:
         return f"Error connecting to Ollama: {e}"
     
 def classify_intent(active_sims: list, user_message: str) -> str:
+    context = "City management and overtourism" #TODO: move it somewhere else
     prompt = f"""
 You are an intent classifier.
 Your task is to determine the user's intended action.
 
 Possible actions:
 - INTERACT_SCENARIO: Analyze, explain, interpret, or explore existing scenarios.
+- CREATE_PROBLEM: Create a new problem starting from it's description. When creating a new problem the user might want to include also scenarios generation.
+  parameters of an existing scenario.
 - RUN_NEW_SCENARIO: Create, run, start, or re-run a scenario, including modifying
   parameters of an existing scenario.
 - INVALID: The request is totally unclear and the intent cannot be determined or the request is clear but unrelated to scenarios or system capabilities.
@@ -31,11 +34,12 @@ Possible actions:
 Decision rules:
 
 1. If the user request is clear and refers to a scenario → INTERACT_SCENARIO.
+2. If the user mentions a new problem or the focus of the request is a specific problem description → CREATE_PROBLEM.
 3. If the user request asks to run, create, start, or modify a scenario → RUN_NEW_SCENARIO.
-4. If the request is unrelated to scenarios → INVALID.
+4. If the request is unrelated to problems or scenarios in the related to {context} → INVALID.
 5. If the request is totally unclear or vague → INVALID.
 
-Context: overtourism in New York.
+Context: {context}.
 The Context provides background but does not override the intent rules.
 
 User request: {user_message}
@@ -147,4 +151,27 @@ Expert answers:
     for role, answer in expert_answers.items():
         prompt += f"\n[{role}]\n{answer}\n"
 
+    return llm_interaction(prompt)
+
+def extract_problem_data(user_message: str, problem_info: dict, extracted_problem_info: dict) -> str:
+    all_keys = list(problem_info.keys())
+    keys_to_extract = {k for k in all_keys if k not in extracted_problem_info}
+
+    prompt = f"""You are a problem information extractor for a city management digital twin focused on overtourism.
+Your task is to extract structured information about a problem from the user's message.
+The information to extract is:
+{', '.join(keys_to_extract)}
+Rules:
+- Return your answer in JSON format with the following structure:
+{{
+{', '.join([f'  "{field}": "extracted content"' for field in keys_to_extract])}
+}}
+- Fill each field with corresponding information from the user's message, if present.
+- If a field is about the tile, please limit the length to maximum 3 words.
+- You can reuse information to fill more than one field if applicable.
+- Do NOT invent information that is not present in the user's message.
+- If no information is found for a field do not include it in the output.
+{user_message}
+"""
+    
     return llm_interaction(prompt)

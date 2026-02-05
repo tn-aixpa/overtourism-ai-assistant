@@ -166,7 +166,7 @@ graph.add_conditional_edges(
 
 graph.add_conditional_edges(
     "extract_problem",
-    lambda s: "ready" if s.problem_data else "missing",
+    lambda s: "ready" if s.extracted_all_problem else "missing",
     {
         "missing": "ask_missing_problem",
         "ready": "confirm_problem",
@@ -174,7 +174,16 @@ graph.add_conditional_edges(
 )
 
 graph.add_edge("ask_missing_problem", "extract_problem")
-graph.add_edge("confirm_problem", "decide_scenario_strategy")
+
+graph.add_conditional_edges(
+    "confirm_problem",
+    lambda s: s.confirm_action,
+    {
+        "CONFIRM": "decide_scenario_strategy",
+        "EDIT": "extract_problem",
+        "CANCEL": END,
+    },
+)
 
 graph.add_conditional_edges(
     "decide_scenario_strategy",

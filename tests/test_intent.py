@@ -5,6 +5,7 @@ from app.agent.nodes.intent import intent_node
 from app.agent.nodes.validate_intent import validate_intent_node
 from app.agent.state import AgentState
 
+# TODO add tests for CREATE_PROBLEM
 
 @pytest.mark.parametrize(
     "user_message, active_scenarios, expected_intent",
@@ -18,6 +19,13 @@ from app.agent.state import AgentState
         # --- COMPARE_SCENARIOS (multiple active scenarios) ---
         ("Compare ther results of the two scenarios simA and simB", ["simA", "simB"], "COMPARE_SCENARIOS"),
         ("Explain the differences between simA and simB", ["simA", "simB"], "COMPARE_SCENARIOS"),
+
+        # --- CREATE NEW PROBLEM ---
+        ("Create a new problem related to Molveno overtourism and in particular focus on beach usage", [], "CREATE_PROBLEM"),
+        ("I want to define a new problem related to traffic congestion", [], "CREATE_PROBLEM"),
+        ("There is a new issue regarding parking usage that needs to be addressed", [], "CREATE_PROBLEM"),
+        ("In Molveno there is a problem related to the fact that there are not enough parking spaces which leads to people parking off-spot and long queues. The administration would like to have 3 different strategies to tackle this problem.", [], "CREATE_PROBLEM"),
+
 
         # --- RUN_NEW_SCENARIO ---
         ("Run a new scenario with increased parking capacity", [], "RUN_NEW_SCENARIO"),

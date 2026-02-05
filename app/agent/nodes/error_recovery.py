@@ -16,5 +16,6 @@ def error_recovery_node(state: AgentState, error_message: str = None) -> AgentSt
     state.response = (
         "Oops! Something went wrong while processing your request. "
         "Please check your inputs or try again."
+        "ERROR DETAILS: " + error_message if error_message else ""
     )
     return state

@@ -28,6 +28,14 @@ def validate_intent_node(state: AgentState) -> AgentState:
         if len(state.scenario_ids) > 1:
             state.next_action = "COMPARE_SCENARIOS"
             return state
+        
+    # --- CREATE_PROBLEM ---
+    if intent == "RUN_NEW_SCENARIO" and not state.problem_id:
+        state.next_action = "NOT_ALLOWED"
+        state.response = (
+            "No problem is defined. Please define a problem first."
+        )
+        return state
 
     # --- RUN_NEW_SCENARIO ---
     if intent == "RUN_NEW_SCENARIO" and state.running_scenario:
@@ -37,5 +45,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
             "before starting a new one."
         )
         return state
+    
+
 
     return state
