@@ -19,15 +19,15 @@ from app.utils.data import parse_data
     ],
 )
 
-def test_interact(empty_state, problem_id, file_name1, id1, file_name2, id2, message, check):
+def test_compare(empty_state, problem_id, file_name1, id1, file_name2, id2, message, check):
 
     state = replace(empty_state)
     
     state.problem_id = problem_id
     state.scenario_ids = [id1, id2]
     state.data_loaded_at = datetime.now()
-    state.next_action = "INTERACT_SCENARIO"
-    state.role = "Data Analyst"
+    state.next_action = "COMPARE_SCENARIOS"
+    state.selected_roles = ["Data Analyst"]
 
     state.data = {}
     with open(f"tests/data/{file_name1}", "r") as f:

@@ -28,7 +28,7 @@ def test_interact(empty_state, file_name, id, message, check):
     state.scenario_ids = [id]
     state.data_loaded_at = datetime.now()
     state.next_action = "INTERACT_SCENARIO"
-    state.role = "Data Analyst"
+    state.selected_roles = ["Data Analyst"]
 
     with open(f"tests/data/{file_name}", "r") as f:
         state = parse_data(state, json.loads(f.read()))

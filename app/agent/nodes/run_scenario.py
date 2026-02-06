@@ -7,10 +7,6 @@ def extract_inputs(state: AgentState) -> AgentState:
     #TODO implement
     return state
 
-def ask_missing(state: AgentState) -> AgentState:
-    #TODO implement
-    return state
-
 def confirm(state: AgentState) -> AgentState:
     #TODO implement
     return state

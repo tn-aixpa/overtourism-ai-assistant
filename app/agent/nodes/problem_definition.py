@@ -30,22 +30,15 @@ def extract_problem(state: AgentState) -> AgentState:
       #TODO: impement
       pass
     return state
-    
-def ask_missing_problem():
-    pass
 
-def confirm_problem():
+def parse_problem_confirmation(state: AgentState) -> AgentState:
     pass
 
 def decide_scenario_strategy():
     pass
-def ask_scenario_preference():
-    pass
-def collect_user_scenarios():
-    pass
+
 def validate_scenarios():
     pass
-def confirm_user_scenarios():
-    pass
+
 def generate_scenario_candidates():
     pass
