@@ -6,7 +6,7 @@ from app.agent.state import AgentState
 
 def test_full_workflow_invalid(empty_state):
     state = replace(empty_state)
-    state.user_message = "Tell me about the weather in Paris"
+    state.messages = [{"role": "user", "content": "Tell me about the weather in Paris"}]
 
     result = app.invoke(state)
     assert result["response"] == "I'm not able to handle this request with the current system capabilities."
@@ -30,7 +30,7 @@ def test_full_workflow_interact(empty_state):
         }
     }}
         
-    state.user_message="Analyze the scenario and propose policies with environmental impacts and infrastructure changes."
+    state.messages = [{"role": "user", "content": "Analyze the scenario and propose policies with environmental impacts and infrastructure changes."}]
     state.problem_id = "P1"
     state.scenario_ids = ["sim_001"]
     state.data = MOCK_data
@@ -85,7 +85,7 @@ def test_full_workflow_compare(empty_state):
             }
         }
     }
-    state.user_message = "What are the impacts of reducing the number of parking spaces? How will this impact mobility and environment?"
+    state.messages = [{"role": "user", "content": "What are the impacts of reducing the number of parking spaces? How will this impact mobility and environment?"}]
     state.problem_id = "P1"
     state.scenario_ids = ["sim_001", "sim_002"]
     state.data = MOCK_data

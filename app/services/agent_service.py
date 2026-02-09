@@ -4,7 +4,7 @@ from app.agent.state import AgentState
 
 def run_agent(request) -> AgentState:
     initial_state = AgentState(
-        user_message=request.user_message,
+        messages= [request.message] if request.message else [],
         _id=request.scenario_ids,
         running_scenario=request.running_scenario,
 

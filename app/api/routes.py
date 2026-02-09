@@ -48,7 +48,7 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         state.session_id = request.session_id
         state.problem_id = request.problem_id or ""
         state.scenario_ids = request.scenario_ids or []
-        state.user_message = request.user_message
+        state.messages= [request.message] if request.message else [],
         if request.data is not None:
             state.data = request.data
             state.data_loaded_at = request.data_loaded_at

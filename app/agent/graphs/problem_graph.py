@@ -4,7 +4,6 @@ from langgraph.types import Command
 from ..state import AgentState
 from ..nodes.problem_definition import (
     extract_problem,
-    parse_problem_confirmation,
     decide_scenario_strategy,
     validate_scenarios,
     generate_scenario_candidates,
@@ -17,37 +16,31 @@ from .scenario_graph import scenario_runner_subgraph
 
 wait_problem_input = human_gate(
     "WAIT_PROBLEM_INPUT",
-    "user_problem_input",
     lambda s: {"missing_fields": s.missing_problem_fields},
 )
 
 wait_problem_confirmation = human_gate(
     "WAIT_PROBLEM_CONFIRMATION",
-    "confirm_action",
-    lambda s: {"problem": s.problem_definition},
+    lambda s: {"instructions": "Do you confirm the extracted problem information?", "problem_info": s.extracted_problem_info},
 )
 
 wait_scenario_preference = human_gate(
     "WAIT_SCENARIO_PREFERENCE",
-    "scenario_strategy_input",
     lambda s: {"context": s.problem_definition},
 )
 
 wait_user_scenarios = human_gate(
     "WAIT_USER_SCENARIOS",
-    "user_scenarios",
     lambda s: {"instructions": "Provide scenarios"},
 )
 
 wait_scenarios_confirmation = human_gate(
     "WAIT_SCENARIOS_CONFIRMATION",
-    "confirm_action",
     lambda s: {"scenarios": s.scenarios},
 )
 
 wait_missing_scenario_inputs = human_gate(
     "WAIT_SCENARIO_INPUT",
-    "scenario_user_input",
     lambda s: {"missing_fields": s.missing_fields},
 )
 
@@ -60,13 +53,21 @@ def extract_problem_node(state: AgentState):
     return Command(update=state, goto="WAIT_PROBLEM_INPUT")
 
 def parse_confirmation_node(state: AgentState):
-    state = parse_problem_confirmation(state)
+    message = state.messages[-1]["content"].lower() if state.messages else ""
+    if any(word in message for word in ["yes", "confirm", "ok"]):
+        state.next_action = "CONFIRM_PROBLEM"
+    elif any(word in message for word in ["no", "cancel", "interrut"]):
+        state.next_action = "CANCEL_PROBLEM"
+    else:
+        state.next_action = "EDIT_PROBLEM"
+    #TODO: add also llm fallback
+
     routes = {
-        "CONFIRM": "decide_scenario_strategy",
-        "EDIT": "extract_problem",
-        "CANCEL": END,
+        "CONFIRM_PROBLEM": "decide_scenario_strategy",
+        "EDIT_PROBLEM": "extract_problem",
+        "CANCEL_PROBLEM": END,
     }
-    return Command(update=state, goto=routes[state.confirm_action])
+    return Command(update=state, goto=routes[state.next_action])
 
 def decide_strategy_node(state: AgentState):
     state = decide_scenario_strategy(state)
@@ -103,4 +104,7 @@ graph.add_node("WAIT_SCENARIOS_CONFIRMATION", wait_scenarios_confirmation)
 graph.add_node("generate_scenario_candidates", generate_scenario_candidates)
 
 graph.set_entry_point("extract_problem")
+
+graph.add_edge("WAIT_PROBLEM_CONFIRMATION", "parse_problem_confirmation")
+
 problem_subgraph = graph.compile()

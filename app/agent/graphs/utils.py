@@ -19,7 +19,7 @@ def safe(node_fn):
 # HUMAN GATE NODES (Interrupt-based)
 # ─────────────────────────────────────────────
 
-def human_gate(interrupt_type, output_key, payload_builder):
+def human_gate(interrupt_type, payload_builder):
     def _node(state: AgentState):
 
         payload = {
@@ -27,8 +27,13 @@ def human_gate(interrupt_type, output_key, payload_builder):
             **payload_builder(state),
         }
 
-        result = interrupt(payload)
+        response = interrupt(payload)
+        if response:
+            state.messages.append({
+                "role": "user",
+                "content": response
+            })
 
-        return {output_key: result}
+        return state
 
     return _node

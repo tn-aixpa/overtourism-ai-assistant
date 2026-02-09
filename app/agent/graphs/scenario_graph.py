@@ -9,7 +9,6 @@ from ..graphs.utils import human_gate, safe
 
 wait_missing_inputs = human_gate(
     "WAIT_SCENARIO_INPUT",
-    "scenario_user_input",
     lambda s: {"missing_fields": s.missing_fields},
 )
 

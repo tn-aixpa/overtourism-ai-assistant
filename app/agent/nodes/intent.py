@@ -2,7 +2,7 @@ from ..state import AgentState
 from ...utils.llm import classify_intent
 
 def intent_node(state: AgentState) -> AgentState:
-    answer = classify_intent(state.scenario_ids, state.user_message)
+    answer = classify_intent(state.scenario_ids, state.messages[-1]["content"] if state.messages else "")
     if "Error" not in answer:  
       state.next_action = answer
     else:

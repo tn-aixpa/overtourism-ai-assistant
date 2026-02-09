@@ -7,7 +7,7 @@ from datetime import datetime
 @dataclass
 class AgentState:
     # Core state
-    user_message: str = ""
+    messages: List[Dict[str, Any]] = field(default_factory=list) # contains dict in format {"role": "user"/"assistant", "content": "...message content..."}
     next_action: Optional[str] = None
     response: str = ""
 

@@ -21,7 +21,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
     for role in state.selected_roles:
 
         answer = answer_question_comparison(
-            question=state.user_message,
+            question=state.messages[-1]["content"] if state.messages else "",
             data=state.data,
             role=role,
         )

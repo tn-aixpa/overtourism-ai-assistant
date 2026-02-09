@@ -20,7 +20,7 @@ def route_from_intent(state: AgentState):
         return Command(update=state, goto="extract", graph=Command.PARENT)
 
     if action == "CREATE_PROBLEM":
-        return Command(update=state, goto="extract_problem", graph=Command.PARENT)
+        return Command(update=state, goto="problem", graph=Command.PARENT)
 
     # END nodes
     if action in ["NOT_ALLOWED", "INVALID"]:

@@ -7,7 +7,7 @@ from app.agent.state import AgentState
 # TODO add tests for CREATE_PROBLEM
 
 @pytest.mark.parametrize(
-    "user_message, active_scenarios, problem_id,expected_intent",
+    "message, active_scenarios, problem_id,expected_intent",
     [
         # --- INTERACT_SCENARIO (single active scenario) ---
         ("Explain the results of scenario simA", ["simA"], "P1", "INTERACT_SCENARIO"),
@@ -41,12 +41,12 @@ from app.agent.state import AgentState
     ],
 )
 
-def test_intent_classification(empty_state: AgentState, user_message, active_scenarios, problem_id, expected_intent):
+def test_intent_classification(empty_state: AgentState, message, active_scenarios, problem_id, expected_intent):
     # Copy base state safely
     state = replace(empty_state)
 
     # Set variables
-    state.user_message = user_message
+    state.messages.append({"role": "user", "content": message})
     state.problem_id = problem_id    
 
     # Set active scenarios

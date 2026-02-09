@@ -35,7 +35,7 @@ def test_compare(empty_state, problem_id, file_name1, id1, file_name2, id2, mess
     with open(f"tests/data/{file_name2}", "r") as f:
         state = parse_data(state, json.loads(f.read()))
 
-    state.user_message = message
+    state.messages.append({"role": "user", "content": message})
     state = compare_scenarios(state)
 
     correct = False

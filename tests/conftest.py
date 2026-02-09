@@ -5,7 +5,7 @@ from app.agent.state import AgentState
 def empty_state():
 
     return AgentState(
-        user_message="",
+        messages=[],
         next_action=None,
         response="",
         session_id="",

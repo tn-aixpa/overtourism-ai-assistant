@@ -33,7 +33,7 @@ def test_interact(empty_state, file_name, id, message, check):
     with open(f"tests/data/{file_name}", "r") as f:
         state = parse_data(state, json.loads(f.read()))
 
-    state.user_message = message
+    state.messages.append({"role": "user", "content": message})
     state = interact_scenario(state)
 
     assert check in state.response

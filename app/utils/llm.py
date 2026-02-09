@@ -17,7 +17,7 @@ def llm_interaction(prompt: str) -> str:
     except Exception as e:
         return f"Error connecting to Ollama: {e}"
     
-def classify_intent(active_sims: list, user_message: str) -> str:
+def classify_intent(active_sims: list, message: str) -> str:
     context = "City management and overtourism" #TODO: move it somewhere else
     prompt = f"""
 You are an intent classifier.
@@ -42,7 +42,7 @@ Decision rules:
 Context: {context}.
 The Context provides background but does not override the intent rules.
 
-User request: {user_message}
+User request: {message}
 Active scenarios: {active_sims or "none"}
 
 Return only the action name.
@@ -132,7 +132,7 @@ Question: {question}
 
     return llm_interaction(prompt)
 
-def synthesize_llm(user_message: str, expert_answers: dict) -> str:
+def synthesize_llm(message: str, expert_answers: dict) -> str:
     prompt = f"""
 You are a policy synthesizer.
 
@@ -143,7 +143,7 @@ Rules:
 - Do NOT add recommendations unless explicitly present
 
 Question:
-{user_message}
+{message}
 
 Expert answers:
 """
@@ -153,7 +153,7 @@ Expert answers:
 
     return llm_interaction(prompt)
 
-def extract_problem_data(user_message: str, problem_info: dict, extracted_problem_info: dict) -> str:
+def extract_problem_data(message: str, problem_info: dict, extracted_problem_info: dict) -> str:
     all_keys = list(problem_info.keys())
     keys_to_extract = {k for k in all_keys if k not in extracted_problem_info}
 
@@ -169,9 +169,32 @@ Rules:
 - Fill each field with corresponding information from the user's message, if present.
 - If a field is about the tile, please limit the length to maximum 3 words.
 - You can reuse information to fill more than one field if applicable.
+- If the user insterts information about the scenarios that he want to analyze inster them in a field called "user_scenarios".
 - Do NOT invent information that is not present in the user's message.
 - If no information is found for a field do not include it in the output.
-{user_message}
+{message}
 """
     
     return llm_interaction(prompt)
+
+
+def assess_scenario_strategy(messages: list) -> str:
+    prompt = f"""You are an intent classfier that need to decide if and how the user wants to create scenarios based on the conversation history.
+Possible actions:
+- GENERATE_SCENARIOS: The user wants to create scenarios and has or will provided enough information.
+- GENERATE_AGENTIC_SCENARIOS: The user wants to create scenarios, but would like the system to generate them based on some general information provided.
+- ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or in which of the above modalities.extract_problem_data
+- NO_SCENARIOS: The user does not want to create scenarios for the current problem.
+Rules:
+- If the user explicitly mentions wanting to create scenarios and provides specific information about them → GENERATE_SCENARIOS.
+- If the user explicitly mentions wanting the system to generate appropirate scenarios to solve a certain problem → GENERATE_AGENTIC_SCENARIOS.
+- If the user says that they do not want to create scenarios, or answered no upon system request → NO_SCENARIOS.
+- If in doubt, please return ASK_USER_PREFERENCE.
+
+Message history:
+{messages}
+
+Return only the action name.
+"""
+    return llm_interaction(prompt)
+    

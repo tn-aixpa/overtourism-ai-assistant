@@ -8,7 +8,7 @@ class AgentRequest(BaseModel):
     scenario_ids: list[str] = []
     session_id: str = "000"
 
-    user_message: str
+    messages: list[Dict[str, Any]] = []
     next_action: str | None = None
     response: str = ""
     

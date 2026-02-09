@@ -25,7 +25,7 @@ from app.agent.state import AgentState
     ],
 )
 def test_single_roles(question, expected_role):
-    state = AgentState(user_message=question)
+    state = AgentState(messages=[{"role": "user", "content": question}])
     new_state = select_role(state)
 
     # We assert the expected role is included in selected_roles
@@ -46,7 +46,7 @@ def test_single_roles(question, expected_role):
     ],
 )
 def test_multi_roles(question):
-    state = AgentState(user_message=question)
+    state = AgentState(messages=[{"role": "user", "content": question}])
     new_state = select_role(state)
 
     # Must return multiple roles

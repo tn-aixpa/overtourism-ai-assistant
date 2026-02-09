@@ -3,7 +3,7 @@ from ...config import ALLOWED_ROLES
 from ...utils.llm import select_role_llm
 
 def select_role(state: AgentState) -> AgentState:
-    question = state.user_message
+    question = state.messages[-1]["content"] if state.messages else ""
     raw = select_role_llm(question, ALLOWED_ROLES)
 
     if "Error" in raw:

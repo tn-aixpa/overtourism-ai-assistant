@@ -7,7 +7,8 @@ def synthesize_answers(state: AgentState) -> AgentState:
         # TODO: handle this
         return state
     
-    answer = synthesize_llm(state.user_message, state.expert_answers)
+    answer = synthesize_llm(state.messages[-1]["content"] if state.messages else "",
+                            state.expert_answers)
 
     if "Error" in answer:
         #TODO: handle this

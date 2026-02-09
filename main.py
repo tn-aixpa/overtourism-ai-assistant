@@ -2,7 +2,7 @@ from app.agent.graph import app
 
 def test():
     state = {
-        "user_message": "Please, summarize the scenario results.",
+        "message": [{"role": "user"/"assistant", "content": "Please, summarize the scenario results."}],
         "scenario_ids": ["sim1"],
         "data": None,
         "data_loaded_at": None,

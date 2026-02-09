@@ -1,10 +1,13 @@
 import json
 from ..state import AgentState
 from ...utils.llm import extract_problem_data
+from ...utils.llm import assess_scenario_strategy
 
 def extract_problem(state: AgentState) -> AgentState:
-
-    answer = extract_problem_data(state.user_message, state.problem_info, state.extracted_problem_info)
+    #TODO: might need to revise to add the possiblity to change/integrate/remove a field
+    answer = extract_problem_data(state.messages[-1]["content"] if state.messages else "",
+                                  state.problem_info,
+                                  state.extracted_problem_info)
     
     #"problem_title": "Insufficient Parking Spaces in Molveno",\n  "objectives": "To provide sufficient parking spaces, reduce off-spot parking, and eliminate long queues",\n  "problem_description": "The lack of parking spaces in Molveno results in people parking off-spot and forming long queues. This issue needs to be addressed to ensure smooth traffic flow and prevent congestion.",\n  "additional_data": "The current situation is causing inconvenience to visitors and locals alike.",\n  "available_subsystems": "Parking management, Traffic management, Urban planning"\n}',
 
@@ -31,11 +34,13 @@ def extract_problem(state: AgentState) -> AgentState:
       pass
     return state
 
-def parse_problem_confirmation(state: AgentState) -> AgentState:
-    pass
-
-def decide_scenario_strategy():
-    pass
+def decide_scenario_strategy(state: AgentState) -> AgentState:
+    answer = assess_scenario_strategy(state.messages)
+    if "Error" in answer:  
+        state.next_action = "ASK_USER_PREFERENCE"
+    else:
+        state.next_action = answer
+    return state
 
 def validate_scenarios():
     pass
