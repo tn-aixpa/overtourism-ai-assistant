@@ -16,6 +16,9 @@ def select_role(state: AgentState) -> AgentState:
     for r in raw.split(","):
         key = r.strip()
         roles.append(key)
+
+    if not roles:
+        roles = ["Data Analyst"]
     
     state.selected_roles = roles
 

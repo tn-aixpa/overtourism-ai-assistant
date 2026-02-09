@@ -1,8 +1,7 @@
 import pytest
 from dataclasses import replace
 
-from app.agent.nodes.intent import intent_node
-from app.agent.nodes.validate_intent import validate_intent_node
+from app.agent.nodes.intent import intent_node, validate_intent_node
 from app.agent.state import AgentState
 
 # TODO add tests for CREATE_PROBLEM

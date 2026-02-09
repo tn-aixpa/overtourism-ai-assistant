@@ -1,7 +1,7 @@
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 
-DEBUG = True
+DEBUG = False
 
 # Initialize local Ollama model
 llm = ChatOllama(
