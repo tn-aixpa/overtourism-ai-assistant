@@ -27,6 +27,12 @@ def human_gate(interrupt_type, payload_builder):
             **payload_builder(state),
         }
 
+        if "instructions" in payload:
+            state.messages.append({
+                "role": "assistant",
+                "content": payload["instructions"]
+            })
+
         response = interrupt(payload)
         if response:
             state.messages.append({

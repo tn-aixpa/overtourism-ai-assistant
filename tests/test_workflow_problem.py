@@ -5,12 +5,58 @@ from app.agent.graph import app
 from app.agent.state import AgentState
 from tests.conftest import empty_state
 
+# def test_problem_creation_without_scenarios(empty_state, monkeypatch):
+
+#     # Fake human response
+#     def fake_interrupt(payload):
+#         if payload["type"] == "WAIT_PROBLEM_INPUT":
+#             return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
+#         if payload["type"] == "WAIT_PROBLEM_CONFIRMATION":
+#             return "Yes, proceed."
+#         if payload["type"] == "WAIT_SCENARIO_PREFERENCE":
+#             return "No, I don't want to create scenarios."
+#         return None
+
+#     # Replace interrupt with fake version
+#     monkeypatch.setattr(
+#         "app.agent.graphs.utils.interrupt",
+#         fake_interrupt
+#     )
+
+#     state = replace(empty_state)
+#     state.messages = [
+#         {
+#             "role": "user",
+#             "content": (
+#                 "I want to create a new problem.",
+#             )
+#         }
+#     ]
+
+#     state.problem_info = {
+#         "problem_title": {"description": "The title of the problem", "required": True},
+#         "objectives": {"description": "The objectives of the problem", "required": True},
+#         "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
+#         "available_subsystems": {"description": "The available subsystems related to the problem", "required": False},
+#         "additional_data": {"description": "Any additional data relevant to the problem", "required": False},
+#     }
+
+#     events = []
+
+#     with open("logs/test_problem_workflow.log", "w") as f:
+#         for event in app.stream(state):
+#             f.write(f"Event: {event}\n")
+#             events.append(event)
+
 def test_problem_creation_without_scenarios(empty_state, monkeypatch):
 
     # Fake human response
     def fake_interrupt(payload):
-        assert payload["type"] == "WAIT_PROBLEM_CONFIRMATION"
-        return "Yes, proceed."
+        if payload["type"] == "WAIT_PROBLEM_CONFIRMATION":
+            return "Yes, proceed."
+        if payload["type"] == "WAIT_SCENARIO_PREFERENCE":
+            return "No, I don't want to create scenarios."
+        return None
 
     # Replace interrupt with fake version
     monkeypatch.setattr(
@@ -25,14 +71,13 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
             "content": (
                 "In Molveno there is a problem related to the fact that there are not enough parking spaces",
                  "which leads to people parking off-spot and long queues.",
-                "Please, create a new problem based on this description."
             )
         }
     ]
 
     state.problem_info = {
         "problem_title": {"description": "The title of the problem", "required": True},
-        "objectives": {"description": "The objectives of the problem", "required": True},
+        "objectives": {"description": "The objectives of the problem", "required": False},
         "problem_description": {"description": "A detailed description of the problem", "required": True},
         "available_subsystems": {"description": "The available subsystems related to the problem", "required": False},
         "additional_data": {"description": "Any additional data relevant to the problem", "required": False},

@@ -154,45 +154,67 @@ Expert answers:
     return llm_interaction(prompt)
 
 def extract_problem_data(message: str, problem_info: dict, extracted_problem_info: dict) -> str:
+    #TODO: might need to revise to add the possiblity to change/integrate/remove a field
+
     all_keys = list(problem_info.keys())
     keys_to_extract = {k for k in all_keys if k not in extracted_problem_info}
 
     prompt = f"""You are a problem information extractor for a city management digital twin focused on overtourism.
+
 Your task is to extract structured information about a problem from the user's message.
-The information to extract is:
+
+Fields that MAY be extracted:
 {', '.join(keys_to_extract)}
-Rules:
-- Return your answer in JSON format with the following structure:
-{{
-{', '.join([f'  "{field}": "extracted content"' for field in keys_to_extract])}
-}}
-- Fill each field with corresponding information from the user's message, if present.
-- If a field is about the tile, please limit the length to maximum 3 words.
-- You can reuse information to fill more than one field if applicable.
-- If the user insterts information about the scenarios that he want to analyze inster them in a field called "user_scenarios".
-- Do NOT invent information that is not present in the user's message.
-- If no information is found for a field do not include it in the output.
+
+This is what each field means:
+{', '.join([f'{k}: {problem_info[k]["description"]}' for k in all_keys if k not in extracted_problem_info])}
+
+IMPORTANT RULES:
+
+- Return ONLY a JSON object.
+- Extract ONLY concrete problem content (real-world issues, constraints, descriptions, goals, systems).
+- DO NOT extract meta-intent about creating or defining a problem.
+  Example of meta-intent that must be ignored:
+    - "I want to create a new problem"
+    - "Let's define a problem"
+    - "Add a problem"
+- The user must describe an actual problem situation for any field to be included.
+- If the message only expresses intent to create or manage a problem but provides no actual problem details, return exactly ''.
+- NEVER infer, summarize, reinterpret, or expand the message.
+- NEVER generate generic summaries.
+- Remove from the output any fields that are empty strings or empty arrays.
+
+Special rule for "problem_title": maximum 3 words.
+
+User message:
 {message}
 """
     
     return llm_interaction(prompt)
 
+def format_messages(messages):
+    return "\n".join(
+        f"{m['role'].upper()}: {m['content']}"
+        for m in messages
+    )
 
 def assess_scenario_strategy(messages: list) -> str:
     prompt = f"""You are an intent classfier that need to decide if and how the user wants to create scenarios based on the conversation history.
 Possible actions:
 - GENERATE_SCENARIOS: The user wants to create scenarios and has or will provided enough information.
 - GENERATE_AGENTIC_SCENARIOS: The user wants to create scenarios, but would like the system to generate them based on some general information provided.
-- ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or in which of the above modalities.extract_problem_data
+- ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or if he prefers atuomatic or manual geneartion of scenarios.
 - NO_SCENARIOS: The user does not want to create scenarios for the current problem.
 Rules:
 - If the user explicitly mentions wanting to create scenarios and provides specific information about them → GENERATE_SCENARIOS.
-- If the user explicitly mentions wanting the system to generate appropirate scenarios to solve a certain problem → GENERATE_AGENTIC_SCENARIOS.
+- If the user asks for suggestions/solutions for the problem or explicitly mentions wanting the system to generate appropirate scenarios → GENERATE_AGENTIC_SCENARIOS.
+- If scenarios are mentioned try to make a decision between GENERATE_SCENARIOS and GENERATE_AGENTIC_SCENARIOS based on the level of detail provided by the user.
 - If the user says that they do not want to create scenarios, or answered no upon system request → NO_SCENARIOS.
-- If in doubt, please return ASK_USER_PREFERENCE.
+- If the user only mentions a problem, without talking about modifications or solutions → ASK_USER_PREFERENCE.
+- If the user's intent is unclear or cannot be determined → ASK_USER_PREFERENCE.
 
 Message history:
-{messages}
+{format_messages(messages)}
 
 Return only the action name.
 """

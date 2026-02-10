@@ -1,4 +1,4 @@
-from app.agent.graph import app
+from app.agent.graph import app,intent_subgraph, interaction_subgraph, problem_subgraph, scenario_runner_subgraph
 
 def test():
     state = {
@@ -15,8 +15,22 @@ def test():
     print(result["response"])
 
 def draw():
+    # Draw main graph
+    print("=== Main Graph ===")
     print(app.get_graph().draw_mermaid())
 
+    # Draw subgraphs
+    print("=== Intent Subgraph ===")
+    print(intent_subgraph.get_graph().draw_mermaid())
+
+    print("=== Interaction Subgraph ===")
+    print(interaction_subgraph.get_graph().draw_mermaid())
+
+    print("=== Problem Subgraph ===")
+    print(problem_subgraph.get_graph().draw_mermaid())
+
+    print("=== Scenario Runner Subgraph ===")
+    print(scenario_runner_subgraph.get_graph().draw_mermaid())
 
 draw()
 # use https://mermaid.live/ to visualize the output

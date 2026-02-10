@@ -4,8 +4,6 @@ from dataclasses import replace
 from app.agent.nodes.intent import intent_node, validate_intent_node
 from app.agent.state import AgentState
 
-# TODO add tests for CREATE_PROBLEM
-
 @pytest.mark.parametrize(
     "message, active_scenarios, problem_id,expected_intent",
     [

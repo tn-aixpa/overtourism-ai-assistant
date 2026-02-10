@@ -10,13 +10,12 @@ from ..nodes.problem_definition import (
 )
 
 from .utils import human_gate, safe
-from .scenario_graph import scenario_runner_subgraph
 
 # ---- Human gates
 
 wait_problem_input = human_gate(
     "WAIT_PROBLEM_INPUT",
-    lambda s: {"missing_fields": s.missing_problem_fields},
+    lambda s: {"instructions": f"To create correctly create the new problem, please provide the missing information: {chr(10)} - {chr(10).join(k for k in s.problem_info if k not in s.extracted_problem_info)}. {chr(10)}"},
 )
 
 wait_problem_confirmation = human_gate(
@@ -26,7 +25,7 @@ wait_problem_confirmation = human_gate(
 
 wait_scenario_preference = human_gate(
     "WAIT_SCENARIO_PREFERENCE",
-    lambda s: {"context": s.problem_definition},
+    lambda s: {"instructions": "Do you want to create scenarios for this problem? If so, do you have specific scenarios in mind or would you like the system to generate some based on the problem information?"},
 )
 
 wait_user_scenarios = human_gate(
@@ -47,40 +46,51 @@ wait_missing_scenario_inputs = human_gate(
 # ---- Command wrappers
 
 def extract_problem_node(state: AgentState):
-    state = safe(extract_problem)(state)
-    if state.extracted_all_problem:
-        return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
-    return Command(update=state, goto="WAIT_PROBLEM_INPUT")
+    with open("logs/debugger.log", "w") as f:
+        f.write(f"Extracting problem\n")
+        try:
+            state = safe(extract_problem)(state)
+            f.write(f"State after extraction: {state}\n")
+            f.write(f"Extracted problem info: {state.extracted_problem_info}\n")
+            if state.extracted_all_problem:
+                f.write("All problem info extracted successfully.")
+                return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
+            f.write("Problem info extraction incomplete.")
+            return Command(update=state, goto="WAIT_PROBLEM_INPUT")
+        except Exception as e:
+            f.write(f"Error during problem extraction: {e}")
 
 def parse_confirmation_node(state: AgentState):
     message = state.messages[-1]["content"].lower() if state.messages else ""
     if any(word in message for word in ["yes", "confirm", "ok"]):
         state.next_action = "CONFIRM_PROBLEM"
-    elif any(word in message for word in ["no", "cancel", "interrut"]):
+    elif any(word in message for word in ["edit", "change", "modify"]):
+        state.next_action = "EDIT_PROBLEM"
+    elif any(word in message for word in ["cancel", "interrut", "quit"]) or message == "no":
         state.next_action = "CANCEL_PROBLEM"
     else:
-        state.next_action = "EDIT_PROBLEM"
+        state.next_action = "WAIT_PROBLEM_CONFIRMATION"
     #TODO: add also llm fallback
 
     routes = {
         "CONFIRM_PROBLEM": "decide_scenario_strategy",
         "EDIT_PROBLEM": "extract_problem",
         "CANCEL_PROBLEM": END,
+        "WAIT_PROBLEM_CONFIRMATION": "WAIT_PROBLEM_CONFIRMATION",
     }
     return Command(update=state, goto=routes[state.next_action])
 
 def decide_strategy_node(state: AgentState):
     state = decide_scenario_strategy(state)
 
-    # Senior architecture: delegate to scenario runner subgraph
-    if state.scenario_strategy == "NO_SCENARIOS":
-        return Command(update=state, goto=END)
-
-    # Any strategy that requires running scenarios → subgraph
-    if state.scenario_strategy in ["ASK_USER_PREFERENCE", "USER_DEFINED_SCENARIOS", "AGENTIC_SCENARIOS"]:
-        return Command(update=state, graph=scenario_runner_subgraph, goto="extract") #TODO edit this to correct version
-
-    return Command(update=state, goto=END)
+    routes = {
+        "GENERATE_SCENARIOS": "generate_scenario_candidates",
+        "GENERATE_AGENTIC_SCENARIOS": "generate_scenario_candidates",
+        "ASK_USER_PREFERENCE": "WAIT_SCENARIO_PREFERENCE",
+        "NO_SCENARIOS": END,
+    }
+    
+    return Command(update=state, goto=routes[state.next_action])
 
 def validate_scenarios_node(state: AgentState):
     state = validate_scenarios(state)
@@ -106,5 +116,7 @@ graph.add_node("generate_scenario_candidates", generate_scenario_candidates)
 graph.set_entry_point("extract_problem")
 
 graph.add_edge("WAIT_PROBLEM_CONFIRMATION", "parse_problem_confirmation")
+graph.add_edge("WAIT_SCENARIO_PREFERENCE", "decide_scenario_strategy")
+graph.add_edge("WAIT_PROBLEM_INPUT", "extract_problem")
 
 problem_subgraph = graph.compile()

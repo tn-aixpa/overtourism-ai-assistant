@@ -2,9 +2,17 @@ from ..state import AgentState
 from ...utils.llm import classify_intent
 
 def intent_node(state: AgentState) -> AgentState:
-    answer = classify_intent(state.scenario_ids, state.messages[-1]["content"] if state.messages else "")
-    if "Error" not in answer:  
-      state.next_action = answer
+    answer = classify_intent(state.scenario_ids, state.messages[-1]["content"] if state.messages else "").strip()
+
+    VALID_OUTPUTS = {
+        "CREATE_PROBLEM",
+        "RUN_NEW_SCENARIO",
+        "INTERACT_SCENARIO",
+        "INVALID",
+    }
+
+    if answer in VALID_OUTPUTS:
+        state.next_action = answer
     else:
       #TODO: impement
       pass
