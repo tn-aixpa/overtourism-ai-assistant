@@ -9,7 +9,6 @@ def error_recovery_node(state: AgentState, error_message: str = None) -> AgentSt
 
     # Reset critical flags to avoid unsafe operations
     state.running_scenario = False
-    state.awaiting_confirmation = False
     state.next_action = None
 
     # Provide user-friendly fallback

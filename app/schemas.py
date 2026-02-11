@@ -14,8 +14,6 @@ class AgentRequest(BaseModel):
     data: Dict[str, Any] | None = None
     data_loaded_at: str | None = None
     
-    current_input: Dict[str, Any] = {}
-    awaiting_confirmation: bool = False
     running_scenario: bool = False
 
     selected_roles: list[str] = []

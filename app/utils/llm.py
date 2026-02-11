@@ -153,10 +153,10 @@ Expert answers:
 
     return llm_interaction(prompt)
 
-def extract_problem_data(message: str, problem_info: dict, extracted_problem_info: dict) -> str:
+def extract_problem_data(message: str, problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
     #TODO: might need to revise to add the possiblity to change/integrate/remove a field
 
-    all_keys = list(problem_info.keys())
+    all_keys = list(problem_info_to_extract.keys())
     keys_to_extract = {k for k in all_keys if k not in extracted_problem_info}
 
     prompt = f"""You are a problem information extractor for a city management digital twin focused on overtourism.
@@ -167,7 +167,7 @@ Fields that MAY be extracted:
 {', '.join(keys_to_extract)}
 
 This is what each field means:
-{', '.join([f'{k}: {problem_info[k]["description"]}' for k in all_keys if k not in extracted_problem_info])}
+{', '.join([f'{k}: {problem_info_to_extract[k]["description"]}' for k in all_keys if k not in extracted_problem_info])}
 
 IMPORTANT RULES:
 

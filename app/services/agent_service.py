@@ -12,9 +12,6 @@ def run_agent(request) -> AgentState:
         data=request.data,
         data_loaded_at=request.data_loaded_at,
 
-        current_input=request.current_input or {},
-        awaiting_confirmation=request.awaiting_confirmation or False,
-
         next_action=None,
     )
 

@@ -3,8 +3,6 @@ from langgraph.types import Command
 
 from ..state import AgentState
 from ..nodes.intent import intent_node, validate_intent_node
-from .problem_graph import problem_subgraph
-from .scenario_graph import scenario_runner_subgraph
 
 
 # ---- Command wrappers

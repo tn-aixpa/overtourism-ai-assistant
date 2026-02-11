@@ -52,8 +52,6 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         if request.data is not None:
             state.data = request.data
             state.data_loaded_at = request.data_loaded_at
-        state.current_input = request.current_input or state.current_input
-        state.awaiting_confirmation = request.awaiting_confirmation or False
         state.running_scenario = request.running_scenario or False
 
         # reset per-turn outputs

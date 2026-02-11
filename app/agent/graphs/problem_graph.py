@@ -12,7 +12,7 @@ from .utils import human_gate, safe
 
 def extract_problem(state: AgentState) -> AgentState:
     answer = extract_problem_data(state.messages[-1]["content"] if state.messages else "",
-                                  state.problem_info,
+                                  state.problem_info_to_extract,
                                   state.extracted_problem_info)
     
     #"problem_title": "Insufficient Parking Spaces in Molveno",\n  "objectives": "To provide sufficient parking spaces, reduce off-spot parking, and eliminate long queues",\n  "problem_description": "The lack of parking spaces in Molveno results in people parking off-spot and forming long queues. This issue needs to be addressed to ensure smooth traffic flow and prevent congestion.",\n  "additional_data": "The current situation is causing inconvenience to visitors and locals alike.",\n  "available_subsystems": "Parking management, Traffic management, Urban planning"\n}',
@@ -30,7 +30,7 @@ def extract_problem(state: AgentState) -> AgentState:
                 state.extracted_problem_info[key] = value
         
         extracted_all_problem = True
-        for key, info in state.problem_info.items():
+        for key, info in state.problem_info_to_extract.items():
             if info["required"] and key not in state.extracted_problem_info:
                 # If any required info is missing, we consider the extraction incomplete
                 extracted_all_problem = False
@@ -58,14 +58,24 @@ def decide_scenario_strategy(state: AgentState) -> AgentState:
         state.next_action = answer.strip()
     return state
 
-def validate_scenarios():
-    pass
+def generate_scenario_candidates(state: AgentState):
+    #generate base scenario first
+    #TODO: implement, for now we just load a base scenario from file
+    with open("tests/data/test_scenarios.json", "r") as f:
+        base_scenario = json.load(f)
+        state.data = base_scenario
 
-def generate_scenario_candidates():
-    pass
-
+    if not state.data:
+        state.messages.append({"role": "assistant", "content": "Error generating scenarios. Please try again later."})
+        return Command(update=state, goto="END")
+    
+    #request llm for possible variations and improvements of the base scenario
+    variations = [] #TODO: implement llm call to generate variations based on base scenario and problem info
+    state.scenarios_to_generate = variations
+    return Command(update=state, goto="END") #TODO: goto subgraph
+    
 def create_problem_instance_node(state: AgentState) -> AgentState:
-    #TODO: implement
+    #TODO: call tool, assume state is changed with problem id and data
     success = True
     if success:
         return Command(update=state, goto="decide_scenario_strategy")
@@ -77,12 +87,12 @@ def create_problem_instance_node(state: AgentState) -> AgentState:
 
 wait_problem_input = human_gate(
     "WAIT_PROBLEM_INPUT",
-    lambda s: {"instructions": f"To create correctly create the new problem, please provide the missing information: {chr(10)} - {chr(10).join(k for k in s.problem_info if k not in s.extracted_problem_info)}. {chr(10)}"},
+    lambda s: {"instructions": f"To create correctly create the new problem, please provide the missing information: {chr(10)} - {chr(10).join(k for k in s.problem_info_to_extract if k not in s.extracted_problem_info)}. {chr(10)}"},
 )
 
 wait_problem_confirmation = human_gate(
     "WAIT_PROBLEM_CONFIRMATION",
-    lambda s: {"instructions": "Do you confirm the extracted problem information?", "problem_info": s.extracted_problem_info},
+    lambda s: {"instructions": "Do you confirm the extracted problem information?", "problem_info_to_extract": s.extracted_problem_info},
 )
 
 wait_scenario_preference = human_gate(
@@ -90,20 +100,6 @@ wait_scenario_preference = human_gate(
     lambda s: {"instructions": "Do you want to create scenarios for this problem? If so, do you have specific scenarios in mind or would you like the system to generate some based on the problem information?"},
 )
 
-wait_user_scenarios = human_gate(
-    "WAIT_USER_SCENARIOS",
-    lambda s: {"instructions": "Provide scenarios"},
-)
-
-wait_scenarios_confirmation = human_gate(
-    "WAIT_SCENARIOS_CONFIRMATION",
-    lambda s: {"scenarios": s.scenarios},
-)
-
-wait_missing_scenario_inputs = human_gate(
-    "WAIT_SCENARIO_INPUT",
-    lambda s: {"missing_fields": s.missing_fields},
-)
 
 # ---- Command wrappers
 
@@ -146,19 +142,13 @@ def decide_strategy_node(state: AgentState):
     state = decide_scenario_strategy(state)
 
     routes = {
-        "GENERATE_SCENARIOS": "generate_scenario_candidates",
+        "GENERATE_SCENARIOS": "generate_scenario_candidates", #TODO: change this to subgraph scenario subgraph or what needed
         "GENERATE_AGENTIC_SCENARIOS": "generate_scenario_candidates",
         "ASK_USER_PREFERENCE": "WAIT_SCENARIO_PREFERENCE",
         "NO_SCENARIOS": END,
     }
     
     return Command(update=state, goto=routes[state.next_action])
-
-def validate_scenarios_node(state: AgentState):
-    state = validate_scenarios(state)
-    if state.scenarios_valid:
-        return Command(update=state, goto="WAIT_SCENARIOS_CONFIRMATION")
-    return Command(update=state, goto="WAIT_USER_SCENARIOS")
 
 # ---- Build subgraph
 
@@ -171,10 +161,6 @@ graph.add_node("parse_problem_confirmation", parse_confirmation_node)
 graph.add_node("create_problem_instance", create_problem_instance_node)
 graph.add_node("decide_scenario_strategy", decide_strategy_node)
 graph.add_node("WAIT_SCENARIO_PREFERENCE", wait_scenario_preference)
-graph.add_node("WAIT_USER_SCENARIOS", wait_user_scenarios)
-graph.add_node("validate_scenarios", validate_scenarios_node)
-graph.add_node("WAIT_SCENARIOS_CONFIRMATION", wait_scenarios_confirmation)
-graph.add_node("generate_scenario_candidates", generate_scenario_candidates)
 
 graph.set_entry_point("extract_problem")
 

@@ -33,7 +33,7 @@ from tests.conftest import empty_state
 #         }
 #     ]
 
-#     state.problem_info = {
+#     state.problem_info_to_extract = {
 #         "problem_title": {"description": "The title of the problem", "required": True},
 #         "objectives": {"description": "The objectives of the problem", "required": True},
 #         "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
@@ -75,7 +75,7 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
         }
     ]
 
-    state.problem_info = {
+    state.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
         "objectives": {"description": "The objectives of the problem", "required": False},
         "problem_description": {"description": "A detailed description of the problem", "required": True},
