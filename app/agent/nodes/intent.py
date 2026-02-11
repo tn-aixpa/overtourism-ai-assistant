@@ -28,19 +28,20 @@ def validate_intent_node(state: AgentState) -> AgentState:
     # --- INVALID intent ---
     if intent == "INVALID":
         state.next_action = "INVALID"
-        state.response = (
-            "I'm not able to handle this request with the current system capabilities."
-        )
+        state.messages.append({
+            "role": "assistant",
+            "content": "I'm not able to handle this request with the current system capabilities."
+        })
         return state
 
     # --- INTERACT_SCENARIO ---
     if intent == "INTERACT_SCENARIO":
         if not state.scenario_ids:
             state.next_action = "NOT_ALLOWED"
-            state.response = (
-                "I understand you want to interact with a scenario, "
-                "but no scenario is currently selected."
-            )
+            state.messages.append({
+                "role": "assistant",
+                "content": "I understand you want to interact with a scenario, but no scenario is currently selected."
+            })
             return state
 
         if len(state.scenario_ids) > 1:
@@ -50,18 +51,19 @@ def validate_intent_node(state: AgentState) -> AgentState:
     # --- CREATE_PROBLEM ---
     if intent == "RUN_NEW_SCENARIO" and not state.problem_id:
         state.next_action = "NOT_ALLOWED"
-        state.response = (
-            "No problem is defined. Please define a problem first."
-        )
+        state.messages.append({
+            "role": "assistant",
+            "content": "No problem is defined. Please define a problem first."
+        })
         return state
 
     # --- RUN_NEW_SCENARIO ---
     if intent == "RUN_NEW_SCENARIO" and state.running_scenario:
         state.next_action = "NOT_ALLOWED"
-        state.response = (
-            "A scenario is already running. Please wait for it to finish "
-            "before starting a new one."
-        )
+        state.messages.append({
+            "role": "assistant",
+            "content": "A scenario is already running. Please wait for it to finish before starting a new one."
+        })
         return state
     
 

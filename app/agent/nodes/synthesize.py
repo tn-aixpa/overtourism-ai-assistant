@@ -14,6 +14,9 @@ def synthesize_answers(state: AgentState) -> AgentState:
         #TODO: handle this
         pass
 
-    state.response = answer
+    state.messages.append({
+        "role": "assistant",
+        "content": answer
+    })
 
     return state

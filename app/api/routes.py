@@ -57,7 +57,6 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         state.running_scenario = request.running_scenario or False
 
         # reset per-turn outputs
-        state.response = ""
         state.next_action = None
 
         logger.info(
@@ -70,9 +69,10 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         # run the LangGraph agent, persist and return state
         final_state = AgentState(**agent_app.invoke(state))
         save_state(key, final_state)
+        response = final_state.messages[-1]["content"] if final_state.messages and final_state.messages[-1]["role"] == "assistant" else "ERROR: No assistant message generated"
         return AgentResponse(
             action=final_state.next_action,
-            response=final_state.response,
+            response=response,
             blocked=getattr(final_state, "blocked", None),
             state=final_state.__dict__,  # full state for debugging / UI
         )

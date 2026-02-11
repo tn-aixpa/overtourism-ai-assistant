@@ -36,4 +36,5 @@ def test_interact(empty_state, file_name, id, message, check):
     state.messages.append({"role": "user", "content": message})
     state = interact_scenario(state)
 
-    assert check in state.response
+    response = state.messages[-1]["content"] if state.messages and state.messages[-1]["role"] == "assistant" else ""
+    assert check in response

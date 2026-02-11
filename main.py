@@ -7,12 +7,11 @@ def test():
         "data": None,
         "data_loaded_at": None,
         "next_action": None,
-        "response": "",
     }
 
     result = app.invoke(state)
     print("\n=== AGENT RESPONSE ===")
-    print(result["response"])
+    print(result)
 
 def draw():
     # Draw main graph

@@ -4,7 +4,7 @@ from ...utils.llm import answer_question_comparison
 def compare_scenarios(state: AgentState) -> AgentState:
     # check state
     if len(state.scenario_ids) < 2:
-        state.response = f"Something went wrong. Number of active scenarios: {len(state.scenario_ids)}."
+        state.messages.append({"role": "assistant", "content": f"Something went wrong. Number of active scenarios: {len(state.scenario_ids)}. Please ensure at least two scenarios are active."})
         return state
     
 
@@ -12,7 +12,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
     unavailable = [sim for sim in state.scenario_ids if sim not in state.data]
     if len(unavailable):
         # TODO: implement fallback to try to load data
-        state.response = f"Scenario data for id {unavailable} is not available right now. Please try again later."
+        state.messages.append({"role": "assistant", "content": f"Scenario data for id {unavailable} is not available right now. Please try again later."})
         return state
 
     state.expert_answers = {}
@@ -28,6 +28,6 @@ def compare_scenarios(state: AgentState) -> AgentState:
         state.expert_answers[role] = answer
     
     if len(state.selected_roles) == 1:
-        state.response = next(iter(state.expert_answers.values()))
+        state.messages.append({"role": "assistant", "content": next(iter(state.expert_answers.values()))})
 
     return state

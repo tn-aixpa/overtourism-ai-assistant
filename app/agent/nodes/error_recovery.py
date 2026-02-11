@@ -13,9 +13,8 @@ def error_recovery_node(state: AgentState, error_message: str = None) -> AgentSt
     state.next_action = None
 
     # Provide user-friendly fallback
-    state.response = (
-        "Oops! Something went wrong while processing your request. "
-        "Please check your inputs or try again."
-        "ERROR DETAILS: " + error_message if error_message else ""
-    )
+    state.messages.append({
+        "role": "assistant",
+        "content": f"Oops! Something went wrong while processing your request. Please check your inputs or try again. ERROR DETAILS: {error_message if error_message else ''}"
+    })
     return state

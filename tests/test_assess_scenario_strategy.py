@@ -1,6 +1,6 @@
 import pytest
 
-from app.agent.nodes.problem_definition import decide_scenario_strategy
+from app.agent.graphs.problem_graph import decide_scenario_strategy
 from app.agent.state import AgentState
 
 @pytest.mark.parametrize(

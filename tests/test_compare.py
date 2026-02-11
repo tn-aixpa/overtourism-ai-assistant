@@ -39,7 +39,8 @@ def test_compare(empty_state, problem_id, file_name1, id1, file_name2, id2, mess
     state = compare_scenarios(state)
 
     correct = False
-    if any(string in state.response.lower() for string in check):
+    response = state.messages[-1]["content"] if state.messages[-1]["role"] == "assistant" else ""
+    if any(string in response.lower() for string in check):
         correct = True
         
     assert correct

@@ -13,5 +13,4 @@ def confirm(state: AgentState) -> AgentState:
 
 def run_scenario(state: AgentState) -> AgentState:
     #TODO implement
-    state.response = f"Scenario started"
     return state

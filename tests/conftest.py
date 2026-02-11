@@ -7,7 +7,6 @@ def empty_state():
     return AgentState(
         messages=[],
         next_action=None,
-        response="",
         session_id="",
         problem_id="",
         scenario_ids=None, 

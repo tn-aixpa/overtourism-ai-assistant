@@ -16,7 +16,6 @@ def run_agent(request) -> AgentState:
         awaiting_confirmation=request.awaiting_confirmation or False,
 
         next_action=None,
-        response="",
     )
 
     return agent_app.invoke(initial_state)

@@ -9,9 +9,7 @@ class AgentRequest(BaseModel):
     session_id: str = "000"
 
     messages: list[Dict[str, Any]] = []
-    next_action: str | None = None
-    response: str = ""
-    
+    next_action: str | None = None   
 
     data: Dict[str, Any] | None = None
     data_loaded_at: str | None = None
@@ -30,7 +28,7 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     action: str | None
-    response: str
+    response: str | None = None
     blocked: bool | None = None
     state: Dict[str, Any] | None = None
 

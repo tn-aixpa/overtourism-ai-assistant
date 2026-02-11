@@ -9,7 +9,6 @@ class AgentState:
     # Core state
     messages: List[Dict[str, Any]] = field(default_factory=list) # contains dict in format {"role": "user"/"assistant", "content": "...message content..."}
     next_action: Optional[str] = None
-    response: str = ""
 
     # Parameters related to questions
     session_id: str = ""

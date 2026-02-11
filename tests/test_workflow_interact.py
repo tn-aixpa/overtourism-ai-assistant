@@ -9,7 +9,8 @@ def test_full_workflow_invalid(empty_state):
     state.messages = [{"role": "user", "content": "Tell me about the weather in Paris"}]
 
     result = app.invoke(state)
-    assert result["response"] == "I'm not able to handle this request with the current system capabilities."
+    response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
+    assert response == "I'm not able to handle this request with the current system capabilities."
     
 def test_full_workflow_interact(empty_state):
     state = replace(empty_state)
@@ -47,7 +48,8 @@ def test_full_workflow_interact(empty_state):
 
     assert result["next_action"] == "INTERACT_SCENARIO"
     assert len(result["selected_roles"]) > 1
-    assert result["response"] != "" and "not able to handle this request" not in result["response"]
+    response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
+    assert response != "" and "not able to handle this request" not in response
     
 
 def test_full_workflow_compare(empty_state):
@@ -94,4 +96,5 @@ def test_full_workflow_compare(empty_state):
     result = app.invoke(state)
     assert result["next_action"] == "COMPARE_SCENARIOS"
     assert len(result["selected_roles"]) > 1
-    assert result["response"] != "" and "not able to handle this request" not in result["response"]
+    response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
+    assert response != "" and "not able to handle this request" not in response
