@@ -2,10 +2,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import Command
 
 from ..state import AgentState
-from ..nodes.select_role import select_role
-from ..nodes.interact import interact_scenario
-from ..nodes.compare import compare_scenarios
-from ..nodes.synthesize import synthesize_answers
+from ..nodes.iteraction import select_role, interact_scenario, compare_scenarios, synthesize_answers
+from ..graphs.utils import add_safe_node
 
 
 # ---- Command wrappers
@@ -46,14 +44,14 @@ def compare_router(state: AgentState):
 
 # ---- Build subgraph
 
-interaction_graph = StateGraph(AgentState)
+graph = StateGraph(AgentState)
 
-interaction_graph.add_node("select_role", select_role_router)
-interaction_graph.add_node("interact_scenario", interact_router)
-interaction_graph.add_node("compare_scenarios", compare_router)
-interaction_graph.add_node("synthesize", synthesize_answers)
+add_safe_node(graph, "select_role", select_role_router)
+add_safe_node(graph, "interact_scenario", interact_router)
+add_safe_node(graph, "compare_scenarios", compare_router)
+add_safe_node(graph, "synthesize", synthesize_answers)
 
-interaction_graph.set_entry_point("select_role")
-interaction_graph.add_edge("synthesize", END)
+graph.set_entry_point("select_role")
+graph.add_edge("synthesize", END)
 
-interaction_subgraph = interaction_graph.compile()
+interaction_subgraph = graph.compile()

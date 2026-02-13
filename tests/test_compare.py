@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import datetime
 import json
 
-from app.agent.nodes.compare import compare_scenarios
+from app.agent.nodes.iteraction import compare_scenarios
 from app.utils.data import parse_data
 
 @pytest.mark.parametrize(

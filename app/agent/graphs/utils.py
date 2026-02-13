@@ -6,6 +6,9 @@ from ..nodes.error_recovery import error_recovery_node
 # Safe wrappers
 # ─────────────────────────────────────────────
 
+def add_safe_node(graph, name, fn):
+    graph.add_node(name, safe(fn))
+
 def safe(node_fn):
     def _safe(state):
         try:

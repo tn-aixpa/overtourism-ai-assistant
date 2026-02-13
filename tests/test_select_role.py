@@ -1,7 +1,7 @@
 # test_select_role_integration.py
 import pytest
 
-from app.agent.nodes.select_role import select_role
+from app.agent.nodes.iteraction import select_role
 from app.agent.state import AgentState
 
 # -----------------------------

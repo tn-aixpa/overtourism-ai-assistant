@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import datetime
 import json
 
-from app.agent.nodes.interact import interact_scenario
+from app.agent.nodes.iteraction import interact_scenario
 from app.utils.data import parse_data
 
 @pytest.mark.parametrize(

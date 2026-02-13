@@ -1,3 +1,6 @@
+from langgraph.graph import END
+from langgraph.types import Command
+
 from ..state import AgentState
 from ...utils.llm import classify_intent
 
@@ -11,11 +14,8 @@ def intent_node(state: AgentState) -> AgentState:
         "INVALID",
     }
 
-    if answer in VALID_OUTPUTS:
-        state.next_action = answer
-    else:
-      #TODO: impement
-      pass
+    assert answer in VALID_OUTPUTS
+    state.next_action = answer
     return state
 
 def validate_intent_node(state: AgentState) -> AgentState:
@@ -69,3 +69,24 @@ def validate_intent_node(state: AgentState) -> AgentState:
 
 
     return state
+
+def route_from_intent(state: AgentState):
+    action = state.next_action
+    if action in ["INTERACT_SCENARIO", "COMPARE_SCENARIOS"]:
+        return Command(update=state, goto="interaction", graph=Command.PARENT)
+
+    # Scenario runner subgraph
+
+    if action == "RUN_NEW_SCENARIO":
+        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
+
+    if action == "CREATE_PROBLEM":
+        return Command(update=state, goto="problem", graph=Command.PARENT)
+
+    # END nodes
+    if action in ["NOT_ALLOWED", "INVALID"]:
+        return Command(update=state, goto=END)
+    
+
+    # Fallback safety
+    return Command(update=state, goto="error", graph=Command.PARENT)
