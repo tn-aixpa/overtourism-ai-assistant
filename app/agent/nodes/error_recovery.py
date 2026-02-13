@@ -1,4 +1,7 @@
 from ..state import AgentState
+from langgraph.types import Command
+from langgraph.graph import END
+
 
 def error_recovery_node(state: AgentState, error_message: str = None) -> AgentState:
     """
@@ -16,4 +19,5 @@ def error_recovery_node(state: AgentState, error_message: str = None) -> AgentSt
         "role": "assistant",
         "content": f"Oops! Something went wrong while processing your request. Please check your inputs or try again. ERROR DETAILS: {error_message if error_message else ''}"
     })
-    return state
+    
+    Command(update=state, goto=END)

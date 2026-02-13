@@ -219,4 +219,94 @@ Message history:
 Return only the action name.
 """
     return llm_interaction(prompt)
+
+def extract_scenario_data(messages: dict, scenario_info_to_extract: dict, editable_idexes: dict) -> str:
+    all_keys = list(scenario_info_to_extract.keys())
+
+    prompt = f"""
+SYSTEM ROLE:
+
+You are a deterministic structured data extractor.
+
+Your output is parsed automatically by a machine.
+If the output is not valid JSON, the system will fail.
+
+--------------------------------------------------
+
+TASK:
+
+Extract structured information about proposed solutions
+from the conversation.
+
+--------------------------------------------------
+
+STRICT OUTPUT CONTRACT:
+
+- Output MUST be valid JSON.
+- Output MUST be a JSON ARRAY.
+- Each item = ONE solution.
+- NEVER output multiple JSON objects concatenated.
+- NEVER output markdown (no ```).
+- NEVER output explanations or extra text.
+- The response MUST start with "[" and end with "]".
+- The JSON must be directly parsable with json.loads().
+
+--------------------------------------------------
+
+SCHEMA (STRICT):
+
+[
+  {{
+    "title": string (max 3 words),
+
+    "context_conditions": string (optional),
+
+    "indexes_to_change": {{
+        "<index_name>": {{
+            "type": "increase" | "decrease" | "range",
+            "value": number OR [lower_number, upper_number]
+        }}
+    }},
+
+    "potential_impact": string (optional),
+    "description": string (optional),
+    "additional_data": string (optional)
+  }}
+]
+
+Allowed index keys:
+{', '.join(list(editable_idexes.keys()))}
+
+--------------------------------------------------
+
+EXTRA RULES:
+
+- Extract ONLY explicit information.
+- NEVER infer missing details.
+- Remove empty fields entirely.
+- If no solutions exist, return [].
+- Inside "indexes_to_change" NEVER put a list as 'value' if type is "increase" or "decrease".
+- Inside "indexes_to_change" NEVER put a single number as 'value' if type is "range".
+
+--------------------------------------------------
+
+SELF-CHECK (MANDATORY BEFORE OUTPUT):
+
+Before producing the final answer:
+
+1) Verify the output is valid JSON.
+2) Verify the output is a list.
+3) Verify it begins with "[" and ends with "]".
+4) Verify there is NO text outside the JSON.
+5) Verify no empty fields exist.
+
+Only after validation, output the JSON.
+
+--------------------------------------------------
+
+MESSAGE HISTORY:
+
+{format_messages(messages)}
+"""
     
+    return llm_interaction(prompt)

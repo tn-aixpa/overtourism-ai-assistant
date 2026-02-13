@@ -9,6 +9,7 @@ class AgentState:
     # Core state
     messages: List[Dict[str, Any]] = field(default_factory=list) # contains dict in format {"role": "user"/"assistant", "content": "...message content..."}
     next_action: Optional[str] = None
+    error_message: str = ""
 
     # Parameters related to questions
     session_id: str = ""
@@ -17,6 +18,7 @@ class AgentState:
     
     data: Dict[str, Any] = field(default_factory=dict)
     data_loaded_at: Optional[datetime] = None
+    editable_idexes: Dict[str, Any] = field(default_factory=dict)
 
     selected_roles: List[str] = field(default_factory=list)
     expert_answers: Dict[str, str] = field(default_factory=dict)
@@ -28,8 +30,7 @@ class AgentState:
 
     # Scenario creation
     scenario_info_to_extract: Dict[str, Any] = field(default_factory=dict)
-    extracted_scenario_info: List[Dict[str, Any]] = field(default_factory=list)
-    validated_scenarios: List[Dict[str, Any]] = field(default_factory=list)
+    extracted_all_scenario: bool = False
     scenarios_to_generate : List[Dict[str, Any]] = field(default_factory=list)
 
     # Scenario execution

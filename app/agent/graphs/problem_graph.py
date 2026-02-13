@@ -104,19 +104,10 @@ wait_scenario_preference = human_gate(
 # ---- Command wrappers
 
 def extract_problem_node(state: AgentState):
-    with open("logs/debugger.log", "w") as f:
-        f.write(f"Extracting problem\n")
-        try:
-            state = safe(extract_problem)(state)
-            f.write(f"State after extraction: {state}\n")
-            f.write(f"Extracted problem info: {state.extracted_problem_info}\n")
-            if state.extracted_all_problem:
-                f.write("All problem info extracted successfully.")
-                return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
-            f.write("Problem info extraction incomplete.")
-            return Command(update=state, goto="WAIT_PROBLEM_INPUT")
-        except Exception as e:
-            f.write(f"Error during problem extraction: {e}")
+    state = safe(extract_problem)(state)
+    if state.extracted_all_problem:
+        return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
+    return Command(update=state, goto="WAIT_PROBLEM_INPUT")
 
 def parse_confirmation_node(state: AgentState):
     message = state.messages[-1]["content"].lower() if state.messages else ""

@@ -15,7 +15,7 @@ def route_from_intent(state: AgentState):
     # Scenario runner subgraph
 
     if action == "RUN_NEW_SCENARIO":
-        return Command(update=state, goto="extract", graph=Command.PARENT)
+        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
 
     if action == "CREATE_PROBLEM":
         return Command(update=state, goto="problem", graph=Command.PARENT)
