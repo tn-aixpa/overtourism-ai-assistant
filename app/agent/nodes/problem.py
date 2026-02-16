@@ -7,17 +7,13 @@ from ...utils.llm import extract_problem_data
 from ...utils.llm import assess_scenario_strategy
 
 def extract_problem(state: AgentState) -> AgentState:
-    answer = extract_problem_data(state.messages[-1]["content"] if state.messages else "",
+    answer = extract_problem_data(state.messages,
                                   state.problem_info_to_extract,
                                   state.extracted_problem_info)
     
     assert "Error connecting to Ollama" not in answer
 
-    try:
-        # The LLM output should be JSON, so we load it
-        parsed_data = json.loads(answer)
-    except json.JSONDecodeError:
-        return {}
+    parsed_data = json.loads(answer)
 
     for key, value in parsed_data.items():
         if value:
@@ -69,10 +65,18 @@ def create_problem_instance_node(state: AgentState) -> AgentState:
     #TODO: call tool, assume state is changed with problem id and data
     success = True
     assert success
+    state.messages.append(
+        {
+            "role": "assistant",
+            "content": "The problem was successfully created.",
+        }
+    )
     return Command(update=state, goto="decide_scenario_strategy")
 
 def extract_problem_node(state: AgentState):
+
     state = extract_problem(state)
+
     if state.extracted_all_problem:
         return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
     return Command(update=state, goto="WAIT_PROBLEM_INPUT")
@@ -89,21 +93,23 @@ def parse_confirmation_node(state: AgentState):
         state.next_action = "WAIT_PROBLEM_CONFIRMATION"
     #TODO: add also llm fallback
 
+    if state.next_action == "EDIT_PROBLEM":
+        return Command(update=state, goto="extract_problem", graph=Command.PARENT)
+    
     routes = {
-        "CONFIRM_PROBLEM": "decide_scenario_strategy",
-        "EDIT_PROBLEM": "extract_problem",
+        "CONFIRM_PROBLEM": "create_problem_instance",
         "CANCEL_PROBLEM": END,
         "WAIT_PROBLEM_CONFIRMATION": "WAIT_PROBLEM_CONFIRMATION",
     }
-    return Command(update=state, goto=routes[state.next_action], graph=Command.PARENT)
+    return Command(update=state, goto=routes[state.next_action])
 
 def decide_strategy_node(state: AgentState):
+    
     state = decide_scenario_strategy(state)
-
+    
     if state.next_action == "GENERATE_SCENARIOS":
         return Command(update=state, goto="scenario_extraction", )
     routes = {
-        "GENERATE_SCENARIOS": "generate_scenario_candidates",
         "GENERATE_AGENTIC_SCENARIOS": "generate_scenario_candidates",
         "ASK_USER_PREFERENCE": "WAIT_SCENARIO_PREFERENCE",
         "NO_SCENARIOS": END,

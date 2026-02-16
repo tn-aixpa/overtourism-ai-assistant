@@ -8,12 +8,12 @@ from .utils import human_gate, add_safe_node
 
 wait_problem_input = human_gate(
     "WAIT_PROBLEM_INPUT",
-    lambda s: {"instructions": f"To create correctly create the new problem, please provide the missing information: {chr(10)} - {chr(10).join(k for k in s.problem_info_to_extract if k not in s.extracted_problem_info)}. {chr(10)}"},
+        lambda s: {"instructions": f"To correctly create the new problem, please provide the missing information:\n- {'\n- '.join(f'{k}' for k, v in s.problem_info_to_extract.items() if k not in s.extracted_problem_info and v["required"])}"},
 )
 
 wait_problem_confirmation = human_gate(
     "WAIT_PROBLEM_CONFIRMATION",
-    lambda s: {"instructions": "Do you confirm the extracted problem information?", "problem_info_to_extract": s.extracted_problem_info},
+    lambda s: {"instructions": f"These are the information I extracted:\n- {'\n- '.join(f'{k}: {v}' for k, v in s.extracted_problem_info.items())}.\nDo you want to proceed?"}
 )
 
 wait_scenario_preference = human_gate(

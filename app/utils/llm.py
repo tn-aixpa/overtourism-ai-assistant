@@ -1,5 +1,6 @@
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
+from typing import List
 
 DEBUG = False
 
@@ -153,42 +154,113 @@ Expert answers:
 
     return llm_interaction(prompt)
 
-def extract_problem_data(message: str, problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
+def extract_problem_data(messages: List, problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
     #TODO: might need to revise to add the possiblity to change/integrate/remove a field
 
     all_keys = list(problem_info_to_extract.keys())
-    keys_to_extract = {k for k in all_keys if k not in extracted_problem_info}
 
-    prompt = f"""You are a problem information extractor for a city management digital twin focused on overtourism.
+    prompt = f"""
+SYSTEM ROLE:
 
-Your task is to extract structured information about a problem from the user's message.
+You are a deterministic structured data extractor.
 
-Fields that MAY be extracted:
-{', '.join(keys_to_extract)}
+Your output is parsed automatically by a machine.
+If the output is not valid JSON, the system will fail.
 
-This is what each field means:
-{', '.join([f'{k}: {problem_info_to_extract[k]["description"]}' for k in all_keys if k not in extracted_problem_info])}
+--------------------------------------------------
 
-IMPORTANT RULES:
+TASK:
 
-- Return ONLY a JSON object.
-- Extract ONLY concrete problem content (real-world issues, constraints, descriptions, goals, systems).
-- DO NOT extract meta-intent about creating or defining a problem.
-  Example of meta-intent that must be ignored:
-    - "I want to create a new problem"
-    - "Let's define a problem"
-    - "Add a problem"
-- The user must describe an actual problem situation for any field to be included.
-- If the message only expresses intent to create or manage a problem but provides no actual problem details, return exactly ''.
-- NEVER infer, summarize, reinterpret, or expand the message.
-- NEVER generate generic summaries.
-- Remove from the output any fields that are empty strings or empty arrays.
+Extract structured information about a REAL-WORLD problem
+from the conversation.
 
-Special rule for "problem_title": maximum 3 words.
+--------------------------------------------------
 
-User message:
-{message}
+STRICT OUTPUT CONTRACT:
+
+- Output MUST be valid JSON.
+- Output ONLY ONE JSON object.
+- NEVER output markdown.
+- NEVER output explanations or extra text.
+- NEVER output role prefixes like "ASSISTANT:".
+- The response MUST start with "{{" and end with "}}".
+- The JSON must be directly parsable with json.loads().
+- All fields must contain textual values except for available_subsystems.
+- Remove empty fields entirely.
+
+--------------------------------------------------
+
+SCHEMA (STRICT):
+
+A dictionary with pairs (key, value)
+
+Allowed index keys:
+{', '.join(list(all_keys))}
+
+--------------------------------------------------
+
+DEFINITION OF A VALID PROBLEM:
+
+A valid problem MUST include explicit real-world content such as:
+
+- a described situation
+- an issue, constraint, difficulty, or goal
+- concrete context
+
+--------------------------------------------------
+
+META-INTENT IS NOT A PROBLEM:
+
+Statements about creating, defining, planning,
+or wanting to make a problem are NOT problems.
+
+Examples that MUST produce empty output:
+
+- "I want to create a new problem."
+- "Let's define a problem."
+- "Add a problem."
+
+If ONLY meta-intent exists, treat it as NO DATA.
+
+--------------------------------------------------
+
+EMPTY RESULT RULE (VERY IMPORTANT):
+
+If no valid real-world problem exists in the conversation
+
+Do NOT invent placeholder titles or descriptions.
+Do NOT summarize meta-intent.
+Remove all empty keys from the output dictionary.
+
+--------------------------------------------------
+
+EXTRACTION RULES:
+
+- Extract ONLY explicit information.
+- NEVER infer missing details.
+- NEVER fabricate content.
+- Field 'problem_title' should be short (2-3 words) when present.
+
+--------------------------------------------------
+
+SELF-CHECK (MANDATORY BEFORE OUTPUT):
+
+Before producing the final answer:
+
+1) Verify the output is valid JSON.
+2) Verify there is NO text outside the JSON.
+3) Verify no empty fields exist.
+4) If no valid problem exists, output {{}}.
+
+Only after validation, output the JSON.
+
+--------------------------------------------------
+
+MESSAGE HISTORY:
+
+{format_messages(messages)}
 """
+
     
     return llm_interaction(prompt)
 
