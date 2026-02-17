@@ -8,6 +8,8 @@ from app.utils.data import parse_data
 from app.agent.state import AgentState
 from tests.conftest import empty_state
 
+DRAW_CONVERSATION = True
+
 def test_scenario_extraction(empty_state, monkeypatch):
 
     # Fake human response
@@ -56,8 +58,13 @@ def test_scenario_extraction(empty_state, monkeypatch):
 
     events = []
 
-    with open("logs/test_problem_workflow.log", "w") as f:
-        for event in app.stream(state):
-            f.write(f"Event: {event}\n")
-            events.append(event)
-
+    if DRAW_CONVERSATION:
+        from other.drawing_util import draw_conversation
+        state=app.invoke(state)
+        draw_conversation(state["messages"], "logs/scenario_creation.png")
+    else:
+        events = []
+        with open("logs/test_scenario_workflow.log", "a+") as f:
+            for event in app.stream(state):
+                f.write(f"Event: {event}\n")
+                events.append(event)

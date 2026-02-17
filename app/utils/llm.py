@@ -272,17 +272,20 @@ def format_messages(messages):
 
 def assess_scenario_strategy(messages: list) -> str:
     prompt = f"""You are an intent classfier that need to decide if and how the user wants to create scenarios based on the conversation history.
+A scenario is a modification of currect indexes that could possibly solve the problem.
+
 Possible actions:
-- GENERATE_SCENARIOS: The user wants to create scenarios and has or will provided enough information.
+- GENERATE_SCENARIOS: The user wants to create scenarios and knows what indexes he wants to change.
 - GENERATE_AGENTIC_SCENARIOS: The user wants to create scenarios, but would like the system to generate them based on some general information provided.
-- ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or if he prefers atuomatic or manual geneartion of scenarios.
+- ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or if he prefers to specify them or to let the system generate them.
 - NO_SCENARIOS: The user does not want to create scenarios for the current problem.
+
 Rules:
 - If the user explicitly mentions wanting to create scenarios and provides specific information about them → GENERATE_SCENARIOS.
-- If the user asks for suggestions/solutions for the problem or explicitly mentions wanting the system to generate appropirate scenarios → GENERATE_AGENTIC_SCENARIOS.
-- If scenarios are mentioned try to make a decision between GENERATE_SCENARIOS and GENERATE_AGENTIC_SCENARIOS based on the level of detail provided by the user.
+- If the user explicitly asks for scenario suggestions, possible modifications, or solutions → GENERATE_AGENTIC_SCENARIOS.
+- Generic affirmations without scenario-related context → ASK_USER_PREFERENCE.
 - If the user says that they do not want to create scenarios, or answered no upon system request → NO_SCENARIOS.
-- If the user only mentions a problem, without talking about modifications or solutions → ASK_USER_PREFERENCE.
+- If the user only mentions a problem, without talking about scenarios, modifications or solutions → ASK_USER_PREFERENCE.
 - If the user's intent is unclear or cannot be determined → ASK_USER_PREFERENCE.
 
 Message history:

@@ -7,9 +7,8 @@ from ...utils.llm import extract_scenario_data
 
 def extract_scenario(state: AgentState) -> AgentState:
     answer = extract_scenario_data(state.messages,
-                                  state.scenario_info_to_extract,
-                                  state.editable_idexes)
-    
+                                state.scenario_info_to_extract,
+                                state.editable_idexes)   
 
     assert "Error connecting to Ollama" not in answer
     
@@ -74,7 +73,6 @@ def extract_scenario(state: AgentState) -> AgentState:
 
 def extract_scenario_node(state: AgentState):
     state = extract_scenario(state)
-    Command(update=state, goto=END)
     if state.scenarios_to_generate:
         return Command(update=state, goto="WAIT_SCENARIO_CONFIRMATION")
     return Command(update=state, goto="WAIT_SCENARIO_INPUT")
@@ -108,4 +106,10 @@ def run_scenario_node(state: AgentState) -> AgentState:
         #TODO: run tool
         return Command(update=state, goto="run_scenario")
     else:
+        state.messages.append(
+            {
+                "role": "assistant",
+                "content": "I created the requested scenarios." 
+            }
+        )
         return Command(update=state, goto="END")

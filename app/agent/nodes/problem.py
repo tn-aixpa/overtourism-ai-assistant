@@ -42,23 +42,16 @@ def decide_scenario_strategy(state: AgentState) -> AgentState:
     if answer not in VALID_ACTIONS:
         state.next_action = "ASK_USER_PREFERENCE"
     else:
-        state.next_action = answer.strip()
+        state.next_action = answer
+
     return state
 
 def generate_scenario_candidates(state: AgentState):
-    #generate base scenario first
-    #TODO: implement, for now we just load a base scenario from file
-    with open("tests/data/test_scenarios.json", "r") as f:
-        base_scenario = json.load(f)
-        state.data = base_scenario
-
-    if not state.data:
-        state.messages.append({"role": "assistant", "content": "Error generating scenarios. Please try again later."})
-        return Command(update=state, goto="END")
-    
+    #generate base scenario first   
     #request llm for possible variations and improvements of the base scenario
     variations = [] #TODO: implement llm call to generate variations based on base scenario and problem info
     state.scenarios_to_generate = variations
+    
     return Command(update=state, goto="scenario_runner", graph=Command.PARENT)
     
 def create_problem_instance_node(state: AgentState) -> AgentState:
@@ -71,7 +64,6 @@ def create_problem_instance_node(state: AgentState) -> AgentState:
             "content": "The problem was successfully created.",
         }
     )
-    return Command(update=state, goto="decide_scenario_strategy")
 
 def extract_problem_node(state: AgentState):
 
@@ -104,11 +96,10 @@ def parse_confirmation_node(state: AgentState):
     return Command(update=state, goto=routes[state.next_action])
 
 def decide_strategy_node(state: AgentState):
-    
     state = decide_scenario_strategy(state)
     
     if state.next_action == "GENERATE_SCENARIOS":
-        return Command(update=state, goto="scenario_extraction", )
+        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
     routes = {
         "GENERATE_AGENTIC_SCENARIOS": "generate_scenario_candidates",
         "ASK_USER_PREFERENCE": "WAIT_SCENARIO_PREFERENCE",

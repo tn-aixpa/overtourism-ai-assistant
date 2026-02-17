@@ -13,8 +13,11 @@ wait_scenario_input = human_gate(
 
 wait_scenario_confirmation = human_gate(
     "WAIT_SCENARIO_CONFIRMATION",
-    lambda s: {"instructions": "Do you want to proceed with the following scenarios?", "scenario_info_to_extract": s.scenarios_to_generate},
-)
+    lambda s: {
+        "instructions": f"Do you want to proceed with the following scenarios?\n- "
+                        f"{'\n- '.join(str(x) for x in s.scenarios_to_generate)}"
+    },)
+
 # ---- Build subgraph
 
 graph = StateGraph(AgentState)

@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph
 
-from ..nodes.problem import extract_problem_node, parse_confirmation_node, create_problem_instance_node, decide_strategy_node
+from ..nodes.problem import extract_problem_node, parse_confirmation_node, create_problem_instance_node, decide_strategy_node, generate_scenario_candidates
 from ..state import AgentState
 from .utils import human_gate, add_safe_node
 
@@ -32,11 +32,13 @@ add_safe_node(graph, "parse_problem_confirmation", parse_confirmation_node)
 add_safe_node(graph, "create_problem_instance", create_problem_instance_node)
 add_safe_node(graph, "decide_scenario_strategy", decide_strategy_node)
 add_safe_node(graph, "WAIT_SCENARIO_PREFERENCE", wait_scenario_preference)
+add_safe_node(graph, "generate_scenario_candidates", generate_scenario_candidates)
 
 graph.set_entry_point("extract_problem")
 
-graph.add_edge("WAIT_PROBLEM_CONFIRMATION", "parse_problem_confirmation")
-graph.add_edge("WAIT_SCENARIO_PREFERENCE", "decide_scenario_strategy")
 graph.add_edge("WAIT_PROBLEM_INPUT", "extract_problem")
+graph.add_edge("WAIT_PROBLEM_CONFIRMATION", "parse_problem_confirmation")
+graph.add_edge("create_problem_instance", "decide_scenario_strategy")
+graph.add_edge("WAIT_SCENARIO_PREFERENCE", "decide_scenario_strategy")
 
 problem_subgraph = graph.compile()
