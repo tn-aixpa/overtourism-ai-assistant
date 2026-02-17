@@ -92,15 +92,21 @@ def answer_question_comparison(question: str, data: dict, role: str) -> str:
 
     prompt = f"""
 You are a {role}. Your task is to answer the user's question based strictly on the provided scenarios data.
-Answers can refer to one or more scenarios.
 
-Follow these rules:
-1. **Compute numerically** whenever the question asks about differences, changes, rankings, or comparisons.
-2. Do not rely on labels like "critical constraint" — use the actual numeric values in the data.
-3. Answer with the minimum amount of text necessary.
-4. Do not add explanations, interpretations, or conclusions unless explicitly requested.
-5. Include only the information needed to directly answer the question.
-6. Round all numerical values to 2 decimal places.d
+Follow these rules STRICTLY:
+
+1. Extract numeric values directly from the data.
+2. When comparing scenarios:
+   - compute delta = scenario_2 - scenario_1
+   - delta > 0 → "increased"
+   - delta < 0 → "decreased"
+   - delta = 0 → "unchanged"
+3. NEVER infer increase/decrease without numeric calculation.
+4. If index_diffs exist, explicitly connect them to KPI changes.
+5. Do not rely on labels like "critical constraint" — use numeric values.
+6. Use minimal text.
+7. Round all numbers to 2 decimal places.
+8. Do not add speculative impacts unless explicitly requested.
 
 Scenario Data: {data}
 Question: {question}

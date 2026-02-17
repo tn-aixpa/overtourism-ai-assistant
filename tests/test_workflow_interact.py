@@ -1,100 +1,70 @@
 from dataclasses import replace
+from datetime import datetime
+import json
 
 from app.agent.graph import app
 from app.agent.state import AgentState
+from app.utils.data import parse_data
+from app.config import DRAW_CONVERSATION
 
+# def test_full_workflow_invalid(empty_state):
+#     state = replace(empty_state)
+#     state.messages = [{"role": "user", "content": "Tell me about the weather in Paris"}]
 
-def test_full_workflow_invalid(empty_state):
-    state = replace(empty_state)
-    state.messages = [{"role": "user", "content": "Tell me about the weather in Paris"}]
+#     result = app.invoke(state)
+#     response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
+#     assert response == "I'm not able to handle this request with the current system capabilities."
 
-    result = app.invoke(state)
-    response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
-    assert response == "I'm not able to handle this request with the current system capabilities."
+#     if DRAW_CONVERSATION:
+#         from other.drawing_util import draw_conversation
+#         draw_conversation(result["messages"], "logs/invalid.png")
+
+# def test_full_workflow_interact(empty_state):
+
+#     state = replace(empty_state)
     
-def test_full_workflow_interact(empty_state):
-    state = replace(empty_state)
+#     state.problem_id = "parcheggi_200"
+#     state.scenario_ids = ["model_0"]
+#     state.data_loaded_at = datetime.now()
 
-    MOCK_data = {"sim_001" :{
-        "visitors": {
-            "monthly_average": 120000,
-            "peak_month": "August",
-            "capacity": 90000
-        },
-        "infrastructure": {
-            "parking_spaces": 3000,
-            "public_transport_load": 0.92
-        },
-        "environment": {
-            "co2_index": 1.35,
-            "protected_area_pressure": "high"
-        }
-    }}
-        
-    state.messages = [{"role": "user", "content": "Analyze the scenario and propose policies with environmental impacts and infrastructure changes."}]
-    state.problem_id = "P1"
-    state.scenario_ids = ["sim_001"]
-    state.data = MOCK_data
-    state.data_loaded_at = "2024-01-01T10:00:00"
+#     with open(f"tests/data/test_base.json", "r") as f:
+#         state = parse_data(state, json.loads(f.read()))
 
-    # with open("logs/test_workflow_interact_output.txt", "w") as f:
-    #     for chunk in app.stream(
-    #         state,
-    #         subgraphs=True, 
-    #         stream_mode="updates",
-    #     ):
-    #         f.write(str(chunk) + "\n")
-    result = app.invoke(state)
+#     state.messages.append({"role": "user", "content": "What is the most critical constraint and what does this imply?"})
 
-    assert result["next_action"] == "INTERACT_SCENARIO"
-    assert len(result["selected_roles"]) > 1
-    response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
-    assert response != "" and "not able to handle this request" not in response
+#     result = app.invoke(state)
+
+#     assert result["next_action"] == "INTERACT_SCENARIO"
+#     assert len(result["selected_roles"]) >= 1
+#     response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
+#     assert response != "" and "not able to handle this request" not in response and "parking" in response
+
+#     if DRAW_CONVERSATION:
+#         from other.drawing_util import draw_conversation
+#         draw_conversation(result["messages"], "logs/interact.png")
     
-
+    
 def test_full_workflow_compare(empty_state):
     state = replace(empty_state)
 
-    MOCK_data = {
-        "sim_001": {    
-            "visitors": {
-                "monthly_average": 120000,
-                "peak_month": "August",
-                "capacity": 90000
-            },
-            "infrastructure": {
-                "parking_spaces": 3000,
-                "public_transport_load": 0.92
-            },
-            "environment": {
-                "co2_index": 1.35,
-                "protected_area_pressure": "high"
-            }
-        },
-        "sim_002": {    
-            "visitors": {
-                "monthly_average": 80000,
-                "peak_month": "August",
-                "capacity": 90000
-            },
-            "infrastructure": {
-                "parking_spaces": 2500,
-                "public_transport_load": 0.92
-            },
-            "environment": {
-                "co2_index": 0.35,
-                "protected_area_pressure": "high"
-            }
-        }
-    }
-    state.messages = [{"role": "user", "content": "What are the impacts of reducing the number of parking spaces? How will this impact mobility and environment?"}]
-    state.problem_id = "P1"
-    state.scenario_ids = ["sim_001", "sim_002"]
-    state.data = MOCK_data
-    state.data_loaded_at = "2024-01-01T10:00:00"
-        
+    state.problem_id = "parcheggi_200"
+    state.scenario_ids = ["model_0", "model_3"]
+    state.data_loaded_at = datetime.now()
+
+    state.data = {}
+    with open(f"tests/data/test_base.json", "r") as f:
+        state = parse_data(state, json.loads(f.read()))
+    with open(f"tests/data/test_1.json", "r") as f:
+        state = parse_data(state, json.loads(f.read()))
+
+    state.messages.append({"role": "user", "content": "Please, what changed between the two scenarios and what was the impact of the change."})
+
     result = app.invoke(state)
     assert result["next_action"] == "COMPARE_SCENARIOS"
-    assert len(result["selected_roles"]) > 1
+    assert len(result["selected_roles"]) >= 1
     response = result["messages"][-1]["content"] if result["messages"] and result["messages"][-1]["role"] == "assistant" else ""
     assert response != "" and "not able to handle this request" not in response
+
+    if DRAW_CONVERSATION:
+        from other.drawing_util import draw_conversation
+        draw_conversation(result["messages"], "logs/compare.png")

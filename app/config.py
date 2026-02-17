@@ -3,3 +3,5 @@ ALLOWED_ROLES = {
     "Environment Specialist": "can reason about environmental impacts and sustainability.",
     "Urban Planner": "can reason about infrastructure, mobility, and land-use tradeoffs.",
 }
+
+DRAW_CONVERSATION = True

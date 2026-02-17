@@ -7,9 +7,8 @@ from app.agent.graph import app
 from app.agent.state import AgentState
 from tests.conftest import empty_state
 from app.utils.data import parse_data
+from app.config import DRAW_CONVERSATION
 
-
-DRAW_CONVERSATION = True
 
 def test_problem_creation_without_scenarios(empty_state, monkeypatch):
 
