@@ -12,7 +12,7 @@ wait_problem_input = human_gate(
 )
 
 wait_problem_confirmation = human_gate(
-    "WAIT_PROBLEM_CONFIRMATION",
+    "WAIT_CONFIRMATION_PROBLEM",
     lambda s: {"instructions": f"These are the information I extracted:\n- {'\n- '.join(f'{k}: {v}' for k, v in s.extracted_problem_info.items())}.\nDo you want to proceed?"}
 )
 
@@ -27,7 +27,7 @@ graph = StateGraph(AgentState)
 
 add_safe_node(graph, "extract_problem", extract_problem_node)
 add_safe_node(graph, "WAIT_PROBLEM_INPUT", wait_problem_input)
-add_safe_node(graph, "WAIT_PROBLEM_CONFIRMATION", wait_problem_confirmation)
+add_safe_node(graph, "WAIT_CONFIRMATION_PROBLEM", wait_problem_confirmation)
 add_safe_node(graph, "parse_problem_confirmation", parse_confirmation_node)
 add_safe_node(graph, "create_problem_instance", create_problem_instance_node)
 add_safe_node(graph, "decide_scenario_strategy", decide_strategy_node)
@@ -37,7 +37,7 @@ add_safe_node(graph, "generate_scenario_candidates", generate_scenario_candidate
 graph.set_entry_point("extract_problem")
 
 graph.add_edge("WAIT_PROBLEM_INPUT", "extract_problem")
-graph.add_edge("WAIT_PROBLEM_CONFIRMATION", "parse_problem_confirmation")
+graph.add_edge("WAIT_CONFIRMATION_PROBLEM", "parse_problem_confirmation")
 graph.add_edge("create_problem_instance", "decide_scenario_strategy")
 graph.add_edge("WAIT_SCENARIO_PREFERENCE", "decide_scenario_strategy")
 

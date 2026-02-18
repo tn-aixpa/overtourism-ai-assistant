@@ -391,3 +391,46 @@ MESSAGE HISTORY:
 """
     
     return llm_interaction(prompt)
+
+
+def llm_classify_confirmation(message: str):
+    prompt = f"""
+You are an intent classifier inside an AI workflow.
+
+Your task:
+Classify the user's message into ONE of the following labels:
+
+- CONFIRM
+User clearly agrees, confirms, or wants to proceed.
+
+- EDIT
+User wants to modify, change, or adjust something before proceeding.
+
+- CANCEL
+User wants to stop, cancel, or quit the process.
+
+- WAIT_CONFIRMATION
+User intent is unclear, unrelated, ambiguous, or not a confirmation.
+
+IMPORTANT RULES:
+
+1. Return ONLY the label name.
+2. Do NOT explain your reasoning.
+3. Do NOT add extra text.
+4. If uncertain, choose WAIT_CONFIRMATION.
+5. Support multiple languages.
+
+User message:
+\"\"\"{message}\"\"\"
+"""
+
+    result = llm_interaction(prompt)
+
+    allowed = {
+        "CONFIRM",
+        "EDIT",
+        "CANCEL",
+        "WAIT_CONFIRMATION",
+    }
+
+    return result if result in allowed else "WAIT_CONFIRMATION_PROBLEM"

@@ -15,7 +15,7 @@ def test_scenario_extraction(empty_state, monkeypatch):
     def fake_interrupt(payload):
         if payload["type"] == "WAIT_SCENARIO_INPUT":
             return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
-        if payload["type"] == "WAIT_SCENARIO_CONFIRMATION":
+        if payload["type"] == "WAIT_CONFIRMATION_SCENARIO":
             return "Yes, proceed."
         return None
 

@@ -3,8 +3,8 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from ..state import AgentState
-from ...utils.llm import extract_problem_data
-from ...utils.llm import assess_scenario_strategy
+from ...utils.llm import extract_problem_data, assess_scenario_strategy
+from ...utils.common import parse_confirmation
 
 def extract_problem(state: AgentState) -> AgentState:
     answer = extract_problem_data(state.messages,
@@ -70,20 +70,13 @@ def extract_problem_node(state: AgentState):
     state = extract_problem(state)
 
     if state.extracted_all_problem:
-        return Command(update=state, goto="WAIT_PROBLEM_CONFIRMATION")
+        return Command(update=state, goto="WAIT_CONFIRMATION_PROBLEM")
     return Command(update=state, goto="WAIT_PROBLEM_INPUT")
 
 def parse_confirmation_node(state: AgentState):
     message = state.messages[-1]["content"].lower() if state.messages else ""
-    if any(word in message for word in ["yes", "confirm", "ok"]):
-        state.next_action = "CONFIRM_PROBLEM"
-    elif any(word in message for word in ["edit", "change", "modify"]):
-        state.next_action = "EDIT_PROBLEM"
-    elif any(word in message for word in ["cancel", "interrut", "quit"]) or message == "no":
-        state.next_action = "CANCEL_PROBLEM"
-    else:
-        state.next_action = "WAIT_PROBLEM_CONFIRMATION"
-    #TODO: add also llm fallback
+
+    state.next_action = parse_confirmation(message)+'_PROBLEM'
 
     if state.next_action == "EDIT_PROBLEM":
         return Command(update=state, goto="extract_problem", graph=Command.PARENT)
@@ -91,7 +84,7 @@ def parse_confirmation_node(state: AgentState):
     routes = {
         "CONFIRM_PROBLEM": "create_problem_instance",
         "CANCEL_PROBLEM": END,
-        "WAIT_PROBLEM_CONFIRMATION": "WAIT_PROBLEM_CONFIRMATION",
+        "WAIT_CONFIRMATION_PROBLEM": "WAIT_CONFIRMATION_PROBLEM",
     }
     return Command(update=state, goto=routes[state.next_action])
 

@@ -4,6 +4,7 @@ from langgraph.types import Command
 
 from ..state import AgentState
 from ...utils.llm import extract_scenario_data
+from ...utils.common import parse_confirmation
 
 def extract_scenario(state: AgentState) -> AgentState:
     answer = extract_scenario_data(state.messages,
@@ -74,20 +75,13 @@ def extract_scenario(state: AgentState) -> AgentState:
 def extract_scenario_node(state: AgentState):
     state = extract_scenario(state)
     if state.scenarios_to_generate:
-        return Command(update=state, goto="WAIT_SCENARIO_CONFIRMATION")
+        return Command(update=state, goto="WAIT_CONFIRMATION_SCENARIO")
     return Command(update=state, goto="WAIT_SCENARIO_INPUT")
 
 def parse_confirmation_node(state: AgentState):
     message = state.messages[-1]["content"].lower() if state.messages else ""
-    if any(word in message for word in ["yes", "confirm", "ok"]):
-        state.next_action = "CONFIRM_SCENARIO"
-    elif any(word in message for word in ["edit", "change", "modify"]):
-        state.next_action = "EDIT_SCENARIO"
-    elif any(word in message for word in ["cancel", "interrut", "quit"]) or message == "no":
-        state.next_action = "CANCEL_SCENARIO"
-    else:
-        state.next_action = "WAIT_SCENARIO_CONFIRMATION"
-    #TODO: add also llm fallback
+    
+    state.next_action = parse_confirmation(message)+'_SCENARIO'
 
     if state.next_action == "CONFIRM_SCENARIO":
         return Command(update=state, goto="scenario_runner", graph=Command.PARENT) 
@@ -95,7 +89,7 @@ def parse_confirmation_node(state: AgentState):
     routes = {
         "EDIT_SCENARIO": "extract_scenario",
         "CANCEL_SCENARIO": END,
-        "WAIT_SCENARIO_CONFIRMATION": "WAIT_SCENARIO_CONFIRMATION",
+        "WAIT_CONFIRMATION_SCENARIO": "WAIT_CONFIRMATION_SCENARIO",
     }
     return Command(update=state, goto=routes[state.next_action])
 

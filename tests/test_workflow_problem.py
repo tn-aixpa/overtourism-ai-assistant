@@ -16,7 +16,7 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
     def fake_interrupt(payload):
         if payload["type"] == "WAIT_PROBLEM_INPUT":
             return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
-        if payload["type"] == "WAIT_PROBLEM_CONFIRMATION":
+        if payload["type"] == "WAIT_CONFIRMATION_PROBLEM":
             return "Yes, please."
         if payload["type"] == "WAIT_SCENARIO_PREFERENCE":
             return "No, I don't want to create scenarios."
@@ -62,7 +62,7 @@ def test_problem_creation_with_agentic_scenarios(empty_state, monkeypatch):
     def fake_interrupt(payload):
         if payload["type"] == "WAIT_PROBLEM_INPUT":
             return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
-        if payload["type"] == "WAIT_PROBLEM_CONFIRMATION":
+        if payload["type"] == "WAIT_CONFIRMATION_PROBLEM":
             return "Yes, please."
         if payload["type"] == "WAIT_SCENARIO_PREFERENCE":
             return "Yes, please suggest 3 scenarios to solve this problem."
@@ -107,11 +107,11 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
     def fake_interrupt(payload):
         if payload["type"] == "WAIT_PROBLEM_INPUT":
             return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
-        if payload["type"] == "WAIT_PROBLEM_CONFIRMATION":
+        if payload["type"] == "WAIT_CONFIRMATION_PROBLEM":
             return "Yes, please."
         if payload["type"] == "WAIT_SCENARIO_PREFERENCE":
             return "I want to create a two scenarios: one where I increase parking spaces of 200 units, and the other in which I decrease them of 50."
-        if payload["type"] == "WAIT_SCENARIO_CONFIRMATION":
+        if payload["type"] == "WAIT_CONFIRMATION_SCENARIO":
             return "Yes, proceed."
         return None
 
