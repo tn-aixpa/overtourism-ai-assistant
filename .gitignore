@@ -175,7 +175,7 @@ cython_debug/
 
 .ruff_cache/
 
-/logs
+logs/*
 Output/
 testdata/
 *.parquet
