@@ -1,7 +1,8 @@
 import pytest
+from dataclasses import replace
 
 from app.agent.nodes.problem import decide_scenario_strategy
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ConversationMessage
 
 @pytest.mark.parametrize(
     "messages, expected_answer",
@@ -33,8 +34,16 @@ from app.agent.state import AgentState
  "NO_SCENARIOS")
     ],
 )
-def test_single_roles(messages, expected_answer):
-    state = AgentState(messages=messages)
+def test_single_roles(empty_state, messages, expected_answer):
+    state = replace(empty_state)
+    for msg in messages:
+       state.conversation.append(
+              ConversationMessage(
+                  role=msg["role"],
+                  content=msg["content"],
+       ))
+       if msg["role"] == "user":
+           state.last_user_en = msg["content"]
     res_state = decide_scenario_strategy(state)
-    assert res_state.next_action == expected_answer
+    assert res_state.cognitive.next_action == expected_answer
 

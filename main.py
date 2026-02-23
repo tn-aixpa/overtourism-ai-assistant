@@ -5,7 +5,6 @@ def test():
         "message": [{"role": "user"/"assistant", "content": "Please, summarize the scenario results."}],
         "scenario_ids": ["sim1"],
         "data": None,
-        "data_loaded_at": None,
         "next_action": None,
     }
 

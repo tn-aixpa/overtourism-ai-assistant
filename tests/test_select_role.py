@@ -1,8 +1,10 @@
 # test_select_role_integration.py
 import pytest
+from dataclasses import replace
+from datetime import datetime
 
 from app.agent.nodes.iteraction import select_role
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ConversationMessage
 
 # -----------------------------
 # Single-role tests (6)
@@ -24,14 +26,21 @@ from app.agent.state import AgentState
         ("What infrastructure changes are needed?", "Urban Planner"),
     ],
 )
-def test_single_roles(question, expected_role):
-    state = AgentState(messages=[{"role": "user", "content": question}])
+def test_single_roles(empty_state, question, expected_role):
+    state = replace(empty_state)
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=question,
+            timestamp=datetime.now()
+        ))
+    state.last_user_en=question
     new_state = select_role(state)
 
     # We assert the expected role is included in selected_roles
-    assert expected_role in new_state.selected_roles
+    assert expected_role in new_state.cognitive.selected_roles
     # For single-role questions, ensure only one role is returned
-    assert len(new_state.selected_roles) == 1
+    assert len(new_state.cognitive.selected_roles) == 1
 
 # -----------------------------
 # Multi-role tests (2)
@@ -45,9 +54,16 @@ def test_single_roles(question, expected_role):
         ("Analyze the scenario and propose policies with environmental impacts and infrastructure changes."),
     ],
 )
-def test_multi_roles(question):
-    state = AgentState(messages=[{"role": "user", "content": question}])
+def test_multi_roles(empty_state, question):
+    state = replace(empty_state)
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=question,
+            timestamp=datetime.now()
+        ))
+    state.last_user_en=question
     new_state = select_role(state)
 
     # Must return multiple roles
-    assert len(new_state.selected_roles) >= 2
+    assert len(new_state.cognitive.selected_roles) >= 2

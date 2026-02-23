@@ -1,8 +1,9 @@
 import pytest
+from datetime import datetime
 from dataclasses import replace
 
 from app.agent.nodes.intent import intent_node, validate_intent_node
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ConversationMessage
 
 @pytest.mark.parametrize(
     "message, active_scenarios, problem_id,expected_intent",
@@ -44,15 +45,21 @@ def test_intent_classification(empty_state: AgentState, message, active_scenario
     state = replace(empty_state)
 
     # Set variables
-    state.messages.append({"role": "user", "content": message})
-    state.problem_id = problem_id    
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en=message
+    state.cognitive.problem_id = problem_id    
 
     # Set active scenarios
     if active_scenarios:
-        state.scenario_ids = active_scenarios
+        state.cognitive.scenario_ids = active_scenarios
 
     # Run nodes
     state = intent_node(state)
     state = validate_intent_node(state)
 
-    assert state.next_action == expected_intent
+    assert state.cognitive.next_action == expected_intent

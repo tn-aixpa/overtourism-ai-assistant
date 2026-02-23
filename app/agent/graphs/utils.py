@@ -1,5 +1,6 @@
+from datetime import datetime
 from langgraph.types import interrupt
-from ..state import AgentState
+from ..state import AgentState, ConversationMessage
 from ..nodes.error_recovery import error_recovery_node
 
 # ─────────────────────────────────────────────
@@ -31,17 +32,22 @@ def human_gate(interrupt_type, payload_builder):
         }
 
         if "instructions" in payload:
-            state.messages.append({
-                "role": "assistant",
-                "content": payload["instructions"]
-            })
+            state.conversation.append(
+                ConversationMessage(
+                    role="assistant",
+                    content=payload["instructions"],
+                    timestamp=datetime.now()
+            ))
 
         response = interrupt(payload)
         if response:
-            state.messages.append({
-                "role": "user",
-                "content": response
-            })
+            state.conversation.append(
+                ConversationMessage(
+                    role="user",
+                    content=response,
+                    timestamp=datetime.now()
+            ))
+            state.last_user_en = response
 
         return state
 

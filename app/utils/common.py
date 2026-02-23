@@ -1,5 +1,6 @@
 import re
 from .llm import llm_classify_confirmation
+from app.agent.state import AgentState
 
 def parse_confirmation(message):
     CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"}
@@ -22,3 +23,18 @@ def parse_confirmation(message):
 
     # fallback to LLM classification
     return llm_classify_confirmation(message)
+
+def to_state(result_dict) -> AgentState:
+    return AgentState(**result_dict)
+
+def translate_from_eng(str, user_lang):
+    if user_lang == "en":
+        return str
+    #TODO
+    return str
+
+def translate_to_eng(str, user_lang):
+    if user_lang == "en":
+        return str
+    #TODO
+    return str

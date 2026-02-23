@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter, HTTPException
 import logging
+from datetime import datetime
 
 from app.schemas import AgentRequest, AgentResponse
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ConversationMessage
 from app.agent.graph import app as agent_app
 from app.agent.memory import make_key, load_state, save_state
 
@@ -38,38 +39,45 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         key = make_key(
             session_id=request.session_id,
             problem_id=request.problem_id,
-            scenario_ids=request.scenario_ids,
+            scenario_ids=request.cognitive.scenario_ids,
         )
 
         # load or initialize agent state
         state = load_state(key)
 
+        # parse request message
+        message = request.message if request.message else ""
+
         # update state with incoming request
         state.session_id = request.session_id
-        state.problem_id = request.problem_id or ""
-        state.scenario_ids = request.scenario_ids or []
-        state.messages= [request.message] if request.message else [],
-        if request.data is not None:
-            state.data = request.data
-            state.data_loaded_at = request.data_loaded_at
-        state.running_scenario = request.running_scenario or False
+        state.cognitive.problem_id = request.problem_id or ""
+        state.cognitive.scenario_ids = request.cognitive.scenario_ids or []
+        state.conversation.append(
+            ConversationMessage(
+                role="user",
+                content=message,
+                timestamp=datetime.now()
+        ))
+        state.last_user_en=message
+        if request.cognitive.data is not None:
+            state.cognitive.data = request.cognitive.data
 
         # reset per-turn outputs
-        state.next_action = None
+        state.cognitive.next_action = None
 
         logger.info(
             "Running agent | session=%s problem=%s scenarios=%s",
             request.session_id,
             request.problem_id,
-            request.scenario_ids,
+            request.cognitive.scenario_ids,
         )
 
         # run the LangGraph agent, persist and return state
         final_state = AgentState(**agent_app.invoke(state))
         save_state(key, final_state)
-        response = final_state.messages[-1]["content"] if final_state.messages and final_state.messages[-1]["role"] == "assistant" else "ERROR: No assistant message generated"
+        response = final_state.conversation[-1].content if final_state.conversation and final_state.conversation[-1].role == "assistant" else "ERROR: No assistant message generated"
         return AgentResponse(
-            action=final_state.next_action,
+            action=final_state.cognitive.next_action,
             response=response,
             blocked=getattr(final_state, "blocked", None),
             state=final_state.__dict__,  # full state for debugging / UI

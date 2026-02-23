@@ -1,12 +1,11 @@
-import pytest
 from dataclasses import replace
 from datetime import datetime
 import json
 
 from app.agent.graph import app
 from app.utils.data import parse_data
-from app.agent.state import AgentState
-from tests.conftest import empty_state
+from app.agent.state import ConversationMessage
+from app.utils.common import to_state
 from app.config import DRAW_CONVERSATION
 
 def test_scenario_extraction(empty_state, monkeypatch):
@@ -28,10 +27,9 @@ def test_scenario_extraction(empty_state, monkeypatch):
     # Definitions
     state = replace(empty_state)
     
-    state.problem_id = "parcheggi_200"
-    state.data_loaded_at = datetime.now()
+    state.cognitive.problem_id = "parcheggi_200"
 
-    state.scenario_info_to_extract = {
+    state.cognitive.scenario_info_to_extract = {
         "title": {"description": "The title of the scenario", "required": True},
         "description": {"description": "Describes the proposal", "required": False},
         "additional_data": {"description": "Any additional data relevant to the problem, links or attachments", "required": False},
@@ -44,23 +42,22 @@ def test_scenario_extraction(empty_state, monkeypatch):
     with open(f"tests/data/test_base.json", "r") as f:
         state = parse_data(state, json.loads(f.read()), True)
 
-
-    #"I want to create a new scenario where I increase parking spaces of 200 units",
-    state.messages = [
-        {
-            "role": "user",
-            "content": (
-                "I want to create a two scenarios: one where I increase parking spaces of 200 units, and the other in which I decrease them of 50 ",
-            )
-        }
-    ]
+    message="I want to create a two scenarios: one where I increase parking spaces of 200 units, and the other in which I decrease them of 50 "
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en = message
 
     events = []
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
-        state=app.invoke(state)
-        draw_conversation(state["messages"], "logs/scenario_creation.png")
+        result_dict = app.invoke(state)
+        result = to_state(result_dict)
+        draw_conversation(result.conversation, "logs/scenario_creation.png")
     else:
         events = []
         with open("logs/test_scenario_workflow.log", "a+") as f:

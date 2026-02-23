@@ -1,35 +1,30 @@
-from typing import Dict, NamedTuple
+import uuid
+from typing import Dict
+from app.agent.state import AgentState
 
-from .state import AgentState
+# In-memory store
+_STATE_STORE: Dict[str, AgentState] = {}
 
 
-class ConversationKey(NamedTuple):
-    session_id: str
-    problem_id: str
-    scenario_ids: tuple[str, ...]
-    
-_STATE_STORE: Dict[ConversationKey, AgentState] = {}
+def generate_key() -> str:
+    """Generate a random conversation key."""
+    return str(uuid.uuid4())
 
-def make_key(
-    session_id: str,
-    problem_id: str | None,
-    scenario_ids: list[str] | None,
-) -> ConversationKey:
-    return ConversationKey(
-        session_id=session_id,
-        problem_id=problem_id or "",
-        scenario_ids=tuple(sorted(scenario_ids)) if scenario_ids else (),
-    )
 
-def load_state(key: ConversationKey) -> AgentState:
-    return _STATE_STORE.get(
-        key,
-        AgentState(
-            session_id=key.session_id,
-            problem_id=key.problem_id,
-            scenario_ids=list(key.scenario_ids),
-        ),
-    )
+def load_state(key: str | None) -> tuple[str, AgentState]:
+    """
+    Load existing state by key.
+    If key is None or not found, create a new state with a new key.
+    Returns (key, state).
+    """
+    if key and key in _STATE_STORE:
+        return key, _STATE_STORE[key]
 
-def save_state(key: ConversationKey, state: AgentState):
+    new_key = generate_key()
+    state = AgentState(session_id=new_key)
+    _STATE_STORE[new_key] = state
+    return new_key, state
+
+
+def save_state(key: str, state: AgentState) -> None:
     _STATE_STORE[key] = state

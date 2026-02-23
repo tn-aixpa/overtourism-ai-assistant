@@ -5,6 +5,7 @@ import json
 
 from app.agent.nodes.iteraction import interact_scenario
 from app.utils.data import parse_data
+from app.agent.state import ConversationMessage
 
 @pytest.mark.parametrize(
     "file_name, id,  message, check",
@@ -24,17 +25,22 @@ def test_interact(empty_state, file_name, id, message, check):
 
     state = replace(empty_state)
     
-    state.problem_id = "parcheggi_200"
-    state.scenario_ids = [id]
-    state.data_loaded_at = datetime.now()
-    state.next_action = "INTERACT_SCENARIO"
-    state.selected_roles = ["Data Analyst"]
+    state.cognitive.problem_id = "parcheggi_200"
+    state.cognitive.scenario_ids = [id]
+    state.cognitive.next_action = "INTERACT_SCENARIO"
+    state.cognitive.selected_roles = ["Data Analyst"]
 
     with open(f"tests/data/{file_name}", "r") as f:
         state = parse_data(state, json.loads(f.read()))
 
-    state.messages.append({"role": "user", "content": message})
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en = message
     state = interact_scenario(state)
 
-    response = state.messages[-1]["content"] if state.messages and state.messages[-1]["role"] == "assistant" else ""
+    response = state.conversation[-1].content if state.conversation and state.conversation[-1].role == "assistant" else ""
     assert check in response

@@ -29,9 +29,9 @@ def translate_obj(obj):
         return obj
 
 def parse_data(state, data: dict, partial=False):
-    assert state.problem_id == data["problem_id"]
+    assert state.cognitive.problem_id == data["problem_id"]
     if not partial:
-        assert data["scenario_id"] in state.scenario_ids
+        assert data["scenario_id"] in state.cognitive.scenario_ids
 
         cleaned_data = data["data"]
         if "points" in cleaned_data:
@@ -39,10 +39,10 @@ def parse_data(state, data: dict, partial=False):
         if "index_diffs" in data and data["index_diffs"]:
             cleaned_data["index_diffs"] = data["index_diffs"]
         cleaned_data = translate_obj(cleaned_data)
-        if not state.data:
-            state.data = {data["scenario_id"]: cleaned_data}
+        if not state.cognitive.data:
+            state.cognitive.data = {data["scenario_id"]: cleaned_data}
         else:
-            state.data[data["scenario_id"]] = cleaned_data
+            state.cognitive.data[data["scenario_id"]] = cleaned_data
 
 
     # use later to run scenarios
@@ -59,6 +59,6 @@ def parse_data(state, data: dict, partial=False):
                 "step": 10.0
             }
                 
-    state.editable_idexes = editable_indexes_with_limits
+    state.cognitive.editable_indexes = editable_indexes_with_limits
                 
     return state

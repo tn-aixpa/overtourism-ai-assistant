@@ -18,7 +18,7 @@ def select_role_router(state: AgentState):
 
     return Command(
         update=result,
-        goto=mapping[state.next_action],
+        goto=mapping[state.cognitive.next_action],
     )
 
 
@@ -26,7 +26,7 @@ def interact_router(state: AgentState):
 
     result = interact_scenario(state)
 
-    if len(state.selected_roles) > 1:
+    if len(state.cognitive.selected_roles) > 1:
         return Command(update=result, goto="synthesize")
 
     return Command(update=result, goto=END)
@@ -36,7 +36,7 @@ def compare_router(state: AgentState):
 
     result = compare_scenarios(state)
 
-    if len(state.selected_roles) > 1:
+    if len(state.cognitive.selected_roles) > 1:
         return Command(update=result, goto="synthesize")
 
     return Command(update=result, goto=END)

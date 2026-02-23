@@ -1,15 +1,15 @@
 import json
+from datetime import datetime
 from langgraph.graph import END
 from langgraph.types import Command
 
-from ..state import AgentState
+from ..state import AgentState, ConversationMessage
 from ...utils.llm import extract_scenario_data
 from ...utils.common import parse_confirmation
 
 def extract_scenario(state: AgentState) -> AgentState:
-    answer = extract_scenario_data(state.messages,
-                                state.scenario_info_to_extract,
-                                state.editable_idexes)   
+    answer = extract_scenario_data(state.conversation,
+                                state.cognitive.editable_indexes)   
 
     assert "Error connecting to Ollama" not in answer
     
@@ -17,7 +17,7 @@ def extract_scenario(state: AgentState) -> AgentState:
 
     scenarios = json.loads(answer)       
     extracted_all_scenario = True
-    required_fileds = [f for f, v in state.scenario_info_to_extract.items() if v["required"]]
+    required_fileds = [f for f, v in state.cognitive.scenario_info_to_extract.items() if v["required"]]
     validated_scenarios = {}
     for scenario in scenarios:
         if not all(elem in scenario for elem in required_fileds):    
@@ -25,24 +25,24 @@ def extract_scenario(state: AgentState) -> AgentState:
             break
 
         # validate indexes
-        messages = []
+        validation_errors = []
         if "indexes_to_change" in scenario:
             validated_scenarios[scenario['title']] = []
             for key, value in scenario["indexes_to_change"].items():
                 try:
-                    min_val = state.editable_idexes[key]["min"]
-                    max_val = state.editable_idexes[key]["max"]
-                    step = state.editable_idexes[key]["step"]
+                    min_val = state.cognitive.editable_indexes[key]["min"]
+                    max_val = state.cognitive.editable_indexes[key]["max"]
+                    step = state.cognitive.editable_indexes[key]["step"]
                     if value["type"] == "range":
                         current_val_min = value["value"][0]
                         current_val_max = value["value"][1]
                         if not (current_val_min <= current_val_min and current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            messages.append(f"The range [{current_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
+                            validation_errors.append(f"The range [{current_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
                         else:
                             validated_scenarios[scenario['title']].append({key: [current_val_min, current_val_max]})
                     else:
-                        base_val_min = state.editable_idexes[key]["loc"]
-                        base_val_max = base_val_min + state.editable_idexes[key]["scale"]
+                        base_val_min = state.cognitive.editable_indexes[key]["loc"]
+                        base_val_max = base_val_min + state.cognitive.editable_indexes[key]["scale"]
                         if value["type"] == "increase":
                             increase_val = value["value"]
                             current_val_max = base_val_max + increase_val
@@ -50,40 +50,40 @@ def extract_scenario(state: AgentState) -> AgentState:
                             decrease_val = value["value"]
                             current_val_max = base_val_max - decrease_val
                         if not (current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            messages.append(f"The range [{base_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
+                            validation_errors.append(f"The range [{base_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
                         else:
                             validated_scenarios[scenario['title']].append({key: [base_val_min, current_val_max]})
                 except Exception as e:
-                    messages.append(f"Error parsing index {key}: {str(value)} is not valid.")       
+                    validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid.")       
     
     if not extracted_all_scenario:
-        state.extracted_all_scenario = False
-        state.error_message =  f""""Not all scenarios include the required elements ({', '.join(required_fileds)}).\nExtracted info"""
-        state.scenarios_to_generate = None
+        state.cognitive.extracted_all_scenario = False
+        state.cognitive.validation_errors =  f""""Not all scenarios include the required elements ({', '.join(required_fileds)}).\nExtracted info"""
+        state.cognitive.scenarios_to_generate = None
         return state
-    if not len(messages):
-        state.extracted_all_scenario = True
-        state.error_message = None
-        state.scenarios_to_generate = validated_scenarios
+    if not len(validation_errors):
+        state.cognitive.extracted_all_scenario = True
+        state.cognitive.validation_errors = ""
+        state.cognitive.scenarios_to_generate = validated_scenarios
     else:
-        state.extracted_all_scenario = False
-        state.error_message = "The following errors were dected for the scenarios you defined:\n" + "\n- ".join(messages) 
-        state.scenarios_to_generate = None
+        state.cognitive.extracted_all_scenario = False
+        state.cognitive.validation_errors = "The following errors were dected for the scenarios you defined:\n" + "\n- ".join(validation_errors) 
+        state.cognitive.scenarios_to_generate = None
 
     return state
 
 def extract_scenario_node(state: AgentState):
     state = extract_scenario(state)
-    if state.scenarios_to_generate:
+    if state.cognitive.scenarios_to_generate:
         return Command(update=state, goto="WAIT_CONFIRMATION_SCENARIO")
     return Command(update=state, goto="WAIT_SCENARIO_INPUT")
 
 def parse_confirmation_node(state: AgentState):
-    message = state.messages[-1]["content"].lower() if state.messages else ""
+    message = state.last_user_en
     
-    state.next_action = parse_confirmation(message)+'_SCENARIO'
+    state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
 
-    if state.next_action == "CONFIRM_SCENARIO":
+    if state.cognitive.next_action == "CONFIRM_SCENARIO":
         return Command(update=state, goto="scenario_runner", graph=Command.PARENT) 
     
     routes = {
@@ -91,19 +91,19 @@ def parse_confirmation_node(state: AgentState):
         "CANCEL_SCENARIO": END,
         "WAIT_CONFIRMATION_SCENARIO": "WAIT_CONFIRMATION_SCENARIO",
     }
-    return Command(update=state, goto=routes[state.next_action])
+    return Command(update=state, goto=routes[state.cognitive.next_action])
 
 
 def run_scenario_node(state: AgentState) -> AgentState:
-    if state.scenarios_to_generate:
-        scenario_title, scanario_parameters = state.scenarios_to_generate.popitem()
+    if state.cognitive.scenarios_to_generate:
+        scenario_title, scanario_parameters = state.cognitive.scenarios_to_generate.popitem()
         #TODO: run tool
         return Command(update=state, goto="run_scenario")
     else:
-        state.messages.append(
-            {
-                "role": "assistant",
-                "content": "I created the requested scenarios." 
-            }
-        )
+        state.conversation.append(
+            ConversationMessage(
+                role="assistant",
+                content="I created the requested scenarios." ,
+                timestamp=datetime.now()
+        ))
         return Command(update=state, goto="END")

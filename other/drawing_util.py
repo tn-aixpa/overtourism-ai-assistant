@@ -64,7 +64,7 @@ def draw_conversation(messages, im_name):
 
         lines = wrap_text_pixels(
             temp_draw,
-            msg["content"],
+            msg.content,
             MAX_BUBBLE_WIDTH - (BUBBLE_PADDING * 2)
         )
 
@@ -96,7 +96,7 @@ def draw_conversation(messages, im_name):
 
     for msg, lines, bubble_width, bubble_height in rendered_messages:
 
-        if msg["role"] == "user":
+        if msg.role == "user":
             x = WIDTH - bubble_width - PADDING
             bubble_color = USER_COLOR
             text_color = TEXT_COLOR_USER

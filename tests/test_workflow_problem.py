@@ -1,14 +1,14 @@
-import pytest
 from dataclasses import replace
 from datetime import datetime
 import json
 
 from app.agent.graph import app
-from app.agent.state import AgentState
-from tests.conftest import empty_state
+from app.agent.state import ConversationMessage
 from app.utils.data import parse_data
+from app.utils.common import to_state
 from app.config import DRAW_CONVERSATION
 
+message="I want to create a new problem."
 
 def test_problem_creation_without_scenarios(empty_state, monkeypatch):
 
@@ -29,14 +29,15 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.messages = [
-        {
-            "role": "user",
-            "content": "I want to create a new problem.",
-        }
-    ]
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en = message
 
-    state.problem_info_to_extract = {
+    state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
         "objectives": {"description": "The objectives of the problem", "required": True},
         "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
@@ -46,8 +47,9 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
-        state=app.invoke(state)
-        draw_conversation(state["messages"], "logs/problem_creation_no_scenarios.png")
+        result_dict = app.invoke(state)
+        result = to_state(result_dict)
+        draw_conversation(result.conversation, "logs/problem_creation_no_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "w") as f:
@@ -75,14 +77,15 @@ def test_problem_creation_with_agentic_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.messages = [
-        {
-            "role": "user",
-            "content": "I want to create a new problem.",
-        }
-    ]
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en = message
 
-    state.problem_info_to_extract = {
+    state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
         "objectives": {"description": "The objectives of the problem", "required": True},
         "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
@@ -92,8 +95,9 @@ def test_problem_creation_with_agentic_scenarios(empty_state, monkeypatch):
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
-        state=app.invoke(state)
-        draw_conversation(state["messages"], "logs/problem_creation_agentic_scenarios.png")
+        result_dict = app.invoke(state)
+        result = to_state(result_dict)
+        draw_conversation(result.conversation, "logs/problem_creation_agentic_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "a+") as f:
@@ -122,14 +126,15 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.messages = [
-        {
-            "role": "user",
-            "content": "I want to create a new problem.",
-        }
-    ]
+    state.conversation.append(
+        ConversationMessage(
+            role="user",
+            content=message,
+            timestamp=datetime.now()
+    ))
+    state.last_user_en = message
 
-    state.problem_info_to_extract = {
+    state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
         "objectives": {"description": "The objectives of the problem", "required": True},
         "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
@@ -137,10 +142,9 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
         "additional_data": {"description": "Any additional data relevant to the problem", "required": False},
     }
 
-    state.problem_id = "parcheggi_200"
-    state.data_loaded_at = datetime.now()
+    state.cognitive.problem_id = "parcheggi_200"
 
-    state.scenario_info_to_extract = {
+    state.cognitive.scenario_info_to_extract = {
         "title": {"description": "The title of the scenario", "required": True},
         "description": {"description": "Describes the proposal", "required": False},
         "additional_data": {"description": "Any additional data relevant to the problem, links or attachments", "required": False},
@@ -154,8 +158,9 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
-        state=app.invoke(state)
-        draw_conversation(state["messages"], "logs/problem_creation_user_scenarios.png")
+        result_dict = app.invoke(state)
+        result = to_state(result_dict)
+        draw_conversation(result.conversation, "logs/problem_creation_user_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "a+") as f:

@@ -1,6 +1,7 @@
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 from typing import List
+from app.agent. state import ConversationMessage
 
 DEBUG = False
 
@@ -10,6 +11,12 @@ llm = ChatOllama(
     base_url="http://localhost:11434",
     temperature=0,
 )
+
+def format_messages(messages):
+    return "\n".join(
+        f"{m.role.upper()}: {m.content}"
+        for m in messages
+    )
 
 def llm_interaction(prompt: str) -> str:
     try:
@@ -160,7 +167,7 @@ Expert answers:
 
     return llm_interaction(prompt)
 
-def extract_problem_data(messages: List, problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
+def extract_problem_data(messages: List[ConversationMessage], problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
     #TODO: might need to revise to add the possiblity to change/integrate/remove a field
 
     all_keys = list(problem_info_to_extract.keys())
@@ -270,13 +277,7 @@ MESSAGE HISTORY:
     
     return llm_interaction(prompt)
 
-def format_messages(messages):
-    return "\n".join(
-        f"{m['role'].upper()}: {m['content']}"
-        for m in messages
-    )
-
-def assess_scenario_strategy(messages: list) -> str:
+def assess_scenario_strategy(messages: List[ConversationMessage]) -> str:
     prompt = f"""You are an intent classfier that need to decide if and how the user wants to create scenarios based on the conversation history.
 A scenario is a modification of currect indexes that could possibly solve the problem.
 
@@ -301,9 +302,7 @@ Return only the action name.
 """
     return llm_interaction(prompt)
 
-def extract_scenario_data(messages: dict, scenario_info_to_extract: dict, editable_idexes: dict) -> str:
-    all_keys = list(scenario_info_to_extract.keys())
-
+def extract_scenario_data(messages: List[ConversationMessage], editable_indexes: dict) -> str:
     prompt = f"""
 SYSTEM ROLE:
 
@@ -356,7 +355,7 @@ SCHEMA (STRICT):
 ]
 
 Allowed index keys:
-{', '.join(list(editable_idexes.keys()))}
+{', '.join(list(editable_indexes.keys()))}
 
 --------------------------------------------------
 

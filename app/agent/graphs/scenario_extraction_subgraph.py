@@ -8,14 +8,14 @@ from .utils import human_gate, add_safe_node
 
 wait_scenario_input = human_gate(
     "WAIT_SCENARIO_INPUT",
-    lambda s: {"instructions": s.error_message + f"\nPlease, provide all required details to create a scenario"},
+    lambda s: {"instructions": s.cognitive.validation_errors + f"\nPlease, provide all required details to create a scenario"},
 )
 
 wait_scenario_confirmation = human_gate(
     "WAIT_CONFIRMATION_SCENARIO",
     lambda s: {
         "instructions": f"Do you want to proceed with the following scenarios?\n- "
-                        f"{'\n- '.join(str(x) for x in s.scenarios_to_generate)}"
+                        f"{'\n- '.join(str(x) for x in s.cognitive.scenarios_to_generate)}"
     },)
 
 # ---- Build subgraph
