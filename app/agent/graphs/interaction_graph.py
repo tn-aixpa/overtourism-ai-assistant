@@ -1,9 +1,9 @@
 from langgraph.graph import StateGraph, END
 from langgraph.types import Command
 
-from ..state import AgentState
-from ..nodes.iteraction import select_role, interact_scenario, compare_scenarios, synthesize_answers
-from ..graphs.utils import add_safe_node
+from app.agent.state import AgentState
+from app.agent.nodes.iteraction import select_role, interact_scenario, compare_scenarios, synthesize_answers
+from app.agent.graphs.utils import add_safe_node
 
 
 # ---- Command wrappers

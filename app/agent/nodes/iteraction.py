@@ -1,7 +1,10 @@
 from datetime import datetime
+
 from ..state import AgentState, ConversationMessage
 from ...config import ALLOWED_ROLES
 from ...utils.llm import select_role_llm, answer_question, answer_question_comparison, synthesize_llm
+from ...utils.error_codes import ErrorCode, GraphError
+from ...utils.common import translate_from_eng
 
 def select_role(state: AgentState) -> AgentState:
     question = state.last_user_en
@@ -28,32 +31,15 @@ def interact_scenario(state: AgentState) -> AgentState:
 
     # check state
     if len(state.cognitive.scenario_ids) == 0:
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content="Something went wrong. No scenario is available to interact with.",
-                timestamp=datetime.now()
-        ))
+        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No active scenario")       
     
     if len(state.cognitive.scenario_ids) > 1:
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content="Something went wrong. More than one active scenario found.",
-                timestamp=datetime.now()
-        ))
-        return state
+        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Select a single scenario")  
     
 
     # load data if needed
     if state.cognitive.scenario_ids[0] not in state.cognitive.data:
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=f"Scenario data for id {state.cognitive.scenario_ids[0]} is not available right now. Please try again later.",
-                timestamp=datetime.now()
-        ))        
-        return state
+        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Data for selected scenario unavailable")  
 
     state.cognitive.expert_answers = {}
 
@@ -68,38 +54,27 @@ def interact_scenario(state: AgentState) -> AgentState:
         state.cognitive.expert_answers[role] = answer
     
     if len(state.cognitive.selected_roles) == 1:
+        #TODO: check this
         state.conversation.append(
             ConversationMessage(
                 role="assistant",
-                content=next(iter(state.cognitive.expert_answers.values())),
+                content=translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
                 timestamp=datetime.now()
         ))
 
     return state
 
 def compare_scenarios(state: AgentState) -> AgentState:
+
     # check state
     if len(state.cognitive.scenario_ids) < 2:
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=f"Something went wrong. Number of active scenarios: {len(state.cognitive.scenario_ids)}. Please ensure at least two scenarios are active.",
-                timestamp=datetime.now()
-        ))
-        return state
+        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")  
     
 
     # load data if needed
     unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.data]
     if len(unavailable):
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=f"Scenario data for id {unavailable} is not available right now. Please try again later.",
-                timestamp=datetime.now()
-        ))
-        
-        return state
+        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No data available")  
 
     state.cognitive.expert_answers = {}
 
@@ -114,10 +89,11 @@ def compare_scenarios(state: AgentState) -> AgentState:
         state.cognitive.expert_answers[role] = answer
     
     if len(state.cognitive.selected_roles) == 1:
+        #TODO: check this
         state.conversation.append(
             ConversationMessage(
                 role="assistant",
-                content=next(iter(state.cognitive.expert_answers.values())),
+                content=translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
                 timestamp=datetime.now()
         ))
         
@@ -136,7 +112,7 @@ def synthesize_answers(state: AgentState) -> AgentState:
     state.conversation.append(
         ConversationMessage(
             role="assistant",
-            content=answer,
+            content=translate_from_eng(answer, state.user_lang),
             timestamp=datetime.now()
     ))
 

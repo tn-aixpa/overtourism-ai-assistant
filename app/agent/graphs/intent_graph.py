@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph
 
-from ..state import AgentState
-from ..graphs.utils import add_safe_node
-from ..nodes.intent import intent_node, validate_intent_node, route_from_intent
+from app.agent.state import AgentState
+from app.agent.graphs.utils import add_safe_node
+from app.agent.nodes.intent import intent_node, validate_intent_node, route_from_intent
 
 # ---- Build subgraph
 

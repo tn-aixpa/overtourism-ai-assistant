@@ -52,7 +52,12 @@ class AgentState:
     # Orchestration Layer (English only)
     session_id: str = ""
     last_user_en: Optional[str] = None  # translated latest user message
-    user_lang: str = "en"
+    user_lang: str = "English"
 
     # Cognitive Layer (English only)
     cognitive: CognitiveState = field(default_factory=CognitiveState)
+
+    # Error handling
+    error_code: str = ""
+    error_details: str = ""
+

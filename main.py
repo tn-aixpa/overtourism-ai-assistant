@@ -2,7 +2,7 @@ from app.agent.graph import app,intent_subgraph, interaction_subgraph, problem_s
 
 def test():
     state = {
-        "message": [{"role": "user"/"assistant", "content": "Please, summarize the scenario results."}],
+        "message": [{"role": "user"/"assistant", "content": "Test message"}],
         "scenario_ids": ["sim1"],
         "data": None,
         "next_action": None,

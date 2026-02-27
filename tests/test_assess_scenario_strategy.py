@@ -2,7 +2,7 @@ import pytest
 from dataclasses import replace
 
 from app.agent.nodes.problem import decide_scenario_strategy
-from app.agent.state import AgentState, ConversationMessage
+from app.agent.state import ConversationMessage
 
 @pytest.mark.parametrize(
     "messages, expected_answer",

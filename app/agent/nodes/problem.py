@@ -6,6 +6,7 @@ from langgraph.types import Command
 from ..state import AgentState, ConversationMessage
 from ...utils.llm import extract_problem_data, assess_scenario_strategy
 from ...utils.common import parse_confirmation
+from ...utils.messages import get_message, MessageCode
 
 def extract_problem(state: AgentState) -> AgentState:
     answer = extract_problem_data(state.conversation,
@@ -62,7 +63,7 @@ def create_problem_instance_node(state: AgentState) -> AgentState:
     state.conversation.append(
         ConversationMessage(
             role="assistant",
-            content="The problem was successfully created.",
+            content=get_message(MessageCode.SUCCESS_PROBLEM, state.user_lang),
             timestamp=datetime.now()
     ))
 

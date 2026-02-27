@@ -1,9 +1,8 @@
-from datetime import datetime
-from langgraph.graph import END
 from langgraph.types import Command
 
-from ..state import AgentState, ConversationMessage
+from ..state import AgentState
 from ...utils.llm import classify_intent
+from ...utils.error_codes import ErrorCode, GraphError
 
 def intent_node(state: AgentState) -> AgentState:
     answer = classify_intent(state.cognitive.scenario_ids, state.last_user_en).strip()
@@ -28,42 +27,27 @@ def validate_intent_node(state: AgentState) -> AgentState:
 
     # --- INVALID intent ---
     if intent == "INVALID":
-        state.cognitive.next_action = "INVALID"
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content="I'm not able to handle this request with the current system capabilities.",
-                timestamp=datetime.now()
-        ))
-
-        return state
+        raise GraphError(ErrorCode.INVALID_REQUEST)
 
     # --- INTERACT_SCENARIO ---
-    if intent == "INTERACT_SCENARIO":
+    elif intent == "INTERACT_SCENARIO":
         if not state.cognitive.scenario_ids:
             state.cognitive.next_action = "NOT_ALLOWED"
-            state.conversation.append(
-                ConversationMessage(
-                    role="assistant",
-                    content="I understand you want to interact with a scenario, but no scenario is currently selected.",
-                    timestamp=datetime.now()
-            ))
-            return state
-
+            raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No active scenario")
+        
         if len(state.cognitive.scenario_ids) > 1:
             state.cognitive.next_action = "COMPARE_SCENARIOS"
-            return state
+
+            # --- COMPARE_SCENARIOS ---
+            if not len(state.cognitive.scenario_ids) > 1:
+                state.cognitive.next_action = "NOT_ALLOWED"
+                raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")
         
     # --- CREATE_PROBLEM ---
-    if intent == "RUN_NEW_SCENARIO" and not state.cognitive.problem_id:
-        state.cognitive.next_action = "NOT_ALLOWED"
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content="No problem is defined. Please define a problem first.",
-                timestamp=datetime.now()
-        ))
-        return state
+    elif intent == "RUN_NEW_SCENARIO":
+        if not state.cognitive.problem_id:
+            state.cognitive.next_action = "NOT_ALLOWED"
+            raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No problem selected")
 
     return state
 
@@ -72,18 +56,11 @@ def route_from_intent(state: AgentState):
     if action in ["INTERACT_SCENARIO", "COMPARE_SCENARIOS"]:
         return Command(update=state, goto="interaction", graph=Command.PARENT)
 
-    # Scenario runner subgraph
-
     if action == "RUN_NEW_SCENARIO":
         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
 
     if action == "CREATE_PROBLEM":
-        return Command(update=state, goto="problem", graph=Command.PARENT)
+        return Command(update=state, goto="problem", graph=Command.PARENT)   
 
-    # END nodes
-    if action in ["NOT_ALLOWED", "INVALID"]:
-        return Command(update=state, goto=END)
+    raise GraphError(ErrorCode.REQUEST_ERROR)
     
-
-    # Fallback safety
-    return Command(update=state, goto="error", graph=Command.PARENT)

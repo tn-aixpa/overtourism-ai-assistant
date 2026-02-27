@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph
 
-from ..nodes.scenario import run_scenario_node
-from ..graphs.utils import add_safe_node
-from ..state import AgentState
+from app.agent.nodes.scenario import run_scenario_node
+from app.agent.graphs.utils import add_safe_node
+from app.agent.state import AgentState
 
 graph = StateGraph(AgentState)
 

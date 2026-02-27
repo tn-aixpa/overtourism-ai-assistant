@@ -1,5 +1,5 @@
 import re
-from .llm import llm_classify_confirmation
+from .llm import llm_classify_confirmation, translate
 from app.agent.state import AgentState
 
 def parse_confirmation(message):
@@ -28,13 +28,13 @@ def to_state(result_dict) -> AgentState:
     return AgentState(**result_dict)
 
 def translate_from_eng(str, user_lang):
-    if user_lang == "en":
+    if user_lang == "English":
         return str
-    #TODO
+    translate(str, "English", user_lang)
     return str
 
 def translate_to_eng(str, user_lang):
-    if user_lang == "en":
+    if user_lang == "English":
         return str
-    #TODO
+    translate(str, user_lang, "English")
     return str

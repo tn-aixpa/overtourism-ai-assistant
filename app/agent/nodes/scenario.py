@@ -6,6 +6,7 @@ from langgraph.types import Command
 from ..state import AgentState, ConversationMessage
 from ...utils.llm import extract_scenario_data
 from ...utils.common import parse_confirmation
+from ...utils.messages import get_message, MessageCode
 
 def extract_scenario(state: AgentState) -> AgentState:
     answer = extract_scenario_data(state.conversation,
@@ -103,7 +104,7 @@ def run_scenario_node(state: AgentState) -> AgentState:
         state.conversation.append(
             ConversationMessage(
                 role="assistant",
-                content="I created the requested scenarios." ,
+                content=get_message(MessageCode.SUCCESS_SCENARIO, state.user_lang),
                 timestamp=datetime.now()
         ))
         return Command(update=state, goto="END")

@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from app.agent.nodes.iteraction import select_role
-from app.agent.state import AgentState, ConversationMessage
+from app.agent.state import ConversationMessage
 
 # -----------------------------
 # Single-role tests (6)
@@ -34,7 +34,7 @@ def test_single_roles(empty_state, question, expected_role):
             content=question,
             timestamp=datetime.now()
         ))
-    state.last_user_en=question
+    state.last_user_en = question
     new_state = select_role(state)
 
     # We assert the expected role is included in selected_roles
@@ -62,7 +62,7 @@ def test_multi_roles(empty_state, question):
             content=question,
             timestamp=datetime.now()
         ))
-    state.last_user_en=question
+    state.last_user_en = question
     new_state = select_role(state)
 
     # Must return multiple roles

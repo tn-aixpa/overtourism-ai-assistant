@@ -1,4 +1,5 @@
 from langchain_ollama import ChatOllama
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from typing import List
 from app.agent. state import ConversationMessage
@@ -433,3 +434,16 @@ User message:
     }
 
     return result if result in allowed else "WAIT_CONFIRMATION_PROBLEM"
+
+translate_prompt = ChatPromptTemplate.from_template(
+    "Translate the following text from {input_language} to {target_language}. "
+    "Return ONLY the translated text. Do not explain.\n\n{text}"
+)
+
+def translate(text, input_language, target_language):
+    chain = translate_prompt | llm
+    return chain.invoke({
+        "text": text,
+        "input_language": input_language,
+        "target_language": target_language
+    }).content
