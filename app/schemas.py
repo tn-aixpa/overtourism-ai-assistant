@@ -1,8 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 
-
-
 class ConversationMessage(BaseModel):
     role: str
     content: str
@@ -29,10 +27,7 @@ class AgentRequest(BaseModel):
         extra = "allow"
         
 class AgentResponse(BaseModel):
-    action: Optional[str] = None
     response: Optional[str] = None
-    blocked: Optional[bool] = None
-    cognitive: Optional[Dict[str, Any]] = None
 
     class Config:
         extra = "allow"
