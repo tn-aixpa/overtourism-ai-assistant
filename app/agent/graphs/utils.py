@@ -20,7 +20,8 @@ def safe(node_fn, node_name):
 
         except GraphError as ge:
             state.error_code = ge.code
-            state.error_details = f"Node {node_name}, error: {ge.details}"
+            state.error_details = ge.details
+            state.error_node = node_name
 
             return Command(
                 update=state,
@@ -30,7 +31,8 @@ def safe(node_fn, node_name):
 
         except Exception as e:
             state.error_code = ErrorCode.REQUEST_ERROR
-            state.error_details = f"Node {node_name}, error: {e}"
+            state.error_details = str(e)
+            state.error_node = node_name
 
             return Command(
                 update=state,

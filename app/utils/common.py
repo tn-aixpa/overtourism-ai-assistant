@@ -27,14 +27,14 @@ def parse_confirmation(message):
 def to_state(result_dict) -> AgentState:
     return AgentState(**result_dict)
 
-def translate_from_eng(str, user_lang):
+def translate_from_eng(msg, user_lang):
     if user_lang == "English":
-        return str
-    translate(str, "English", user_lang)
-    return str
+        return msg
+    msg = translate(msg, "English", user_lang)
+    return msg
 
-def translate_to_eng(str, user_lang):
+def translate_to_eng(msg, user_lang):
     if user_lang == "English":
-        return str
-    translate(str, user_lang, "English")
-    return str
+        return msg
+    msg = translate(msg, user_lang, "English")
+    return msg

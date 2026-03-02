@@ -82,6 +82,7 @@ class AgentState:
 
     # Error handling
     error_code: str = ""
+    error_node: str = ""
     error_details: str = ""
 
     # ---- Methods ----
@@ -122,4 +123,3 @@ class AgentState:
 
     def get_ui_context(self, n: Optional[int] = None):
         return self.conversation.get_context_window_localized(n)
-

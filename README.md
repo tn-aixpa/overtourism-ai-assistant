@@ -34,8 +34,8 @@ A different port can be used, just change it so that it does not conflic with ov
 
 
 ## TODO:
-- Add multilingual support
 - Chat-only interface
+- Trace interaction steps (tool cals, decisions)
 - Itegration with front-end + memory handling
 
 ## Open points and future improvements
@@ -46,3 +46,4 @@ A different port can be used, just change it so that it does not conflic with ov
 - Error recovery might be improved with retries logic, especially for scenario
 - stardard data format and language (to prevent errors in computations) + finetuning (both for computations and for synonims)
 - parallelize operations (different expers or simulations)
+- design token-budget-aware compression for context

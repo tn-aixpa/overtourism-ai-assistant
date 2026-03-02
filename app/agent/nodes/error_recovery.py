@@ -10,7 +10,7 @@ def error_recovery_node(state: AgentState) -> Command:
 
     if state.error_details:
         with open("logs/errors.txt", "a+") as f:
-            f.write(f"{state.error_details}\n")
+            f.write(f"Error in node {state.error_node}: {state.error_details}\n")
 
     state.cognitive.next_action = None
     state.add_assistant_message(

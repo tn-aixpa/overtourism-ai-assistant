@@ -56,7 +56,6 @@ Active scenarios: {active_sims or "none"}
 Return only the action name.
 
 """
-       
     return llm_interaction(prompt)
 
 def select_role_llm(question: str, allowed_roles: dict) -> str:
