@@ -12,8 +12,6 @@ def test_scenario_extraction(empty_state, monkeypatch):
 
     # Fake human response
     def fake_interrupt(payload):
-        if payload["type"] == "WAIT_SCENARIO_INPUT":
-            return "The problem is that there are not enough parking spaces in Molveno, which leads to people parking off-spot and long queues."
         if payload["type"] == "WAIT_CONFIRMATION_SCENARIO":
             return "Yes, proceed."
         return None
@@ -43,13 +41,7 @@ def test_scenario_extraction(empty_state, monkeypatch):
         state = parse_data(state, json.loads(f.read()), True)
 
     message="I want to create a two scenarios: one where I increase parking spaces of 200 units, and the other in which I decrease them of 50 "
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.now()
-    ))
-    state.last_user_en = message
+    state.add_user_message(message, message)
 
     events = []
 
@@ -57,7 +49,7 @@ def test_scenario_extraction(empty_state, monkeypatch):
         from other.drawing_util import draw_conversation
         result_dict = app.invoke(state)
         result = to_state(result_dict)
-        draw_conversation(result.conversation, "logs/scenario_creation.png")
+        draw_conversation(result.conversation.messages, "logs/scenario_creation.png")
     else:
         events = []
         with open("logs/test_scenario_workflow.log", "a+") as f:

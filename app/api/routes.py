@@ -9,7 +9,7 @@ from app.agent.state import AgentState, ConversationMessage
 from app.agent.graph import app as agent_app
 from app.agent.memory import generate_key, load_state, save_state
 from app.utils.common import translate_from_eng
-from app.utils.error_codes import get_error_message
+from app.utils.error_codes import ErrorCode, get_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,7 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         state.session_id = request.session_id
         state.cognitive.problem_id = request.problem_id or ""
         state.cognitive.scenario_ids = request.cognitive.scenario_ids or []
-        state.conversation.append(
-            ConversationMessage(
-                role="user",
-                content=message,
-                timestamp=datetime.now()
-        ))
-        state.last_user_en = translate_from_eng(message, state.user_lang)
+        state.add_user_message(message, translate_from_eng(message, state.user_lang))
         if request.cognitive.data is not None:
             state.cognitive.data = request.cognitive.data
 
@@ -66,7 +60,8 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         # run the LangGraph agent, persist and return state
         final_state = AgentState(**agent_app.invoke(state))
         save_state(key, final_state)
-        response = final_state.conversation[-1].content if final_state.conversation and final_state.conversation[-1].role == "assistant" else get_error_message(ErrorCode.INVALID_REQUEST, state.user_lang)
+        last_message = final_state.get_last_message()
+        response = last_message.content_localized if last_message and last_message.role == "assistant" else get_error_message(ErrorCode.INVALID_REQUEST, state.user_lang)
         return AgentResponse(
             action=final_state.cognitive.next_action,
             response=response,

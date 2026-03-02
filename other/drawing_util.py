@@ -15,7 +15,7 @@ def draw_conversation(messages, im_name):
     TEXT_COLOR_USER = (255, 255, 255)
     TEXT_COLOR_ASSISTANT = (0, 0, 0)
 
-    font = ImageFont.load_default()
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
 
     # ---------- HELPERS ----------
 
@@ -64,7 +64,7 @@ def draw_conversation(messages, im_name):
 
         lines = wrap_text_pixels(
             temp_draw,
-            msg.content,
+            msg.content_localized,
             MAX_BUBBLE_WIDTH - (BUBBLE_PADDING * 2)
         )
 

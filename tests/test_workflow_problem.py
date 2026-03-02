@@ -29,13 +29,7 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.now()
-    ))
-    state.last_user_en = message
+    state.add_user_message(message, message)
 
     state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
@@ -49,7 +43,7 @@ def test_problem_creation_without_scenarios(empty_state, monkeypatch):
         from other.drawing_util import draw_conversation
         result_dict = app.invoke(state)
         result = to_state(result_dict)
-        draw_conversation(result.conversation, "logs/problem_creation_no_scenarios.png")
+        draw_conversation(result.conversation.messages, "logs/problem_creation_no_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "w") as f:
@@ -77,13 +71,7 @@ def test_problem_creation_with_agentic_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.now()
-    ))
-    state.last_user_en = message
+    state.add_user_message(message, message)
 
     state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
@@ -97,7 +85,7 @@ def test_problem_creation_with_agentic_scenarios(empty_state, monkeypatch):
         from other.drawing_util import draw_conversation
         result_dict = app.invoke(state)
         result = to_state(result_dict)
-        draw_conversation(result.conversation, "logs/problem_creation_agentic_scenarios.png")
+        draw_conversation(result.conversation.messages, "logs/problem_creation_agentic_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "a+") as f:
@@ -126,13 +114,7 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
     )
 
     state = replace(empty_state)
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.now()
-    ))
-    state.last_user_en = message
+    state.add_user_message(message, message)
 
     state.cognitive.problem_info_to_extract = {
         "problem_title": {"description": "The title of the problem", "required": True},
@@ -160,7 +142,7 @@ def test_problem_creation_with_user_scenarios(empty_state, monkeypatch):
         from other.drawing_util import draw_conversation
         result_dict = app.invoke(state)
         result = to_state(result_dict)
-        draw_conversation(result.conversation, "logs/problem_creation_user_scenarios.png")
+        draw_conversation(result.conversation.messages, "logs/problem_creation_user_scenarios.png")
     else:
         events = []
         with open("logs/test_problem_workflow.log", "a+") as f:

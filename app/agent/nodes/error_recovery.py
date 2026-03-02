@@ -12,15 +12,10 @@ def error_recovery_node(state: AgentState) -> Command:
         with open("logs/errors.txt", "a+") as f:
             f.write(f"{state.error_details}\n")
 
-    error_message = get_error_message(code, state.user_lang)
-
     state.cognitive.next_action = None
-
-    state.conversation.append(
-        ConversationMessage(
-            role="assistant",
-            content=error_message,
-            timestamp=datetime.now()
-        )
+    state.add_assistant_message(
+        get_error_message(code, state.user_lang),
+        get_error_message(code, "English")
     )
+
     return Command(update=state, goto=END)

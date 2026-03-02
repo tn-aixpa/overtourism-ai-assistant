@@ -7,12 +7,15 @@ def run_agent(request) -> AgentState:
     initial_state = AgentState(
         conversation=ConversationMessage(
             role="user",
-            content=request.message if request.message else "",
+            content_localized=request.message if request.message else "",
+            content_en=request.message if request.message else "",
             timestamp=datetime.now()
         ),
+        session_id=request.session_id,
+        user_lang=request.user_lang,
         _id=request.cognitive.scenario_ids,
 
-        # 🔹 Preserve incoming data and timestamp
+        # Preserve incoming data and timestamp
         data=request.cognitive.data,
 
         next_action=None,

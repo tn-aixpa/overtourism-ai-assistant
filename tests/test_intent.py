@@ -45,13 +45,7 @@ def test_intent_classification(empty_state: AgentState, message, active_scenario
     state = replace(empty_state)
 
     # Set variables
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=message,
-            timestamp=datetime.now()
-    ))
-    state.last_user_en = message
+    state.add_user_message(message, message)
     state.cognitive.problem_id = problem_id    
 
     # Set active scenarios

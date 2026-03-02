@@ -11,16 +11,16 @@ from ...utils.error_codes import ErrorCode, GraphError
 # ─────────────────────────────────────────────
 
 def add_safe_node(graph, name, fn):
-    graph.add_node(name, safe(fn))
+    graph.add_node(name, safe(fn, name))
 
-def safe(node_fn):
+def safe(node_fn, node_name):
     def _safe(state):
         try:
             return node_fn(state)
 
         except GraphError as ge:
             state.error_code = ge.code
-            state.error_details = ge.details
+            state.error_details = f"Node {node_name}, error: {ge.details}"
 
             return Command(
                 update=state,
@@ -30,7 +30,7 @@ def safe(node_fn):
 
         except Exception as e:
             state.error_code = ErrorCode.REQUEST_ERROR
-            state.error_details = str(e)
+            state.error_details = f"Node {node_name}, error: {e}"
 
             return Command(
                 update=state,
@@ -53,22 +53,17 @@ def human_gate(interrupt_type, payload_builder):
         }
 
         if "instructions" in payload:
-            state.conversation.append(
-                ConversationMessage(
-                    role="assistant",
-                    content=translate_from_eng(payload["instructions"], state.user_lang),
-                    timestamp=datetime.now()
-            ))
+            state.add_assistant_message(
+                localized=translate_from_eng(payload["instructions"], state.user_lang),
+                translated_en=payload["instructions"]
+            )
 
         response = interrupt(payload)
         if response:
-            state.conversation.append(
-                ConversationMessage(
-                    role="user",
-                    content=response,
-                    timestamp=datetime.now()
-            ))
-            state.last_user_en = translate_to_eng(response, state.user_lang)
+            state.add_user_message(
+                localized=response,
+                translated_en=translate_to_eng(response, state.user_lang)
+            )
 
         return state
 

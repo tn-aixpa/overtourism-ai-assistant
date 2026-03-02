@@ -9,7 +9,7 @@ from ...utils.common import parse_confirmation
 from ...utils.messages import get_message, MessageCode
 
 def extract_problem(state: AgentState) -> AgentState:
-    answer = extract_problem_data(state.conversation,
+    answer = extract_problem_data(state.get_reasoning_context(),
                                   state.cognitive.problem_info_to_extract,
                                   state.cognitive.extracted_problem_info)
     
@@ -32,7 +32,7 @@ def extract_problem(state: AgentState) -> AgentState:
     return state
 
 def decide_scenario_strategy(state: AgentState) -> AgentState:
-    answer = assess_scenario_strategy(state.conversation).strip()
+    answer = assess_scenario_strategy(state.get_reasoning_context()).strip()
 
     VALID_ACTIONS = {
         "GENERATE_SCENARIOS",
@@ -60,12 +60,10 @@ def create_problem_instance_node(state: AgentState) -> AgentState:
     #TODO: call tool, assume state is changed with problem id and data
     success = True
     assert success
-    state.conversation.append(
-        ConversationMessage(
-            role="assistant",
-            content=get_message(MessageCode.SUCCESS_PROBLEM, state.user_lang),
-            timestamp=datetime.now()
-    ))
+    state.add_assistant_message(
+        get_message(MessageCode.SUCCESS_PROBLEM, state.user_lang),
+        get_message(MessageCode.SUCCESS_PROBLEM, "English")
+    )
 
 def extract_problem_node(state: AgentState):
 
@@ -76,7 +74,7 @@ def extract_problem_node(state: AgentState):
     return Command(update=state, goto="WAIT_PROBLEM_INPUT")
 
 def parse_confirmation_node(state: AgentState):
-    message = state.last_user_en
+    message = state.get_last_user_message().content_en
 
     state.cognitive.next_action = parse_confirmation(message)+'_PROBLEM'
 

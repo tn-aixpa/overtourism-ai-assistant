@@ -15,8 +15,7 @@ llm = ChatOllama(
 
 def format_messages(messages):
     return "\n".join(
-        f"{m.role.upper()}: {m.content}"
-        for m in messages
+        f"{m['role'].upper()}: {m['content']}" for m in messages
     )
 
 def llm_interaction(prompt: str) -> str:

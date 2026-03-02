@@ -9,7 +9,7 @@ from ...utils.common import parse_confirmation
 from ...utils.messages import get_message, MessageCode
 
 def extract_scenario(state: AgentState) -> AgentState:
-    answer = extract_scenario_data(state.conversation,
+    answer = extract_scenario_data(state.get_reasoning_context(),
                                 state.cognitive.editable_indexes)   
 
     assert "Error connecting to Ollama" not in answer
@@ -80,7 +80,7 @@ def extract_scenario_node(state: AgentState):
     return Command(update=state, goto="WAIT_SCENARIO_INPUT")
 
 def parse_confirmation_node(state: AgentState):
-    message = state.last_user_en
+    message = state.get_last_user_message().content_en
     
     state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
 
@@ -101,10 +101,8 @@ def run_scenario_node(state: AgentState) -> AgentState:
         #TODO: run tool
         return Command(update=state, goto="run_scenario")
     else:
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=get_message(MessageCode.SUCCESS_SCENARIO, state.user_lang),
-                timestamp=datetime.now()
-        ))
+        state.add_assistant_message(
+            get_message(MessageCode.SUCCESS_SCENARIO, state.user_lang),
+            get_message(MessageCode.SUCCESS_SCENARIO, "English")
+        )
         return Command(update=state, goto="END")

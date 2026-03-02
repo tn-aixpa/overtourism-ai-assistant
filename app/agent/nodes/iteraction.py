@@ -7,7 +7,7 @@ from ...utils.error_codes import ErrorCode, GraphError
 from ...utils.common import translate_from_eng
 
 def select_role(state: AgentState) -> AgentState:
-    question = state.last_user_en
+    question = state.get_last_user_message().content_en
     raw = select_role_llm(question, ALLOWED_ROLES)
 
     if "Error" in raw:
@@ -47,7 +47,7 @@ def interact_scenario(state: AgentState) -> AgentState:
     for role in state.cognitive.selected_roles:
 
         answer = answer_question(
-            question=state.last_user_en,
+            question=state.get_last_user_message().content_en,
             data=state.cognitive.data,
             role=role,
         )
@@ -55,12 +55,10 @@ def interact_scenario(state: AgentState) -> AgentState:
     
     if len(state.cognitive.selected_roles) == 1:
         #TODO: check this
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
-                timestamp=datetime.now()
-        ))
+        state.add_assistant_message(
+            translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
+            next(iter(state.cognitive.expert_answers.values()))
+        )
 
     return state
 
@@ -82,7 +80,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
     for role in state.cognitive.selected_roles:
 
         answer = answer_question_comparison(
-            question=state.last_user_en,
+            question=state.get_last_user_message().content_en,
             data=state.cognitive.data,
             role=role,
         )
@@ -90,12 +88,10 @@ def compare_scenarios(state: AgentState) -> AgentState:
     
     if len(state.cognitive.selected_roles) == 1:
         #TODO: check this
-        state.conversation.append(
-            ConversationMessage(
-                role="assistant",
-                content=translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
-                timestamp=datetime.now()
-        ))
+        state.add_assistant_message(
+            translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
+            next(iter(state.cognitive.expert_answers.values()))
+        )
         
     return state
 
@@ -104,16 +100,14 @@ def synthesize_answers(state: AgentState) -> AgentState:
     # Safety check
     assert len(state.cognitive.expert_answers) > 1
     
-    answer = synthesize_llm(state.last_user_en,
+    answer = synthesize_llm(state.get_last_user_message().content_en,
                             state.cognitive.expert_answers)
 
     assert not answer.startswith("Error")
 
-    state.conversation.append(
-        ConversationMessage(
-            role="assistant",
-            content=translate_from_eng(answer, state.user_lang),
-            timestamp=datetime.now()
-    ))
+    state.add_assistant_message(
+        translate_from_eng(answer, state.user_lang),
+        answer
+    )
 
     return state

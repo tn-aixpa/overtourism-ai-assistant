@@ -28,13 +28,7 @@ from app.agent.state import ConversationMessage
 )
 def test_single_roles(empty_state, question, expected_role):
     state = replace(empty_state)
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=question,
-            timestamp=datetime.now()
-        ))
-    state.last_user_en = question
+    state.add_user_message(question, question)
     new_state = select_role(state)
 
     # We assert the expected role is included in selected_roles
@@ -56,13 +50,7 @@ def test_single_roles(empty_state, question, expected_role):
 )
 def test_multi_roles(empty_state, question):
     state = replace(empty_state)
-    state.conversation.append(
-        ConversationMessage(
-            role="user",
-            content=question,
-            timestamp=datetime.now()
-        ))
-    state.last_user_en = question
+    state.add_user_message(question, question)
     new_state = select_role(state)
 
     # Must return multiple roles

@@ -3,11 +3,40 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+from app.config import MAX_CONTEXT_WINDOW
+
 @dataclass
 class ConversationMessage:
     role: str  # "user" | "assistant"
-    content: str  # Localized (Italian)
+    content_localized: str  # localized user-facing content(e.g. Italian)
+    content_en: str
     timestamp: Optional[datetime] = None
+
+@dataclass
+class ConversationBuffer:
+    messages: List[ConversationMessage] = field(default_factory=list)
+    max_window_size: int = MAX_CONTEXT_WINDOW  # configurable context window
+
+    def add_message(self, message: ConversationMessage):
+        self.messages.append(message)
+
+    def get_last_n(self, n: Optional[int] = None) -> List[ConversationMessage]:
+        n = n or self.max_window_size
+        return self.messages[-n:]
+
+    def get_context_window_en(self, n: Optional[int] = None) -> List[Dict[str, str]]:
+        """
+        Returns last N messages formatted for LLM reasoning (English only).
+        """
+        msgs = self.get_last_n(n)
+        return [{"role": m.role, "content": m.content_en} for m in msgs]
+
+    def get_context_window_localized(self, n: Optional[int] = None) -> List[Dict[str, str]]:
+        """
+        Returns last N messages in user language (UI use only).
+        """
+        msgs = self.get_last_n(n)
+        return [{"role": m.role, "content": m.content_localized} for m in msgs]
 
 @dataclass
 class CognitiveState:
@@ -39,19 +68,13 @@ class CognitiveState:
     data: Dict[str, Any] = field(default_factory=dict)
     editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
-    #TODO: Add memory if more than one message is required
-    # recent_window: List[Dict[str, str]] = field(default_factory=list) - last 1-3 messages
-    # conversation_summary_en: Optional[str] = None
-
-
 @dataclass
 class AgentState:
-    # Interface layer (Current language only)
-    conversation: List[ConversationMessage] = field(default_factory=list)
+    # Interface layer (Localized language only)
+    conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
 
     # Orchestration Layer (English only)
     session_id: str = ""
-    last_user_en: Optional[str] = None  # translated latest user message
     user_lang: str = "English"
 
     # Cognitive Layer (English only)
@@ -60,4 +83,43 @@ class AgentState:
     # Error handling
     error_code: str = ""
     error_details: str = ""
+
+    # ---- Methods ----
+
+    def add_user_message(self, localized: str, translated_en: str):
+        self.conversation.add_message(
+            ConversationMessage(
+                role="user",
+                content_localized=localized,
+                content_en=translated_en,
+                timestamp=datetime.now()
+            )
+        )
+
+    def add_assistant_message(self, localized: str, translated_en: str):
+        self.conversation.add_message(
+            ConversationMessage(
+                role="assistant",
+                content_localized=localized,
+                content_en=translated_en,
+                timestamp=datetime.now()
+            )
+        )
+
+    def get_last_user_message(self):
+        for msg in reversed(self.conversation.messages):
+            if msg.role == "user":
+                return msg
+        return None
+    
+    def get_last_message(self):
+        if len(self.conversation.messages) > 0:
+            return self.conversation.messages[-1]
+        return None
+
+    def get_reasoning_context(self, n: Optional[int] = None):
+        return self.conversation.get_context_window_en(n)
+
+    def get_ui_context(self, n: Optional[int] = None):
+        return self.conversation.get_context_window_localized(n)
 
