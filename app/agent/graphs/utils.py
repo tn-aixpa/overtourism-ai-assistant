@@ -49,6 +49,8 @@ def safe(node_fn, node_name):
 def human_gate(interrupt_type, payload_builder):
     def _node(state: AgentState):
 
+        state.add_trace("human_gate", data={"interrupt_type": interrupt_type})
+
         payload = {
             "type": interrupt_type,
             **payload_builder(state),

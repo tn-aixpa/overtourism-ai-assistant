@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict
+from typing import Dict, Optional
 from app.agent.state import AgentState
 
 # In-memory store
@@ -11,20 +11,22 @@ def generate_key() -> str:
     return str(uuid.uuid4())
 
 
-def load_state(key: str | None) -> tuple[str, AgentState]:
+def load_state(session_id: Optional[str]) -> Optional[AgentState]:
     """
-    Load existing state by key.
-    If key is None or not found, create a new state with a new key.
-    Returns (key, state).
+    Retrieve AgentState from memory.
+    Returns None if not found.
     """
-    if key and key in _STATE_STORE:
-        return key, _STATE_STORE[key]
+    if not session_id:
+        return None
 
-    new_key = generate_key()
-    state = AgentState(session_id=new_key)
-    _STATE_STORE[new_key] = state
-    return new_key, state
+    return _STATE_STORE.get(session_id)
 
 
 def save_state(key: str, state: AgentState) -> None:
     _STATE_STORE[key] = state
+
+    # For debugging, replace later with proper saving
+    with open("logs/traceback.log", "w") as f:
+        f.write(f"Saved state for session_id={key}\n")
+        for trace in state.cognitive.trace.steps:
+            f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.description} | {str(trace.data)}\n")

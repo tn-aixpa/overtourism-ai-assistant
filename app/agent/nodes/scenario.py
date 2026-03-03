@@ -74,6 +74,7 @@ def extract_scenario(state: AgentState) -> AgentState:
 
 def extract_scenario_node(state: AgentState):
     state = extract_scenario(state)
+    state.add_trace("node_execution", data={"node": "extract_scenario", "extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
     if state.cognitive.scenarios_to_generate:
         return Command(update=state, goto="WAIT_CONFIRMATION_SCENARIO")
     return Command(update=state, goto="WAIT_SCENARIO_INPUT")
@@ -82,6 +83,8 @@ def parse_confirmation_node(state: AgentState):
     message = state.get_last_user_message().content_en
     
     state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
+
+    state.add_trace("node_execution", data={"node": "parse_confirmation_node", "next_action": state.cognitive.next_action})
 
     if state.cognitive.next_action == "CONFIRM_SCENARIO":
         return Command(update=state, goto="scenario_runner", graph=Command.PARENT) 
@@ -96,6 +99,7 @@ def parse_confirmation_node(state: AgentState):
 
 def run_scenario_node(state: AgentState) -> AgentState:
     if state.cognitive.scenarios_to_generate:
+        state.add_trace("node_execution", data={"node": "run_scenario_node", "to_generate": len(state.cognitive.scenarios_to_generate)})
         scenario_title, scanario_parameters = state.cognitive.scenarios_to_generate.popitem()
         #TODO: run tool
         return Command(update=state, goto="run_scenario")

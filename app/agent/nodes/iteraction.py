@@ -96,6 +96,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
 
 def synthesize_answers(state: AgentState) -> AgentState:
     # Safety check
+    state.add_trace("node_execution", data={"node": "synthesize_answers"})
     assert len(state.cognitive.expert_answers) > 1
     
     answer = synthesize_llm(state.get_last_user_message().content_en,

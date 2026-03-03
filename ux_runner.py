@@ -3,7 +3,7 @@ import requests
 
 API_URL = "http://localhost:9000/agent"
 
-st.title("LangGraph Agent Demo")
+st.title("Digital Twin Agent Demo")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -20,7 +20,7 @@ if prompt := st.chat_input("Ask something..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    response = requests.post(API_URL, json={"message": prompt})
+    response = requests.post(API_URL, json={"message": prompt, "demo": True})
     answer = response.json()["response"]
 
     st.session_state.messages.append({"role": "assistant", "content": answer})

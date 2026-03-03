@@ -39,6 +39,28 @@ class ConversationBuffer:
         return [{"role": m.role, "content": m.content_localized} for m in msgs]
 
 @dataclass
+class TraceStep:
+    step_type: str  # e.g., "tool_call", "node_execution"
+    description: str | None = None
+    data: Optional[Dict[str, Any]] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=datetime.now)
+
+@dataclass
+class TraceBuffer:
+    steps: List[TraceStep] = field(default_factory=list)
+    max_trace_size: int = 1000
+
+    def add_step(self, step: TraceStep):
+        self.steps.append(step)
+        if len(self.steps) > self.max_trace_size:
+            # remove oldest steps to keep buffer size
+            self.steps = self.steps[-self.max_trace_size:]
+
+    def get_last_n(self, n: Optional[int] = None) -> List[TraceStep]:
+        n = n or self.max_trace_size
+        return self.steps[-n:]
+
+@dataclass
 class CognitiveState:
     # Canonical reasoning language: ENGLISH
 
@@ -68,6 +90,12 @@ class CognitiveState:
     data: Dict[str, Any] = field(default_factory=dict)
     editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
+    # Tracing
+    trace: TraceBuffer = field(default_factory=TraceBuffer)
+
+    def add_trace(self, step_type: str, description: str | None = None, data: Optional[Dict[str, Any]] = None):
+        self.trace.add_step(TraceStep(step_type=step_type, description=description, data=data))
+
 @dataclass
 class AgentState:
     # Interface layer (Localized language only)
@@ -86,6 +114,9 @@ class AgentState:
     error_details: str = ""
 
     # ---- Methods ----
+
+    def add_trace(self, step_type: str, description: str | None = None, data: Optional[Dict[str, Any]] = None):
+        self.cognitive.add_trace(step_type=step_type, description=description, data=data)
 
     def add_user_message(self, localized: str, translated_en: str):
         self.conversation.add_message(
@@ -123,3 +154,9 @@ class AgentState:
 
     def get_ui_context(self, n: Optional[int] = None):
         return self.conversation.get_context_window_localized(n)
+    
+#     agent_state.cognitive.add_trace(
+#     step_type="tool_call",
+#     description="Called weather API to get current temperature",
+#     data={"tool": "WeatherAPI", "params": {"city": "Rome"}, "result": 21}
+# )
