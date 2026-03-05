@@ -16,7 +16,7 @@ def intent_node(state: AgentState) -> AgentState:
 
     assert answer in VALID_OUTPUTS
     state.cognitive.next_action = answer
-    state.add_trace("node_execution", data={"node": "intent_node", "intent": answer})
+    state.add_trace("node_execution", node="intent_node", data={"intent": answer})
     return state
 
 def validate_intent_node(state: AgentState) -> AgentState:
@@ -50,11 +50,11 @@ def validate_intent_node(state: AgentState) -> AgentState:
             state.cognitive.next_action = "NOT_ALLOWED"
             raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No problem selected")
 
-    state.add_trace("node_execution", data={"node": "validate_intent_node", "intent": state.cognitive.next_action})
+    state.add_trace("node_execution", node="validate_intent_node", data={"intent": state.cognitive.next_action})
     return state
 
 def route_from_intent(state: AgentState):
-    state.add_trace("node_execution", data={"node": "route_from_intent", "intent": state.cognitive.next_action})
+    state.add_trace("node_execution", node="route_from_intent", data={"intent": state.cognitive.next_action})
     action = state.cognitive.next_action
     if action in ["INTERACT_SCENARIO", "COMPARE_SCENARIOS"]:
         return Command(update=state, goto="interaction", graph=Command.PARENT)

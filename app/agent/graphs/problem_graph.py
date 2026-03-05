@@ -13,7 +13,7 @@ wait_problem_input = human_gate(
 
 wait_problem_confirmation = human_gate(
     "WAIT_CONFIRMATION_PROBLEM",
-    lambda s: {"instructions": f"These are the information I extracted:\n- {'\n- '.join(f'{k}: {v}' for k, v in s.cognitive.extracted_problem_info.items())}.\nDo you want to proceed?"}
+    lambda s: {"instructions": f"These are the information I extracted:\n- {'\n- '.join(f'{k}: {v}' for k, v in s.cognitive.extracted_problem_info.items())}.\n\nDo you want to proceed?"}
 )
 
 wait_scenario_preference = human_gate(
@@ -23,8 +23,14 @@ wait_scenario_preference = human_gate(
 
 # ---- Build subgraph
 
+def problem_resume_router(state: AgentState):
+    if state.last_node and state.last_node.startswith("WAIT_"):
+        return state.last_node  # jump to the right node
+    return "extract_problem"
+
 graph = StateGraph(AgentState)
 
+graph.add_node("problem_resume_router", lambda s: s)
 add_safe_node(graph, "extract_problem", extract_problem_node)
 add_safe_node(graph, "WAIT_PROBLEM_INPUT", wait_problem_input)
 add_safe_node(graph, "WAIT_CONFIRMATION_PROBLEM", wait_problem_confirmation)
@@ -34,11 +40,17 @@ add_safe_node(graph, "decide_scenario_strategy", decide_strategy_node)
 add_safe_node(graph, "WAIT_SCENARIO_PREFERENCE", wait_scenario_preference)
 add_safe_node(graph, "generate_scenario_candidates", generate_scenario_candidates)
 
-graph.set_entry_point("extract_problem")
-
-graph.add_edge("WAIT_PROBLEM_INPUT", "extract_problem")
-graph.add_edge("WAIT_CONFIRMATION_PROBLEM", "parse_problem_confirmation")
+graph.set_entry_point("problem_resume_router")
+graph.add_conditional_edges(
+    "problem_resume_router",
+    problem_resume_router,
+    {
+        "extract_problem": "extract_problem",
+        "WAIT_PROBLEM_INPUT": "extract_problem",
+        "WAIT_CONFIRMATION_PROBLEM": "parse_problem_confirmation",
+        "WAIT_SCENARIO_PREFERENCE": "decide_scenario_strategy",
+    }
+)
 graph.add_edge("create_problem_instance", "decide_scenario_strategy")
-graph.add_edge("WAIT_SCENARIO_PREFERENCE", "decide_scenario_strategy")
 
 problem_subgraph = graph.compile()

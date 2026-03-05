@@ -27,6 +27,6 @@ def save_state(key: str, state: AgentState) -> None:
 
     # For debugging, replace later with proper saving
     with open("logs/traceback.log", "w") as f:
-        f.write(f"Saved state for session_id={key}\n")
+        f.write(f"Saved state for session_id={key}, last node={state.last_node}\n")
         for trace in state.cognitive.trace.steps:
-            f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.description} | {str(trace.data)}\n")
+            f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")

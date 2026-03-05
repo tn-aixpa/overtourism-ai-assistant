@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, HTTPException
 import logging
+from langgraph.errors import Interrupt
+from langgraph.types import Command
 
 from app.schemas import AgentRequest, AgentResponse
 from app.agent.state import AgentState
@@ -68,6 +70,7 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         
         # load existing state or create a new one
         state = load_state(key)
+
         if not state:
             user_lang = getattr(request, 'user_lang', "English")
             state = AgentState(session_id=key, user_lang=user_lang)
@@ -83,24 +86,48 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
         translated = translate_from_eng(request.message, state.user_lang)
         state.add_user_message(localized=request.message, translated_en=translated)
 
-        # 5Run LangGraph agent
-        updated_state_dict = agent_app.invoke(state)
-        final_state = AgentState(**updated_state_dict)
+        # Run LangGraph agent
+        try:
 
-        # persist updated state
-        save_state(key, final_state)
+            updated_state_dict = agent_app.invoke(state)
+            
+            if "__interrupt__" in updated_state_dict:                
+                # Build the actual updated state before saving
+                state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
+                final_state = AgentState(**state_dict)
+                
+                save_state(key, final_state)  # ✅ save the real updated state
+                
+                return AgentResponse(
+                    response=final_state.get_last_message().content_localized,
+                    session_id=key,
+                )
 
-        # return the last assistant message as response
-        last_msg = final_state.get_last_message()
-        response_text = ""
-        if last_msg and last_msg.role == "assistant":
-            response_text = last_msg.content_localized  # return in user language
-        else:
-            logger.warning("No assistant message generated in the response")
-            response_text = get_error_message(ErrorCode.REQUEST_ERROR, final_state=state.user_lang)
+            state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
+                       
+            final_state = AgentState(**state_dict)
 
-        return AgentResponse(response=response_text)
+            save_state(key, final_state)
 
+            last_msg = final_state.get_last_message()
+            response_text = (
+                last_msg.content_localized
+                if last_msg and last_msg.role == "assistant"
+                else get_error_message(ErrorCode.REQUEST_ERROR, final_state=state.user_lang)
+            )
+
+            return AgentResponse(
+                response=response_text,
+                session_id=key,
+            )
+
+        except Exception as e:
+            # This may now be unreachable, but keep as fallback
+            save_state(key, state)
+            return AgentResponse(
+                response=str(e),
+                session_id=key,
+            )
     except HTTPException:
         raise
     except Exception as e:

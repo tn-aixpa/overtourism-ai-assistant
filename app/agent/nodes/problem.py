@@ -50,7 +50,7 @@ def decide_scenario_strategy(state: AgentState) -> AgentState:
 def generate_scenario_candidates(state: AgentState):
     #generate base scenario first   
     #request llm for possible variations and improvements of the base scenario
-    state.add_trace("tool_call_mocked", data={"tool": "AI scenario generation"})
+    state.add_trace("tool_call_mocked", node="generate_scenario_candidates", data={"tool": "AI scenario generation"})
     variations = [] #TODO: implement llm call to generate variations based on base scenario and problem info
     state.cognitive.scenarios_to_generate = variations
     
@@ -58,19 +58,20 @@ def generate_scenario_candidates(state: AgentState):
     
 def create_problem_instance_node(state: AgentState) -> AgentState:
     #TODO: call tool, assume state is changed with problem id and data
-    state.add_trace("tool_call_mocked", data={"tool": "problem_creation"})
+    state.add_trace("tool_call_mocked", node="create_problem_instance_node", data={"tool": "problem_creation"})
     success = True
     assert success
     state.add_assistant_message(
         get_message(MessageCode.SUCCESS_PROBLEM, state.user_lang),
         get_message(MessageCode.SUCCESS_PROBLEM, "English")
     )
+    return state
 
 def extract_problem_node(state: AgentState):
 
     state = extract_problem(state)
 
-    state.add_trace("node_execution", data={"node": "extract_problem_node", "extracted": state.cognitive.extracted_problem_info, "extracted_all": state.cognitive.extracted_all_problem})
+    state.add_trace("node_execution", node="extract_problem_node", data={"extracted": state.cognitive.extracted_problem_info, "extracted_all": state.cognitive.extracted_all_problem})
 
     if state.cognitive.extracted_all_problem:
         return Command(update=state, goto="WAIT_CONFIRMATION_PROBLEM")
@@ -81,7 +82,7 @@ def parse_confirmation_node(state: AgentState):
 
     state.cognitive.next_action = parse_confirmation(message)+'_PROBLEM'
 
-    state.add_trace("node_execution", data={"node": "parse_confirmation_node", "intent": state.cognitive.next_action})
+    state.add_trace("node_execution", node="parse_confirmation_node", data={"intent": state.cognitive.next_action})
 
     if state.cognitive.next_action == "EDIT_PROBLEM":
         return Command(update=state, goto="extract_problem", graph=Command.PARENT)
@@ -95,7 +96,7 @@ def parse_confirmation_node(state: AgentState):
 
 def decide_strategy_node(state: AgentState):
     state = decide_scenario_strategy(state)
-    state.add_trace("node_execution", data={"node": "decide_strategy_node", "intent": state.cognitive.next_action})
+    state.add_trace("node_execution", node="decide_strategy_node", data={"intent": state.cognitive.next_action})
     
     if state.cognitive.next_action == "GENERATE_SCENARIOS":
         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)

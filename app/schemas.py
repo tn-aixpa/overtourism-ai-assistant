@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Dict, Any, List, Optional
 
 class ConversationMessage(BaseModel):
@@ -23,11 +23,10 @@ class AgentRequest(BaseModel):
     next_action: Optional[str] = None
     cognitive: Optional[CognitivePayload] = None
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
         
 class AgentResponse(BaseModel):
     response: Optional[str] = None
+    session_id: str
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

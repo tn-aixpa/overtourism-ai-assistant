@@ -18,18 +18,30 @@ wait_scenario_confirmation = human_gate(
                         f"{'\n- '.join(str(x) for x in s.cognitive.scenarios_to_generate)}"
     },)
 
+def scenario_resume_router(state: AgentState):
+    if state.last_node and state.last_node.startswith("WAIT_"):
+        return state.last_node  # jump to the right node
+    return "extract_scenario"
+
 # ---- Build subgraph
 
 graph = StateGraph(AgentState)
 
+graph.add_node("scenario_resume_router", lambda s: s)
 add_safe_node(graph, "extract_scenario", extract_scenario_node)
 add_safe_node(graph, "WAIT_SCENARIO_INPUT", wait_scenario_input)
 add_safe_node(graph, "WAIT_CONFIRMATION_SCENARIO", wait_scenario_confirmation)
 add_safe_node(graph, "parse_scenario_confirmation", parse_confirmation_node)
 
-graph.set_entry_point("extract_scenario")
+graph.set_entry_point("scenario_resume_router")
 
-graph.add_edge("WAIT_CONFIRMATION_SCENARIO", "parse_scenario_confirmation")
-graph.add_edge("WAIT_SCENARIO_INPUT", "extract_scenario")
+graph.add_conditional_edges(
+    "scenario_resume_router",
+    scenario_resume_router,
+    {
+        "WAIT_CONFIRMATION_SCENARIO", "parse_scenario_confirmation",
+        "WAIT_SCENARIO_INPUT", "extract_scenario"
+    }
+)
 
 scenario_extraction_subgraph = graph.compile()

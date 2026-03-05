@@ -11,7 +11,7 @@ from app.agent.graphs.utils import add_safe_node
 def select_role_router(state: AgentState):
     result = select_role(state)
 
-    state.add_trace("node_execution", data={"node": "select_role_router", "selected_role": state.cognitive.selected_role})
+    state.add_trace("node_execution", node="select_role_router", data={"selected_roles": state.cognitive.selected_roles})
 
     mapping = {
         "INTERACT_SCENARIO": "interact_scenario",
@@ -25,7 +25,7 @@ def select_role_router(state: AgentState):
 
 
 def interact_router(state: AgentState):
-    state.add_trace("node_execution", data={"node": "interact_router"})
+    state.add_trace("node_execution", node="interact_router")
     result = interact_scenario(state)
 
     if len(state.cognitive.selected_roles) > 1:
@@ -35,7 +35,7 @@ def interact_router(state: AgentState):
 
 
 def compare_router(state: AgentState):
-    state.add_trace("node_execution", data={"node": "compare_router"})
+    state.add_trace("node_execution", node="compare_router")
     result = compare_scenarios(state)
 
     if len(state.cognitive.selected_roles) > 1:

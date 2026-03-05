@@ -10,7 +10,7 @@ class ConversationMessage:
     role: str  # "user" | "assistant"
     content_localized: str  # localized user-facing content(e.g. Italian)
     content_en: str
-    timestamp: Optional[datetime] = None
+    timestamp: datetime = field(default_factory=datetime.now)
 
 @dataclass
 class ConversationBuffer:
@@ -41,7 +41,7 @@ class ConversationBuffer:
 @dataclass
 class TraceStep:
     step_type: str  # e.g., "tool_call", "node_execution"
-    description: str | None = None
+    node: str | None = None
     data: Optional[Dict[str, Any]] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -93,8 +93,8 @@ class CognitiveState:
     # Tracing
     trace: TraceBuffer = field(default_factory=TraceBuffer)
 
-    def add_trace(self, step_type: str, description: str | None = None, data: Optional[Dict[str, Any]] = None):
-        self.trace.add_step(TraceStep(step_type=step_type, description=description, data=data))
+    def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
+        self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
 
 @dataclass
 class AgentState:
@@ -113,10 +113,16 @@ class AgentState:
     error_node: str = ""
     error_details: str = ""
 
+    @property
+    def last_node(self):
+        if not self.cognitive.trace.steps:
+            return None
+        return self.cognitive.trace.steps[-1].node
+
     # ---- Methods ----
 
-    def add_trace(self, step_type: str, description: str | None = None, data: Optional[Dict[str, Any]] = None):
-        self.cognitive.add_trace(step_type=step_type, description=description, data=data)
+    def add_trace(self, step_type: str, node: str | None = None, data: Optional[Dict[str, Any]] = None):
+        self.cognitive._add_trace(step_type=step_type, node=node, data=data)
 
     def add_user_message(self, localized: str, translated_en: str):
         self.conversation.add_message(
@@ -124,7 +130,6 @@ class AgentState:
                 role="user",
                 content_localized=localized,
                 content_en=translated_en,
-                timestamp=datetime.now()
             )
         )
 
@@ -134,7 +139,6 @@ class AgentState:
                 role="assistant",
                 content_localized=localized,
                 content_en=translated_en,
-                timestamp=datetime.now()
             )
         )
 
@@ -154,9 +158,3 @@ class AgentState:
 
     def get_ui_context(self, n: Optional[int] = None):
         return self.conversation.get_context_window_localized(n)
-    
-#     agent_state.cognitive.add_trace(
-#     step_type="tool_call",
-#     description="Called weather API to get current temperature",
-#     data={"tool": "WeatherAPI", "params": {"city": "Rome"}, "result": 21}
-# )
