@@ -30,7 +30,8 @@ graph.add_conditional_edges(
         "WAIT_PROBLEM_INPUT": "problem",
         "WAIT_CONFIRMATION_PROBLEM": "problem",
         "WAIT_SCENARIO_PREFERENCE": "problem",
-        # ... etc
+        "WAIT_CONFIRMATION_SCENARIO": "scenario_extraction",
+        "WAIT_SCENARIO_INPUT": "scenario_extraction"
     }
 )
 graph.set_entry_point("resume_router")

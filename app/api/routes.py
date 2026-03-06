@@ -2,8 +2,6 @@
 
 from fastapi import APIRouter, HTTPException
 import logging
-from langgraph.errors import Interrupt
-from langgraph.types import Command
 
 from app.schemas import AgentRequest, AgentResponse
 from app.agent.state import AgentState
@@ -96,7 +94,7 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
                 state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
                 final_state = AgentState(**state_dict)
                 
-                save_state(key, final_state)  # ✅ save the real updated state
+                save_state(key, final_state)
                 
                 return AgentResponse(
                     response=final_state.get_last_message().content_localized,

@@ -1,5 +1,3 @@
-# from app.agent.state import AgentState
-
 translation = {
     'parcheggi': 'parking',
     'spiaggia': 'beach',
