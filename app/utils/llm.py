@@ -25,7 +25,7 @@ def llm_interaction(prompt: str) -> str:
     except Exception as e:
         return f"Error connecting to Ollama: {e}"
     
-def classify_intent(active_sims: list, message: str) -> str:
+def classify_intent(message: str) -> str:
     context = "City management and overtourism" #TODO: move it somewhere else
     prompt = f"""
 You are an intent classifier.
@@ -51,7 +51,6 @@ Context: {context}.
 The Context provides background but does not override the intent rules.
 
 User request: {message}
-Active scenarios: {active_sims or "none"}
 
 Return only the action name.
 

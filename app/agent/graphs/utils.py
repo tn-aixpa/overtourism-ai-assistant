@@ -1,8 +1,6 @@
-from langgraph.types import interrupt
 from langgraph.types import Command
 
 from ..state import AgentState
-from ...utils.common import translate_to_eng, translate_from_eng
 from ...utils.error_codes import ErrorCode, GraphError
 
 # ─────────────────────────────────────────────
@@ -35,34 +33,3 @@ def safe(node_fn, node_name):
             return Command(update=state, goto="error", graph=Command.PARENT)
 
     return _safe
-
-# ─────────────────────────────────────────────
-# HUMAN GATE NODES (Interrupt-based)
-# ─────────────────────────────────────────────
-
-def human_gate(interrupt_type, payload_builder):
-    def _node(state: AgentState):
-        state.add_trace("human_gate", node=interrupt_type)
-
-        payload = {
-            "type": interrupt_type,
-            **payload_builder(state),
-        }
-
-        if "instructions" in payload:
-            state.add_assistant_message(
-                localized=translate_from_eng(payload["instructions"], state.user_lang),
-                translated_en=payload["instructions"]
-            )
-
-        # trigger interrupt
-        response = interrupt(payload)
-        if response:
-            state.add_user_message(
-                localized=response,
-                translated_en=translate_to_eng(response, state.user_lang)
-            )
-
-        return state
-
-    return _node

@@ -1,32 +1,13 @@
-from dataclasses import replace
-from datetime import datetime
+# tests/test_workflow_scenario.py
 import json
 
+from app.agent.state import AgentState
 from app.agent.graph import app
 from app.utils.data import parse_data
-from app.agent.state import ConversationMessage
-from app.utils.common import to_state
 from app.config import DRAW_CONVERSATION
+from tests.utils.agent_runner import AgentTestRunner
 
-def test_scenario_extraction(empty_state, monkeypatch):
-
-    # Fake human response
-    def fake_interrupt(payload):
-        if payload["type"] == "WAIT_CONFIRMATION_SCENARIO":
-            return "Yes, proceed."
-        return None
-
-    # Replace interrupt with fake version
-    monkeypatch.setattr(
-        "app.agent.graphs.utils.interrupt",
-        fake_interrupt
-    )
-
-    # Definitions
-    state = replace(empty_state)
-    
-    state.cognitive.problem_id = "parcheggi_200"
-
+def setup_scenario_info(state: AgentState):
     state.cognitive.scenario_info_to_extract = {
         "title": {"description": "The title of the scenario", "required": True},
         "description": {"description": "Describes the proposal", "required": False},
@@ -35,24 +16,38 @@ def test_scenario_extraction(empty_state, monkeypatch):
         "potential_impact": {"description": "Potential impact of the proposal", "required": False},
         "indexes_to_change": {"description": "Indexes of simulation to change", "required": True}
     }
+    return state
 
+def test_scenario_extraction(empty_state):
+    # Initialize agent runner
+    agent = AgentTestRunner(app, empty_state)
 
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()), True)
+    # Setup problem and scenario extraction info
+    agent.state.cognitive.problem_id = "parcheggi_200"
+    agent.state = setup_scenario_info(agent.state)
 
-    message="I want to create a two scenarios: one where I increase parking spaces of 200 units, and the other in which I decrease them of 50 "
-    state.add_user_message(message, message)
+    # Preload base data if needed
+    with open("tests/data/test_base.json", "r") as f:
+        agent.state = parse_data(agent.state, json.load(f), True)
 
-    events = []
+    # Simulate user message to create two scenarios
+    user_message = (
+        "I want to create a two scenarios: one where I increase parking spaces of 200 units, "
+        "and the other in which I decrease them of 50"
+    )
 
+    # Run the multi-turn workflow
+    result = (
+        agent.start(user_message)
+             .reply("Yes, proceed.")  # user confirms scenario
+             .run()
+    )
+
+    # Optionally draw conversation for debugging
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
-        result_dict = app.invoke(state)
-        result = to_state(result_dict)
-        draw_conversation(result.conversation.messages, "logs/scenario_creation.png")
-    else:
-        events = []
-        with open("logs/test_scenario_workflow.log", "a+") as f:
-            for event in app.stream(state):
-                f.write(f"Event: {event}\n")
-                events.append(event)
+        draw_conversation(result.messages, "logs/scenario_creation.png")
+
+    # Assertions
+    assert result.state.cognitive.problem_id == "parcheggi_200"
+    #assert len(result.state.cognitive.scenarios_to_generate) > 0

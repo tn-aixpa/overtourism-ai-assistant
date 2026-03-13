@@ -5,7 +5,7 @@ from ...utils.llm import classify_intent
 from ...utils.error_codes import ErrorCode, GraphError
 
 def intent_node(state: AgentState) -> AgentState:
-    answer = classify_intent(state.cognitive.scenario_ids, state.get_last_user_message().content_en).strip()
+    answer = classify_intent(state.get_last_user_message().content_en).strip()
 
     VALID_OUTPUTS = {
         "CREATE_PROBLEM",

@@ -75,9 +75,15 @@ def extract_scenario(state: AgentState) -> AgentState:
 def extract_scenario_node(state: AgentState):
     state = extract_scenario(state)
     state.add_trace("node_execution", node="extract_scenario_node", data={"extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
+    state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
+    state.user_input = None
+
     if state.cognitive.scenarios_to_generate:
-        return Command(update=state, goto="WAIT_CONFIRMATION_SCENARIO")
-    return Command(update=state, goto="WAIT_SCENARIO_INPUT")
+        state.waiting_for = AgentState.WaitingFor.SCENARIO_CONFIRMATION
+    else:
+        state.waiting_for = AgentState.WaitingFor.SCENARIO_INPUT
+
+    return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
 def parse_confirmation_node(state: AgentState):
     message = state.get_last_user_message().content_en
@@ -87,13 +93,22 @@ def parse_confirmation_node(state: AgentState):
     state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
 
     if state.cognitive.next_action == "CONFIRM_SCENARIO":
+        state.waiting_for = None
+        state.user_input = None
         return Command(update=state, goto="scenario_runner", graph=Command.PARENT) 
     
     routes = {
         "EDIT_SCENARIO": "extract_scenario",
         "CANCEL_SCENARIO": END,
-        "WAIT_CONFIRMATION_SCENARIO": "WAIT_CONFIRMATION_SCENARIO",
     }
+    if state.cognitive.next_action == "WAIT_CONFIRMATION_SCENARIO":
+        state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
+        state.waiting_for = AgentState.WaitingFor.SCENARIO_CONFIRMATION
+        state.user_input = None
+        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+
+    state.waiting_for = None
+    state.user_input = None
     return Command(update=state, goto=routes[state.cognitive.next_action])
 
 

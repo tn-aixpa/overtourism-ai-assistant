@@ -73,9 +73,15 @@ def extract_problem_node(state: AgentState):
 
     state.add_trace("node_execution", node="extract_problem_node", data={"extracted": state.cognitive.extracted_problem_info, "extracted_all": state.cognitive.extracted_all_problem})
 
+    state.active_workflow = AgentState.Workflow.PROBLEM
+    state.user_input = None
+
     if state.cognitive.extracted_all_problem:
-        return Command(update=state, goto="WAIT_CONFIRMATION_PROBLEM")
-    return Command(update=state, goto="WAIT_PROBLEM_INPUT")
+        state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
+    else:
+        state.waiting_for = AgentState.WaitingFor.PROBLEM_INPUT
+
+    return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
 def parse_confirmation_node(state: AgentState):
     message = state.get_last_user_message().content_en
@@ -85,13 +91,21 @@ def parse_confirmation_node(state: AgentState):
     state.add_trace("node_execution", node="parse_confirmation_node", data={"intent": state.cognitive.next_action})
 
     if state.cognitive.next_action == "EDIT_PROBLEM":
+        state.waiting_for = None
         return Command(update=state, goto="extract_problem", graph=Command.PARENT)
     
     routes = {
         "CONFIRM_PROBLEM": "create_problem_instance",
         "CANCEL_PROBLEM": END,
-        "WAIT_CONFIRMATION_PROBLEM": "WAIT_CONFIRMATION_PROBLEM",
     }
+    if state.cognitive.next_action == "WAIT_CONFIRMATION_PROBLEM":
+        state.active_workflow = AgentState.Workflow.PROBLEM
+        state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
+        state.user_input = None
+        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+
+    state.waiting_for = None
+    state.user_input = None
     return Command(update=state, goto=routes[state.cognitive.next_action])
 
 def decide_strategy_node(state: AgentState):
@@ -99,11 +113,19 @@ def decide_strategy_node(state: AgentState):
     state.add_trace("node_execution", node="decide_strategy_node", data={"intent": state.cognitive.next_action})
     
     if state.cognitive.next_action == "GENERATE_SCENARIOS":
+        state.waiting_for = None
         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
     routes = {
         "GENERATE_AGENTIC_SCENARIOS": "generate_scenario_candidates",
-        "ASK_USER_PREFERENCE": "WAIT_SCENARIO_PREFERENCE",
         "NO_SCENARIOS": END,
     }
-    
+
+    if state.cognitive.next_action == "ASK_USER_PREFERENCE":
+        state.active_workflow = AgentState.Workflow.PROBLEM
+        state.waiting_for = AgentState.WaitingFor.SCENARIO_PREFERENCE
+        state.user_input = None
+        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+
+    state.waiting_for = None
+    state.user_input = None
     return Command(update=state, goto=routes[state.cognitive.next_action])

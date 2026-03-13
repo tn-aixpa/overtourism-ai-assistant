@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from enum import StrEnum
 
 from app.config import MAX_CONTEXT_WINDOW
 
@@ -104,6 +105,28 @@ class AgentState:
     # Orchestration Layer (English only)
     session_id: str = ""
     user_lang: str = "English"
+
+    # Workflow orchestration
+    class Workflow(StrEnum):
+        INTENT = "intent"
+        PROBLEM = "problem"
+        SCENARIO_EXTRACTION = "scenario_extraction"
+        INTERACTION = "interaction"
+        SCENARIO_RUNNER = "scenario_runner"
+
+    active_workflow: Optional["AgentState.Workflow"] = None
+
+    class WaitingFor(StrEnum):
+        PROBLEM_INPUT = "PROBLEM_INPUT"
+        PROBLEM_CONFIRMATION = "PROBLEM_CONFIRMATION"
+        SCENARIO_PREFERENCE = "SCENARIO_PREFERENCE"
+        SCENARIO_INPUT = "SCENARIO_INPUT"
+        SCENARIO_CONFIRMATION = "SCENARIO_CONFIRMATION"
+
+    waiting_for: Optional["AgentState.WaitingFor"] = None
+    # Raw user input used to resume from WAIT_USER_INPUT.
+    # (When using the HTTP API, this is populated only when `waiting_for` is set.)
+    user_input: Optional[str] = None
 
     # Cognitive Layer (English only)
     cognitive: CognitiveState = field(default_factory=CognitiveState)
