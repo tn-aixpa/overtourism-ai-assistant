@@ -1,3 +1,4 @@
+import logging
 import json
 from langgraph.graph import END
 from langgraph.types import Command
@@ -7,11 +8,14 @@ from ...utils.llm import extract_scenario_data
 from ...utils.common import parse_confirmation
 from ...utils.messages import get_message, MessageCode
 
+logger = logging.getLogger(__name__)
+
 def extract_scenario(state: AgentState) -> AgentState:
+    logger.info("Extracting scenario from reasoning context")
     answer = extract_scenario_data(state.get_reasoning_context(),
                                 state.cognitive.editable_indexes)   
 
-    assert "Error connecting to Ollama" not in answer
+    assert "Error connecting to chatbot" not in answer
     
     #TODO: check if it reasonable
 
@@ -70,9 +74,12 @@ def extract_scenario(state: AgentState) -> AgentState:
         state.cognitive.validation_errors = "The following errors were dected for the scenarios you defined:\n" + "\n- ".join(validation_errors) 
         state.cognitive.scenarios_to_generate = None
 
+    logger.info(f"Extracted scenarios: {state.cognitive.scenarios_to_generate}, extracted_all_scenario: {state.cognitive.extracted_all_scenario}, validation_errors: {state.cognitive.validation_errors}")
+
     return state
 
 def extract_scenario_node(state: AgentState):
+    logger.info("Entering extract_scenario_node")
     state = extract_scenario(state)
     state.add_trace("node_execution", node="extract_scenario_node", data={"extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
     state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
@@ -86,9 +93,11 @@ def extract_scenario_node(state: AgentState):
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
 def parse_confirmation_node(state: AgentState):
+    logger.info("Entering parse_confirmation_node")
     message = state.get_last_user_message().content_en
     
     state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
+    logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
 
     state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
 
@@ -114,6 +123,7 @@ def parse_confirmation_node(state: AgentState):
 
 def run_scenario_node(state: AgentState) -> AgentState:
     if state.cognitive.scenarios_to_generate:
+        logger.info(f"Running scenario with parameters: {state.cognitive.scenarios_to_generate}")
         state.add_trace("node_execution", node="run_scenario_node", data={"to_generate": len(state.cognitive.scenarios_to_generate)})
         scenario_title, scenario_parameters = state.cognitive.scenarios_to_generate.popitem()
         #TODO: run tool
@@ -123,4 +133,5 @@ def run_scenario_node(state: AgentState) -> AgentState:
             get_message(MessageCode.SUCCESS_SCENARIO, state.user_lang),
             get_message(MessageCode.SUCCESS_SCENARIO, "English")
         )
+        logger.info("No scenarios to run.")
         return Command(update=state, goto="END")

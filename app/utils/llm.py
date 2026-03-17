@@ -1,4 +1,5 @@
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from typing import List
@@ -23,7 +24,7 @@ def llm_interaction(prompt: str) -> str:
         response = llm.invoke([HumanMessage(content=prompt)])
         return response.content.strip()
     except Exception as e:
-        return f"Error connecting to Ollama: {e}"
+        return f"Error connecting to chatbot: {e}"
     
 def classify_intent(message: str) -> str:
     context = "City management and overtourism" #TODO: move it somewhere else
@@ -276,8 +277,10 @@ MESSAGE HISTORY:
     return llm_interaction(prompt)
 
 def assess_scenario_strategy(messages: List[ConversationMessage]) -> str:
-    prompt = f"""You are an intent classfier that need to decide if and how the user wants to create scenarios based on the conversation history.
-A scenario is a modification of currect indexes that could possibly solve the problem.
+    prompt = f"""You are an intent classifier that determines whether the user wants to create scenarios based on the conversation history.
+The conversation may include steps to define a problem, so do not confuse confirations about proceeding with problem creation with the user wanting to create scenarios yet.
+A scenario is a modification of currect indexes that could possibly solve a problem; consequently problems are typically created before scenarios.
+Scenario creation can be either user-driven, where the user specifies which indexes to change and how, or agent-driven, where the user asks the system to generate scenarios based on general information or preferences.
 
 Possible actions:
 - GENERATE_SCENARIOS: The user wants to create scenarios and knows what indexes he wants to change.
@@ -285,12 +288,15 @@ Possible actions:
 - ASK_USER_PREFERENCE: It is unclear/unkown if the user wants to create scenarios or if he prefers to specify them or to let the system generate them.
 - NO_SCENARIOS: The user does not want to create scenarios for the current problem.
 
+
 Rules:
-- If the user explicitly mentions wanting to create scenarios and provides specific information about them → GENERATE_SCENARIOS.
-- If the user explicitly asks for scenario suggestions, possible modifications, or solutions → GENERATE_AGENTIC_SCENARIOS.
+- If the user was asked about creating scenarios and the latest user message is a clear "No" → NO_SCENARIOS.
+- If the user was asked about creating scenarios, try to decide between GENERATE_SCENARIOS and GENERATE_AGENTIC_SCENARIOS based on whether the user provided specific information about scenario changes or just general preferences or indications. Use ASK_USER_PREFERENCE if the intent is unclear.
+- If the user explicitly mentioned wanting to create scenarios before and provides specific information about them → GENERATE_SCENARIOS.
+- If the user explicitly asked the assistant about scenario suggestions, possible modifications, or solutions → GENERATE_AGENTIC_SCENARIOS.
 - Generic affirmations without scenario-related context → ASK_USER_PREFERENCE.
-- If the user says that they do not want to create scenarios, or answered no upon system request → NO_SCENARIOS.
-- If the user only mentions a problem, without talking about scenarios, modifications or solutions → ASK_USER_PREFERENCE.
+- If the user explicitly stated that they do not want to create scenarios → NO_SCENARIOS.
+- If the user only mentions a problem, without talking about scenarios or specific changes to solve it → ASK_USER_PREFERENCE.
 - If the user's intent is unclear or cannot be determined → ASK_USER_PREFERENCE.
 
 Message history:
@@ -298,6 +304,7 @@ Message history:
 
 Return only the action name.
 """
+    
     return llm_interaction(prompt)
 
 def extract_scenario_data(messages: List[ConversationMessage], editable_indexes: dict) -> str:

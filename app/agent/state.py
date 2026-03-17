@@ -1,8 +1,9 @@
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from enum import StrEnum
+from enum import StrEnum, Enum
+import json
 
 from app.config import MAX_CONTEXT_WINDOW
 
@@ -181,3 +182,41 @@ class AgentState:
 
     def get_ui_context(self, n: Optional[int] = None):
         return self.conversation.get_context_window_localized(n)
+    
+    # -------------------------
+    # Dump state
+    # -------------------------
+
+    def _serialize(self, obj: Any):
+        """Recursively serialize non-JSON-safe objects."""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+
+        if isinstance(obj, Enum):
+            return obj.value
+
+        if isinstance(obj, list):
+            return [self._serialize(i) for i in obj]
+
+        if isinstance(obj, dict):
+            return {k: self._serialize(v) for k, v in obj.items()}
+
+        return obj
+
+    def dump_to_file(self, filepath: str):
+        """
+        Dump the full AgentState to a JSON file.
+        Useful for debugging, replay, or audit logs.
+        """
+        raw_dict = asdict(self)
+        serialized = self._serialize(raw_dict)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(serialized, f, indent=2, ensure_ascii=False)
+
+    def save(self):
+        # For debugging, replace later with proper saving
+        with open("logs/traceback.log", "a+") as f:
+            f.write(f"Saved state for session_id={self.session_id}, last node={self.last_node}\n")
+            for trace in self.cognitive.trace.steps:
+                f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")

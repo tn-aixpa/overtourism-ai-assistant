@@ -1,14 +1,18 @@
 from langgraph.graph import StateGraph, END
 from langgraph.types import Command
+import logging
 
 from app.agent.state import AgentState
 from app.agent.nodes.iteraction import select_role, interact_scenario, compare_scenarios, synthesize_answers
 from app.agent.graphs.utils import add_safe_node
 
+logger = logging.getLogger(__name__)
 
 # ---- Command wrappers
 
 def select_role_router(state: AgentState):
+    logger.info("Entered SELECT_ROLE_ROUTER node")
+
     result = select_role(state)
 
     state.add_trace("node_execution", node="select_role_router", data={"selected_roles": state.cognitive.selected_roles})
@@ -25,6 +29,7 @@ def select_role_router(state: AgentState):
 
 
 def interact_router(state: AgentState):
+    logger.info("Entered INTERACT_ROUTER node")
     state.add_trace("node_execution", node="interact_router")
     result = interact_scenario(state)
 
@@ -35,6 +40,7 @@ def interact_router(state: AgentState):
 
 
 def compare_router(state: AgentState):
+    logger.info("Entered COMPARE_ROUTER node")
     state.add_trace("node_execution", node="compare_router")
     result = compare_scenarios(state)
 

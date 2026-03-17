@@ -19,8 +19,6 @@ from app.agent.nodes.problem import decide_scenario_strategy
           {"role": "assistant", "content": "Would you like me to generate scenarios to address this problem or do you have any specific scenario in mind that you want to generate?"},
           {"role": "user", "content": "Yes, please, suggest some valid solutions to this problem."}],
  "GENERATE_AGENTIC_SCENARIOS"),
-        ([{"role": "user", "content": "In Molveno there is a problem related to the fact that there are not enough parking spaces, which leads to people parking off-spot and long queues. Please, also suggest some valid solutions to this problem."}],
- "GENERATE_AGENTIC_SCENARIOS"),
 
         # ASK_USER_PREFERENCE
         ([{"role": "user", "content": "In Molveno there is a problem related to the fact that there are not enough parking spaces, which leads to people parking off-spot and long queues."}],

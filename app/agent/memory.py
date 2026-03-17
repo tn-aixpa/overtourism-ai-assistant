@@ -25,8 +25,5 @@ def load_state(session_id: Optional[str]) -> Optional[AgentState]:
 def save_state(key: str, state: AgentState) -> None:
     _STATE_STORE[key] = state
 
-    # For debugging, replace later with proper saving
-    with open("logs/traceback.log", "w") as f:
-        f.write(f"Saved state for session_id={key}, last node={state.last_node}\n")
-        for trace in state.cognitive.trace.steps:
-            f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")
+    state.save()
+    state.dump_to_file(f"logs/state_{state.session_id}.json")

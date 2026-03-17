@@ -1,13 +1,17 @@
 from langgraph.graph import StateGraph
 from langgraph.types import Command, interrupt
+import logging
 
 from .nodes.error_recovery import error_recovery_node
 from .state import AgentState
 from .graphs import intent_subgraph, interaction_subgraph, problem_subgraph, scenario_extraction_subgraph, scenario_runner_subgraph
 from app.utils.common import translate_from_eng
 
+logger = logging.getLogger(__name__)
+
 def _wait_instructions(state: AgentState) -> str:
     waiting_for = state.waiting_for
+    logger.info(f"Generating wait instructions. Waiting for: {waiting_for}")
 
     if waiting_for == AgentState.WaitingFor.PROBLEM_INPUT:
         missing = [
@@ -21,11 +25,11 @@ def _wait_instructions(state: AgentState) -> str:
 
     if waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION:
         extracted = "\n- ".join(f"{k}: {v}" for k, v in state.cognitive.extracted_problem_info.items())
-        return f"These are the information I extracted:\n- {extracted}.\n\nDo you want to proceed?"
+        return f"These are the information I extracted:\n- {extracted}.\n\nDo you want to proceed with the creation fo this problem?"
 
     if waiting_for == AgentState.WaitingFor.SCENARIO_PREFERENCE:
         return (
-            "Do you want to create scenarios for this problem? "
+            "The problem was successfully created. Do you want to create scenarios for this problem? "
             "If so, do you have specific scenarios in mind or would you like the system to generate some based on the problem information?"
         )
 
@@ -46,16 +50,18 @@ def wait_user_input_node(state: AgentState):
     - If no `state.user_input`, emit instructions + interrupt.
     - If `state.user_input` exists, route back to the active workflow.
     """
+    logger.info("Entered WAIT_USER_INPUT node")
     waiting_for_value = state.waiting_for.value if state.waiting_for else None
     active_workflow_value = state.active_workflow.value if state.active_workflow else None
-    state.add_trace(
-        "human_wait",
-        node="WAIT_USER_INPUT",
-        data={"waiting_for": waiting_for_value, "active_workflow": active_workflow_value},
-    )
 
     if not state.user_input:
+        logger.info("No user input detected → interrupting flow")
         instructions = _wait_instructions(state)
+        state.add_trace(
+            "human_wait",
+            node="WAIT_USER_INPUT",
+            data={"waiting_for": waiting_for_value, "active_workflow": active_workflow_value, "instructions": instructions},
+        )
         state.add_assistant_message(
             localized=translate_from_eng(instructions, state.user_lang),
             translated_en=instructions,
@@ -63,6 +69,7 @@ def wait_user_input_node(state: AgentState):
         interrupt({"type": "WAIT_USER_INPUT", "waiting_for": waiting_for_value, "active_workflow": active_workflow_value})
         return state
 
+    logger.info("User input received → resuming workflow")
     workflow = state.active_workflow.value if state.active_workflow else AgentState.Workflow.INTENT.value
     return Command(update=state, goto=workflow)
 

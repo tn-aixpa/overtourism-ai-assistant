@@ -80,11 +80,12 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
 
         # inject user messages
         assert request.message, "No message provided in the request"
-        
+
+        logger.info(f"Received message for session {key}: {request.message}")        
         translated = translate_from_eng(request.message, state.user_lang)
         state.add_user_message(localized=request.message, translated_en=translated)
 
-        # If we're resuming from a wait state, expose the raw input to the wait node.
+        # If we're resumiO dicng from a wait state, expose the raw input to the wait node.
         # (The message is already stored in the conversation buffer above.)
         if state.waiting_for:
             state.user_input = request.message

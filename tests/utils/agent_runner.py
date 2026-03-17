@@ -93,7 +93,7 @@ class AgentTestRunner:
         return self
 
     def step(self):
-        self.state = invoke_state(self.app, self.state)  # <-- safe AgentState now
+        self.state = invoke_state(self.app, self.state)
 
         if self.state.waiting_for:
             if not self.pending_user_inputs:
