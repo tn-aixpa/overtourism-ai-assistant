@@ -32,6 +32,16 @@ uvicorn app.main:app --reload --port 9000
 
 A different port can be used, just change it so that it does not conflic with overtourism, ollama or other services.
 
+### Demo
+
+A UX is implemented for demo proposal (later this can be expanded into a production front-end).
+To run it move to `chatbot-fronted` folder and then type
+
+```
+npm start
+```
+
+Refer to chatbot-fronted README for more details.
 
 ## TODO:
 - Chat-only interface

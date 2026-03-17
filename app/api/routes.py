@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 import logging
 
 from app.schemas import AgentRequest, AgentResponse
@@ -49,7 +49,13 @@ def load_demo_data(state: AgentState) -> AgentState:
     return state
 
 @router.post("/agent", response_model=AgentResponse)
-async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
+async def run_agent_endpoint(
+    message: str = Form(...),
+    user_lang: str = Form(default="English"),
+    session_id: str = Form(...),
+    demo: bool = Form(default=False),
+    files: list[UploadFile] = File([]),
+) -> AgentResponse:
     """
     Main entrypoint for the AI agent.
 
@@ -64,31 +70,36 @@ async def run_agent_endpoint(request: AgentRequest) -> AgentResponse:
 
     try:
         # resolve memory key for session
-        key = request.session_id or generate_key()
+        key = session_id or generate_key()
         
         # load existing state or create a new one
         state = load_state(key)
 
         if not state:
-            user_lang = getattr(request, 'user_lang', "English")
             state = AgentState(session_id=key, user_lang=user_lang)
 
             #TODO: remove this part later
-            demo = getattr(request, 'demo', False)
             if demo:
                 state = load_demo_data(state)
 
         # inject user messages
-        assert request.message, "No message provided in the request"
+        assert message, "No message provided in the request"
 
-        logger.info(f"Received message for session {key}: {request.message}")        
-        translated = translate_from_eng(request.message, state.user_lang)
-        state.add_user_message(localized=request.message, translated_en=translated)
+        logger.info(f"Received message for session {key}: {message} ({len(files)} attachments)")        
+        translated = translate_from_eng(message, state.user_lang)
+        state.add_user_message(localized=message, translated_en=translated)
 
-        # If we're resumiO dicng from a wait state, expose the raw input to the wait node.
+        # TODO: handle attachments
+        # for file in files:
+            # contents = await file.read()
+            # with open(f"uploads/{file.filename}", "wb") as f:
+            #     f.write(contents)
+
+        # If we're resuming from a wait state, expose the raw input to the wait node.
         # (The message is already stored in the conversation buffer above.)
+        #TODO remove this if?
         if state.waiting_for:
-            state.user_input = request.message
+            state.user_input = message
         else:
             state.user_input = None
 
