@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Digital Twin Agent",
+  "name": "Agentic AI system to support operations connected with MoST Digital Twin",
   "icons": [
     {
       "src": "favicon.ico",
