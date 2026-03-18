@@ -1,9 +1,8 @@
 import pytest
-from datetime import datetime
 from dataclasses import replace
 
 from app.agent.nodes.intent import intent_node, validate_intent_node
-from app.agent.state import AgentState, ConversationMessage
+from app.agent.state import AgentState
 
 @pytest.mark.parametrize(
     "message, active_scenarios, problem_id,expected_intent, should_raise",

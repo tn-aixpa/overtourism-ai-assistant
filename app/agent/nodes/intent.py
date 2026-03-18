@@ -1,9 +1,9 @@
 import logging
 from langgraph.types import Command
 
-from ..state import AgentState
-from ...utils.llm import classify_intent
-from ...utils.error_codes import ErrorCode, GraphError
+from app.agent.state import AgentState
+from app.utils.llm import classify_intent
+from app.utils.error_codes import ErrorCode, GraphError
 
 logger = logging.getLogger(__name__)
 

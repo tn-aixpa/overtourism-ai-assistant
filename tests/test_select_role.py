@@ -1,10 +1,8 @@
 # test_select_role_integration.py
 import pytest
 from dataclasses import replace
-from datetime import datetime
 
 from app.agent.nodes.iteraction import select_role
-from app.agent.state import ConversationMessage
 
 # -----------------------------
 # Single-role tests (6)

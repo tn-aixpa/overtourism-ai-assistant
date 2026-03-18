@@ -2,7 +2,7 @@ import logging
 from langgraph.types import Command
 from langgraph.graph import END
 
-from ..state import AgentState
+from app.agent.state import AgentState
 from app.utils.error_codes import get_error_message, ErrorCode
 
 logger = logging.getLogger(__name__)

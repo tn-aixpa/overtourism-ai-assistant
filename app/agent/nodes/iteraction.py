@@ -1,10 +1,10 @@
 import logging
 
-from ..state import AgentState
-from ...config import ALLOWED_ROLES
-from ...utils.llm import select_role_llm, answer_question, answer_question_comparison, synthesize_llm
-from ...utils.error_codes import ErrorCode, GraphError
-from ...utils.common import translate_from_eng
+from app.agent.state import AgentState
+from app.config import ALLOWED_ROLES
+from app.utils.llm import select_role_llm, answer_question, answer_question_comparison, synthesize_llm
+from app.utils.error_codes import ErrorCode, GraphError
+from app.utils.common import translate_from_eng
 
 logger = logging.getLogger(__name__)
 

@@ -52,8 +52,7 @@ def test_problem_creation_with_agentic_scenarios(agent):
             from other.drawing_util import draw_conversation
             draw_conversation(result.messages, "logs/debug_test_problem_creation_with_agentic_scenarios.png")
 
-        #assert result.state.cognitive.problem_id is not None
-        # #assert len(result.state.cognitive.scenarios_to_generate) > 0
+        assert result.state.cognitive.problem_id is not None
     finally:
         agent.state.save()
         agent.state.dump_to_file("logs/problem_creation_agentic_scenarios_state.json")
@@ -90,8 +89,10 @@ def test_problem_creation_with_user_scenarios(agent):
             from other.drawing_util import draw_conversation
             draw_conversation(result.messages, "logs/problem_creation_user_scenarios.png")
 
-        #assert result.state.cognitive.problem_id is not None
-        # #assert len(result.state.cognitive.scenarios_to_generate) > 0
+        assert result.state.cognitive.problem_id is not None
+        #WARNING: this test might require revision when impementing scenario running
+        runned_scenarios = len([trace for trace in result.state.cognitive.trace.steps if trace.node == "run_scenario_node"])
+        assert runned_scenarios == 2
     finally:
         agent.state.save()
         agent.state.dump_to_file("logs/debug_test_problem_creation_with_user_scenarios.json")

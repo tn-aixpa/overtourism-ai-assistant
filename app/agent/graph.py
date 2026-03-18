@@ -2,9 +2,9 @@ from langgraph.graph import StateGraph
 from langgraph.types import Command, interrupt
 import logging
 
-from .nodes.error_recovery import error_recovery_node
-from .state import AgentState
-from .graphs import intent_subgraph, interaction_subgraph, problem_subgraph, scenario_extraction_subgraph, scenario_runner_subgraph
+from app.agent.nodes.error_recovery import error_recovery_node
+from app.agent.state import AgentState
+from app.agent.graphs import intent_subgraph, interaction_subgraph, problem_subgraph, scenario_extraction_subgraph, scenario_runner_subgraph
 from app.utils.common import translate_from_eng
 
 logger = logging.getLogger(__name__)

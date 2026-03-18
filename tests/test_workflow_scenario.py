@@ -1,4 +1,3 @@
-# tests/test_workflow_scenario.py
 import json
 
 from app.agent.state import AgentState
@@ -50,8 +49,10 @@ def test_scenario_extraction(empty_state):
             draw_conversation(result.messages, "logs/scenario_creation.png")
 
         # Assertions
-        #assert result.state.cognitive.problem_id == "parcheggi_200"
-        ##assert len(result.state.cognitive.scenarios_to_generate) > 0
+        assert result.state.cognitive.problem_id == "parcheggi_200"
+        #WARNING: this test might require revision when impementing scenario running
+        runned_scenarios = len([trace for trace in result.state.cognitive.trace.steps if trace.node == "run_scenario_node"])
+        assert runned_scenarios == 2
     finally:
         agent.state.save()
         agent.state.dump_to_file("logs/scenario_debug.json")

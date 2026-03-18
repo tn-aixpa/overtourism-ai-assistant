@@ -26,7 +26,7 @@ def test_full_workflow_invalid_localized(empty_state, message, language):
 
     last_message = result.get_last_message()
     response = last_message.content_localized if last_message and last_message.role == "assistant" else ""
-    ##assert response == get_error_message(ErrorCode.INVALID_REQUEST, language)
+    assert response == get_error_message(ErrorCode.INVALID_REQUEST, language)
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
@@ -55,12 +55,12 @@ def test_full_workflow_interact_localized(empty_state, message, language):
     result_dict = app.invoke(state)
     result = to_state(result_dict)
 
-    #assert result.cognitive.next_action == "INTERACT_SCENARIO"
-    #assert len(result.cognitive.selected_roles) >= 1
-
     last_message = result.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
-    #assert response != "" and "not able to handle this request" not in response and "parking" in response.lower()
+
+    assert result.cognitive.next_action == "INTERACT_SCENARIO"
+    assert len(result.cognitive.selected_roles) >= 1
+    assert response != "" and "not able to handle this request" not in response and "parking" in response.lower()
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
@@ -92,12 +92,12 @@ def test_full_workflow_compare_localized(empty_state, message, language):
     result_dict = app.invoke(state)
     result = to_state(result_dict)
 
-    #assert result.cognitive.next_action == "COMPARE_SCENARIOS"
-    #assert len(result.cognitive.selected_roles) >= 1
-
     last_message = result.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
-    #assert response != "" and "I'm sorry, I am not able to answer your request." not in response
+
+    assert result.cognitive.next_action == "COMPARE_SCENARIOS"
+    assert len(result.cognitive.selected_roles) >= 1
+    assert response != "" and "I'm sorry, I am not able to answer your request." not in response
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation
@@ -129,14 +129,13 @@ def test_full_workflow_compare_additional_checks_localized(empty_state, message,
     result_dict = app.invoke(state)
     result = to_state(result_dict)
 
-    #assert result.cognitive.next_action == "COMPARE_SCENARIOS"
-    #assert len(result.cognitive.selected_roles) >= 1
-
     last_message = result.get_last_message()
     response = last_message.content_localized if last_message and last_message.role == "assistant" else ""
-
     correct = any(word in response.lower() for word in check_words)
-    #assert response != "" and correct
+
+    assert result.cognitive.next_action == "COMPARE_SCENARIOS"
+    assert len(result.cognitive.selected_roles) >= 1
+    assert response != "" and correct
 
     if DRAW_CONVERSATION:
         from other.drawing_util import draw_conversation

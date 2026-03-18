@@ -1,9 +1,9 @@
 from langgraph.graph import StateGraph
 from langgraph.types import Command
 
-from ..nodes.problem import extract_problem_node, parse_confirmation_node, create_problem_instance_node, decide_strategy_node, generate_scenario_candidates
-from ..state import AgentState
-from .utils import add_safe_node
+from app.agent.nodes.problem import extract_problem_node, parse_confirmation_node, create_problem_instance_node, decide_strategy_node, generate_scenario_candidates
+from app.agent.state import AgentState
+from app.agent.graphs.utils import add_safe_node
 
 # ---- Build subgraph
 
