@@ -1,10 +1,10 @@
 import logging
 import ast
-from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.llm import assess_what_to_list, get_list_message, translate
-from app.utils.error_codes import get_error_message, ErrorCode, GraphError
+from app.utils.error_codes import get_error_message, ErrorCode
+from app.tools.backend_tools import get_problems
 
 logger = logging.getLogger(__name__)
 
@@ -40,22 +40,7 @@ def assess_list(state: AgentState) -> AgentState:
     return state
 
 def get_list(state: AgentState) -> AgentState:
-    state.cognitive.partial_list = {}
-    for element in state.cognitive.elements_to_list:
-        logger.info(f"Retrieving list for {element}")
-
-        #TODO: replace with real code
-        if element=="problems":
-            current_list = ["P1"]
-        elif element=="proposals":
-            current_list = ["p0"]
-        elif element=="scenarios":
-            current_list = ["s1", "s2"]
-        else:
-            break
-        
-        logger.info(f"Retrieved: {current_list}")
-        state.cognitive.partial_list[element] = current_list
+    state.cognitive.partial_list = get_problems.invoke({})
 
     state.cognitive.elements_to_list = []
     state.add_trace("node_execution", node="get_list", data={"retrieved": state.cognitive.partial_list})
