@@ -69,6 +69,10 @@ class CognitiveState:
     # Routing
     next_action: Optional[str] = None
 
+    # Listing
+    elements_to_list: List[str] = field(default_factory=list)
+    partial_list: Dict[str, Any] = field(default_factory=dict)
+
     # Problem context
     problem_id: str = ""
     problem_info_to_extract: Dict[str, Any] = field(default_factory=dict)

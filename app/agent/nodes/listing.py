@@ -1,0 +1,77 @@
+import logging
+import ast
+from langgraph.types import Command
+
+from app.agent.state import AgentState
+from app.utils.llm import assess_what_to_list, get_list_message, translate
+from app.utils.error_codes import get_error_message, ErrorCode, GraphError
+
+logger = logging.getLogger(__name__)
+
+
+def assess_list(state: AgentState) -> AgentState:
+    logger.info("Entered ASSESS_LIST")
+    raw_output = assess_what_to_list(state.get_last_user_message().content_en).strip()
+    logger.info(f"Extracted elements to list: {raw_output}")
+
+    ALLOWED = ["problems", "proposals", "scenarios"]
+    try:
+        to_list = ast.literal_eval(raw_output)
+
+        # Validate it's actually a list of strings
+        if not isinstance(to_list, list) or not all(isinstance(i, str) for i in to_list):
+            raise ValueError("Output is not a valid list of strings")
+        
+        # Normalize: filter + deduplicate + order
+        to_list = [
+            item for item in ALLOWED
+            if item in set(to_list)
+        ]
+
+    except Exception as e:
+        logger.error(f"Parsing failed: {e}")
+        to_list = []
+
+    if not len(to_list):
+        state.add_assistant_message(get_error_message(ErrorCode.NOTHING_TO_LIST), get_error_message(ErrorCode.NOTHING_TO_LIST, state.user_lang))
+
+    state.cognitive.elements_to_list = to_list
+    state.add_trace("node_execution", node="assess_list", data={"to_list": to_list})
+    return state
+
+def get_list(state: AgentState) -> AgentState:
+    state.cognitive.partial_list = {}
+    for element in state.cognitive.elements_to_list:
+        logger.info(f"Retrieving list for {element}")
+
+        #TODO: replace with real code
+        if element=="problems":
+            current_list = ["P1"]
+        elif element=="proposals":
+            current_list = ["p0"]
+        elif element=="scenarios":
+            current_list = ["s1", "s2"]
+        else:
+            break
+        
+        logger.info(f"Retrieved: {current_list}")
+        state.cognitive.partial_list[element] = current_list
+
+    state.cognitive.elements_to_list = []
+    state.add_trace("node_execution", node="get_list", data={"retrieved": state.cognitive.partial_list})
+    return state
+
+def generate_answer(state: AgentState) -> AgentState:
+    answer = get_list_message(state.cognitive.partial_list)
+    state.cognitive.partial_list = {}
+
+    assert "Error connecting to chatbot" not in answer
+
+    logger.info(f"Generated answer: {answer}")
+    state.add_trace("node_execution", node="generate_answer", data={"retrieved": answer})
+
+    #TODO: handle this better for when using localized names for elements
+    state.add_assistant_message(answer, translate(answer, "English", state.user_lang))
+
+    return state
+    

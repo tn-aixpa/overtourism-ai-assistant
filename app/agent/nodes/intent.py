@@ -13,13 +13,15 @@ def intent_node(state: AgentState) -> AgentState:
     answer = classify_intent(state.get_last_user_message().content_en).strip()
 
     VALID_OUTPUTS = {
+        "LIST_AVAILABLE",
         "CREATE_PROBLEM",
-        "RUN_NEW_SCENARIO",
+        "CREATE_NEW_SCENARIO",
         "INTERACT_SCENARIO",
         "INVALID",
     }
 
     assert answer in VALID_OUTPUTS
+
     state.cognitive.next_action = answer
     logger.info(f"Detected intent: {answer}")
     state.add_trace("node_execution", node="intent_node", data={"intent": answer})
@@ -56,12 +58,12 @@ def validate_intent_node(state: AgentState) -> AgentState:
                 raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")
         
     # --- CREATE_PROBLEM ---
-    elif intent == "RUN_NEW_SCENARIO":
+    elif intent == "CREATE_NEW_SCENARIO":
         if not state.cognitive.problem_id:
             state.cognitive.next_action = "NOT_ALLOWED"
             logger.error("Intent classified as NOT_ALLOWED due to missing problem id → raising error")
             raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No problem selected")
-
+        
     state.add_trace("node_execution", node="validate_intent_node", data={"intent": state.cognitive.next_action})
     return state
 
@@ -72,11 +74,14 @@ def route_from_intent(state: AgentState):
     if action in ["INTERACT_SCENARIO", "COMPARE_SCENARIOS"]:
         return Command(update=state, goto="interaction", graph=Command.PARENT)
 
-    if action == "RUN_NEW_SCENARIO":
+    if action == "CREATE_NEW_SCENARIO":
         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
 
     if action == "CREATE_PROBLEM":
-        return Command(update=state, goto="problem", graph=Command.PARENT)   
+        return Command(update=state, goto="problem", graph=Command.PARENT)
+
+    if action == "LIST_AVAILABLE":
+        return Command(update=state, goto="list_available", graph=Command.PARENT)
 
     raise GraphError(ErrorCode.REQUEST_ERROR)
     

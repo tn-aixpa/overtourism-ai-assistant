@@ -26,4 +26,4 @@ def save_state(key: str, state: AgentState) -> None:
     _STATE_STORE[key] = state
 
     state.save()
-    state.dump_to_file(f"logs/state_{state.session_id}.json")
+    #state.dump_to_file(f"logs/state_{state.session_id}.json")

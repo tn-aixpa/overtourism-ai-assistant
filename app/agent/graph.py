@@ -4,7 +4,7 @@ import logging
 
 from app.agent.nodes.error_recovery import error_recovery_node
 from app.agent.state import AgentState
-from app.agent.graphs import intent_subgraph, interaction_subgraph, problem_subgraph, scenario_extraction_subgraph, scenario_runner_subgraph
+from app.agent.graphs import intent_subgraph, interaction_subgraph, problem_subgraph, scenario_extraction_subgraph, scenario_runner_subgraph, list_available_subgraph
 from app.utils.common import translate_from_eng
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,7 @@ graph = StateGraph(AgentState)
 graph.add_node("resume_router", lambda s: s)  # passthrough
 graph.add_node("WAIT_USER_INPUT", wait_user_input_node)
 graph.add_node("intent", intent_subgraph)
+graph.add_node("list_available", list_available_subgraph)
 graph.add_node("interaction", interaction_subgraph)
 graph.add_node("problem", problem_subgraph)
 graph.add_node("scenario_extraction", scenario_extraction_subgraph)

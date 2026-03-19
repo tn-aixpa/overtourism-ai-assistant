@@ -33,23 +33,20 @@ You are an intent classifier.
 Your task is to determine the user's intended action.
 
 Possible actions:
-- INTERACT_SCENARIO: Analyze, explain, interpret, or explore existing scenarios.
-- CREATE_PROBLEM: Create a new problem starting from it's description. When creating a new problem the user might want to include also scenarios generation.
-  parameters of an existing scenario.
-- RUN_NEW_SCENARIO: Create, run, start, or re-run a scenario, including modifying
-  parameters of an existing scenario.
-- INVALID: The request is totally unclear and the intent cannot be determined or the request is clear but unrelated to scenarios or system capabilities.
+- LIST_AVAILABLE
+- INTERACT_SCENARIO
+- CREATE_PROBLEM
+- CREATE_NEW_SCENARIO
+- INVALID
 
 Decision rules:
 
-1. If the user request is clear and refers to a scenario → INTERACT_SCENARIO.
-2. If the user mentions a new problem or the focus of the request is a specific problem description → CREATE_PROBLEM.
-3. If the user request asks to run, create, start, or modify a scenario → RUN_NEW_SCENARIO.
-4. If the request is unrelated to problems or scenarios in the related to {context} → INVALID.
-5. If the request is totally unclear or vague → INVALID.
-
-Context: {context}.
-The Context provides background but does not override the intent rules.
+1. If the user asks to list problems, proposals and/or scenarios that are available on the platform → LIST_AVAILABLE
+2. If the user request is clear and refers to a analyzing, explaining, interpreting, or exploring existing scenarios → INTERACT_SCENARIO.
+3. If the user states that he has or want to create/adress a new the problem, possibly providing a description. The description might also involve solutions, proposals or scenarios, but the creation of a new problem is more important. → CREATE_PROBLEM.
+4. If the user request asks to run, create, start, or modify a scenario → CREATE_NEW_SCENARIO.
+5. If the request is unrelated to problems or scenarios in the related to {context} → INVALID.
+6. If the request is totally unclear or vague → INVALID.
 
 User request: {message}
 
@@ -443,6 +440,128 @@ translate_prompt = ChatPromptTemplate.from_template(
     "Translate the following text from {input_language} to {target_language}. "
     "Return ONLY the translated text. Do not explain.\n\n{text}"
 )
+
+def assess_what_to_list(message):
+    prompt = f"""
+SYSTEM ROLE:
+You are a deterministic structured data extractor.
+
+Your output is parsed automatically by a machine.
+If the format is violated, the system will fail.
+
+--------------------------------------------------
+
+TASK:
+Extract what the user explicitly wants to list.
+
+--------------------------------------------------
+
+STRICT OUTPUT CONTRACT (MANDATORY):
+
+- Output ONLY a valid Python list.
+- Do NOT output any explanation, reasoning, text, or comments.
+- Do NOT output anything before or after the list.
+- The response MUST start with "[" and end with "]".
+- Each item MUST be a string.
+- Allowed values ONLY: "problems", "proposals", "scenarios".
+- Maximum 3 items.
+
+--------------------------------------------------
+
+DECISION RULES:
+
+- Include an item ONLY if the user EXPLICITLY asks to list it.
+- If nothing is explicitly requested → return [].
+- NEVER infer, assume, or guess.
+- NEVER explain your decision.
+
+--------------------------------------------------
+
+EXAMPLES:
+
+User: "List the problems"
+Output: ["problems"]
+
+User: "Give me problems and scenarios"
+Output: ["problems", "scenarios"]
+
+User: "What do you think?"
+Output: []
+
+--------------------------------------------------
+
+USER MESSAGE:
+{message}
+"""
+    
+    return llm_interaction(prompt)
+
+def get_list_message(partial_lists):
+    prompt = f"""
+SYSTEM ROLE:
+You are a deterministic text generator.
+
+--------------------------------------------------
+
+TASK:
+
+Generate a sentence or a short text that summarizes the content of a dictionary.
+
+The dictionary contains up to three keys:
+- "problems"
+- "proposals"
+- "scenarios"
+
+Each key maps to a list of strings.
+
+--------------------------------------------------
+
+STRICT RULES:
+
+- Do NOT add explanations or extra text.
+- Respect this order: problems → proposals → scenarios.
+- Only include keys that exist AND have at least one element.
+- Use correct singular/plural grammar:
+    - 1 → "one problem"
+    - 2+ → "two problems", etc.
+- Start the sentence with a something like: "On the platform there is", "I have found", "There is". Use plural forms (e.g. "there are") if needed.
+- If there are many elments prefer bullet points, otherwise try to build a single sentence.
+
+--------------------------------------------------
+
+EXAMPLES:
+
+Input:
+{{"problems": ["P1"]}}
+Output:
+On the platform there is one problem: P1.
+
+Input:
+{{"problems": ["P1"], "scenarios": ["s0", "s1"]}}
+Output:
+On the platform there are one problem (P1) and two scenarios (s0 and s1).
+
+Input:
+{{"proposals": ["p0"]}}
+Output:
+On the platform there is one proposal: p0.
+
+Input:
+{{"problems": ["P1"], "proposals": ["p0"], "scenarios": ["s0", "s1"]}}
+Output:
+On the platform there are one problem (P1), one proposal (p0) and two scenarios (s0 and s1).
+
+Input:
+{{"problems": ["P1"], "proposals": ["p0", "p1"], "scenarios": ["s0", "s1", "s2", "s3","s4"]}}
+Output:
+On the platform there are:\n-one problem: P1,\n-two proposals: p0, p1,\n-5 scenarios: s0, s1, s2, s3, s4.
+
+--------------------------------------------------
+
+INPUT:
+{partial_lists}
+"""
+    return llm_interaction(prompt)
 
 def translate(text, input_language, target_language):
     chain = translate_prompt | llm

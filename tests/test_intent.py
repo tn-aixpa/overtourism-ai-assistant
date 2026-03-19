@@ -7,6 +7,12 @@ from app.agent.state import AgentState
 @pytest.mark.parametrize(
     "message, active_scenarios, problem_id,expected_intent, should_raise",
     [
+        # --- LIST_AVAILABLE (single active scenario) ---
+        ("What problems have been indentified?", [], "", "LIST_AVAILABLE", False),
+        ("Can you list which proposals have been made to solve this problem?", [], "", "LIST_AVAILABLE", False),
+        ("What scenarios have been identfied?", [], "", "LIST_AVAILABLE", False),
+        ("Can you please list what problems, proposals and scenarios are there?", [], "", "LIST_AVAILABLE", False),
+
         # --- INTERACT_SCENARIO (single active scenario) ---
         ("Explain the results of scenario simA", ["simA"], "P1", "INTERACT_SCENARIO", False),
         ("Summarize the results of scenario simA", ["simA"], "P1", "INTERACT_SCENARIO", False),
@@ -24,10 +30,10 @@ from app.agent.state import AgentState
         ("In Molveno there is a problem related to the fact that there are not enough parking spaces which leads to people parking off-spot and long queues. The administration would like to have 3 different strategies to tackle this problem.", [], "", "CREATE_PROBLEM", False),
 
 
-        # --- RUN_NEW_SCENARIO ---
-        ("Run a new scenario with increased parking capacity", [], "P1", "RUN_NEW_SCENARIO", False),
-        ("Start a new scenario with default parameters", ["simA"], "P1", "RUN_NEW_SCENARIO", False),
-        ("Modify simA to use a different parameter", ["simA"], "P1", "RUN_NEW_SCENARIO", False),
+        # --- CREATE_NEW_SCENARIO ---
+        ("Run a new scenario with increased parking capacity", [], "P1", "CREATE_NEW_SCENARIO", False),
+        ("Start a new scenario with default parameters", ["simA"], "P1", "CREATE_NEW_SCENARIO", False),
+        ("Modify simA to use a different parameter", ["simA"], "P1", "CREATE_NEW_SCENARIO", False),
 
         # --- INVALID (totally unclear) ---
         ("Do the thing for me", [], "", "INVALID", True),
