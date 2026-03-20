@@ -13,15 +13,21 @@ Below a visual representation of the states is presented.
 
 ## Usage
 
-### Debugging
-To generate basic conversation samples you can expoit the pytest functionality.
-Running
+### Requirements
+
+In order to run this project you need first to active
+
+1) ollama server
+2) overtourism backend
+
+To install the ollama server, please follow [this](https://github.com/ollama/ollama?tab=readme-ov-file) guide.
+Onece installed use 
 
 ```
-pytest
+ollama pull mistral
 ```
-will print conversations to `log` folder.
-Make sure `DRAW_CONVERSATION` is set to *True* in app/config.py file, otherwise conversaion will be printed in textual format.
+
+To run the backend server please
 
 ### Production
 You can run the agentic system as a service with the following command
@@ -35,18 +41,20 @@ A different port can be used, just change it so that it does not conflic with ov
 ### Demo
 
 A UX is implemented for demo proposal (later this can be expanded into a production front-end).
-To run it move to `chatbot-fronted` folder and then type
+To run it use the following:
 
 ```
+cd chatbot-fronted
 npm start
+```
+
+On the first run, before ```npm start``` you need to use
+```
+npm install
 ```
 
 Refer to chatbot-fronted README for more details.
 
-## TODO:
-- Chat-only interface
-- Trace interaction steps (tool cals, decisions)
-- Itegration with front-end + memory handling
 
 ## Open points and future improvements
 
