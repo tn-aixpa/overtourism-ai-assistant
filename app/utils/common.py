@@ -1,6 +1,8 @@
 import re
 from app.agent.state import AgentState
-from app.utils.llm import llm_classify_confirmation, translate
+from app.utils.llm_routing import llm_classify_confirmation
+from app.utils.llm_text_generation import translate
+
 
 def parse_confirmation(message):
     CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"}

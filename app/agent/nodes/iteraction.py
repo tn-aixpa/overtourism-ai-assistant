@@ -2,7 +2,9 @@ import logging
 
 from app.agent.state import AgentState
 from app.config import ALLOWED_ROLES
-from app.utils.llm import select_role_llm, answer_question, answer_question_comparison, synthesize_llm
+from app.utils.llm_routing import select_role_llm
+from app.utils.llm_text_generation import answer_question, answer_question_comparison, synthesize_llm
+
 from app.utils.error_codes import ErrorCode, GraphError
 from app.utils.common import translate_from_eng
 

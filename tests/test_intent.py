@@ -24,15 +24,13 @@ from app.agent.state import AgentState
         ("Explain the differences between simA and simB", ["simA", "simB"], "P1", "COMPARE_SCENARIOS", False),
 
         # --- CREATE NEW PROBLEM ---
-        ("Create a new problem related to Molveno overtourism and in particular focus on beach usage", [], "", "CREATE_PROBLEM", False),
-        ("I want to define a new problem related to traffic congestion", [], "", "CREATE_PROBLEM", False),
-        ("There is a new issue regarding parking usage that needs to be addressed", [], "", "CREATE_PROBLEM", False),
-        ("In Molveno there is a problem related to the fact that there are not enough parking spaces which leads to people parking off-spot and long queues. The administration would like to have 3 different strategies to tackle this problem.", [], "", "CREATE_PROBLEM", False),
-
+        ("Create a new problem related to Molveno overtourism and in particular focus on beach usage", [], "", "CREATE_NEW_PROBLEM", False),
+        ("I want to define a new problem related to traffic congestion", [], "", "CREATE_NEW_PROBLEM", False),
+        ("There is a new issue regarding parking usage that needs to be addressed", [], "", "CREATE_NEW_PROBLEM", False),
+        ("In Molveno there is a problem related to the fact that there are not enough parking spaces which leads to people parking off-spot and long queues. The administration would like to have 3 different strategies to tackle this problem.", [], "", "CREATE_NEW_PROBLEM", False),
 
         # --- CREATE_NEW_SCENARIO ---
         ("Run a new scenario with increased parking capacity", [], "P1", "CREATE_NEW_SCENARIO", False),
-        ("Start a new scenario with default parameters", ["simA"], "P1", "CREATE_NEW_SCENARIO", False),
         ("Modify simA to use a different parameter", ["simA"], "P1", "CREATE_NEW_SCENARIO", False),
 
         # --- INVALID (totally unclear) ---

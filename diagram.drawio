@@ -209,7 +209,7 @@
             <mxPoint x="2" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="pevAOEmnro0O_PZKUrTG-66" parent="pevAOEmnro0O_PZKUrTG-26" style="rounded=1;arcSize=20;strokeWidth=2;strokeColor=light-dark(#67AB9F,#67AB9F);fillColor=#FFFFFF;" value="create_problem" vertex="1">
+        <mxCell id="pevAOEmnro0O_PZKUrTG-66" parent="pevAOEmnro0O_PZKUrTG-26" style="rounded=1;arcSize=20;strokeWidth=2;strokeColor=light-dark(#67AB9F,#67AB9F);fillColor=#FFFFFF;" value="CREATE_NEW_PROBLEM" vertex="1">
           <mxGeometry height="49" width="212" x="226.5" y="406.5" as="geometry" />
         </mxCell>
         <mxCell id="pevAOEmnro0O_PZKUrTG-67" parent="pevAOEmnro0O_PZKUrTG-26" style="rounded=1;arcSize=20;strokeWidth=2;fillColor=light-dark(#B5739D,#B5739D);" value="scenario_extecution" vertex="1">

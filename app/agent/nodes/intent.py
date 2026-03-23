@@ -2,7 +2,7 @@ import logging
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm import classify_intent
+from app.utils.llm_routing import classify_intent
 from app.utils.error_codes import ErrorCode, GraphError
 
 logger = logging.getLogger(__name__)
@@ -10,17 +10,7 @@ logger = logging.getLogger(__name__)
 
 def intent_node(state: AgentState) -> AgentState:
     logger.info("Entered INTENT_NODE")
-    answer = classify_intent(state.get_last_user_message().content_en).strip()
-
-    VALID_OUTPUTS = {
-        "LIST_AVAILABLE",
-        "CREATE_PROBLEM",
-        "CREATE_NEW_SCENARIO",
-        "INTERACT_SCENARIO",
-        "INVALID",
-    }
-
-    assert answer in VALID_OUTPUTS
+    answer = classify_intent(state.get_last_user_message().content_en, state.get_reasoning_context())
 
     state.cognitive.next_action = answer
     logger.info(f"Detected intent: {answer}")
@@ -57,7 +47,7 @@ def validate_intent_node(state: AgentState) -> AgentState:
                 logger.error("Intent classified as NOT_ALLOWED due to missing scenario ids → raising error")
                 raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")
         
-    # --- CREATE_PROBLEM ---
+    # --- CREATE_NEW_PROBLEM ---
     elif intent == "CREATE_NEW_SCENARIO":
         if not state.cognitive.problem_id:
             state.cognitive.next_action = "NOT_ALLOWED"
@@ -77,7 +67,7 @@ def route_from_intent(state: AgentState):
     if action == "CREATE_NEW_SCENARIO":
         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
 
-    if action == "CREATE_PROBLEM":
+    if action == "CREATE_NEW_PROBLEM":
         return Command(update=state, goto="problem", graph=Command.PARENT)
 
     if action == "LIST_AVAILABLE":

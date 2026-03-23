@@ -26,6 +26,16 @@ body {
   opacity: 0.9;
 }
 
+/* CONTEXT-HEADER */
+.context-header {
+  background: #a0c4f2;
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* CHAT AREA CENTERED + 80% WIDTH */
 .chat-wrapper {
   display: flex;

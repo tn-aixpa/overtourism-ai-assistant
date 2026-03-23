@@ -58,4 +58,4 @@ def get_problems():
         connections_dict["problem_to_proposals"][pid] = prop_ids
     
     #return ids_dict, connections_dict, names_dict
-    return ids_dict
+    return ids_dict, connections_dict

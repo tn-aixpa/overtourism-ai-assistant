@@ -4,7 +4,9 @@ from langgraph.graph import  END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm import assess_what_to_list, get_list_message, translate
+from app.utils.llm_routing import assess_what_to_list
+from app.utils.llm_text_generation import get_list_message, translate
+
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import get_problems
 
@@ -47,11 +49,17 @@ def assess_list(state: AgentState) -> AgentState:
     return state
 
 def get_list(state: AgentState) -> AgentState:
-    retrieved = get_problems.invoke({})
+
+    if not state.downloaded_data:
+        ids_dict, connections_dict = get_problems.invoke({})
+        state.downloaded_data = {
+            "ids_dict": ids_dict,
+            "connections_dict": connections_dict
+        }
 
     state.cognitive.partial_list = {}
     for to_list in state.cognitive.elements_to_list:
-        state.cognitive.partial_list[to_list] = retrieved[to_list]
+        state.cognitive.partial_list[to_list] = state.downloaded_data["ids_dict"][to_list]
 
     state.add_trace("node_execution", node="get_list", data={"retrieved": state.cognitive.partial_list})
     return state

@@ -111,6 +111,8 @@ class AgentState:
     session_id: str = ""
     user_lang: str = "English"
 
+    downloaded_data: Dict[str, Any] = field(default_factory=dict)
+
     # Workflow orchestration
     class Workflow(StrEnum):
         INTENT = "intent"

@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph
 from langgraph.types import Command
 
-from app.agent.nodes.problem import extract_problem_node, parse_confirmation_node, create_problem_instance_node, decide_strategy_node, generate_scenario_candidates
+from app.agent.nodes.problem import extract_problem_node, parse_confirmation_node, CREATE_NEW_PROBLEM_instance_node, decide_strategy_node, generate_scenario_candidates
 from app.agent.state import AgentState
 from app.agent.graphs.utils import add_safe_node
 
@@ -23,7 +23,7 @@ graph = StateGraph(AgentState)
 graph.add_node("problem_entry_router", lambda s: s)
 add_safe_node(graph, "extract_problem", extract_problem_node)
 add_safe_node(graph, "parse_problem_confirmation", parse_confirmation_node)
-add_safe_node(graph, "create_problem_instance", create_problem_instance_node)
+add_safe_node(graph, "CREATE_NEW_PROBLEM_instance", CREATE_NEW_PROBLEM_instance_node)
 add_safe_node(graph, "decide_scenario_strategy", decide_strategy_node)
 add_safe_node(graph, "generate_scenario_candidates", generate_scenario_candidates)
 
@@ -37,6 +37,6 @@ graph.add_conditional_edges(
         "decide_scenario_strategy": "decide_scenario_strategy",
     }
 )
-graph.add_edge("create_problem_instance", "decide_scenario_strategy")
+graph.add_edge("CREATE_NEW_PROBLEM_instance", "decide_scenario_strategy")
 
 problem_subgraph = graph.compile()

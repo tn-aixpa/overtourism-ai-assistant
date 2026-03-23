@@ -105,6 +105,12 @@ function App() {
         <span className="session">Session: {sessionId}</span>
       </header>
 
+      {/* CONTEXT */}
+      <header className="context-header">
+        <span className="context">Active context: </span>
+      </header>
+
+
       {/* CHAT AREA */}
       <div className="chat-wrapper">
         <div className="chat-container">

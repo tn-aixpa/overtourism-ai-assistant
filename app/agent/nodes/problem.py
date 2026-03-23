@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm import extract_problem_data, assess_scenario_strategy
+from app.utils.llm_routing import extract_problem_data, assess_scenario_strategy
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 
@@ -65,10 +65,10 @@ def generate_scenario_candidates(state: AgentState):
     
     return Command(update=state, goto="scenario_runner", graph=Command.PARENT)
     
-def create_problem_instance_node(state: AgentState) -> AgentState:
+def CREATE_NEW_PROBLEM_instance_node(state: AgentState) -> AgentState:
     #TODO: call tool, assume state is changed with problem id and data
     logger.info("Creating problem instance based on the extracted problem information.")
-    state.add_trace("tool_call_mocked", node="create_problem_instance_node", data={"tool": "problem_creation"})
+    state.add_trace("tool_call_mocked", node="CREATE_NEW_PROBLEM_instance_node", data={"tool": "problem_creation"})
     success = True
     assert success
     # state.add_assistant_message(
@@ -107,7 +107,7 @@ def parse_confirmation_node(state: AgentState):
         return Command(update=state, goto="extract_problem", graph=Command.PARENT)
     
     routes = {
-        "CONFIRM_PROBLEM": "create_problem_instance",
+        "CONFIRM_PROBLEM": "CREATE_NEW_PROBLEM_instance",
         "CANCEL_PROBLEM": END,
     }
     if state.cognitive.next_action == "WAIT_CONFIRMATION_PROBLEM":
