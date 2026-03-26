@@ -1,8 +1,7 @@
 import pytest
 from dataclasses import replace
-import json
+
 from app.agent.graph import app
-from app.utils.data import parse_data
 from app.config import DRAW_CONVERSATION
 from app.utils.common import to_state, translate_to_eng
 from app.utils.error_codes import ErrorCode, get_error_message

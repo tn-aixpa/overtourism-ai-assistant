@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
 import logging
 
 from app.schemas import AgentResponse
@@ -116,4 +116,31 @@ async def run_agent_endpoint(
         raise HTTPException(
             status_code=500,
             detail=f"Agent execution failed: {str(e)}",
+        )
+
+@router.post("/agent/save")
+async def save_conversation_endpoint(payload: dict = Body(...)):
+    """
+    Save the current conversation state to persistent storage.
+    """
+    try:
+        session_id = payload.get("session_id")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="Session ID is required")
+
+        state = load_state(session_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Save the state
+        state.save()  # or save_state(session_id, state)
+        state.dump_to_file(f"logs/state_{state.session_id}.json")
+
+        return {"message": "Conversation saved successfully."}
+
+    except Exception as e:
+        logger.exception("Failed to save conversation")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save conversation: {str(e)}",
         )

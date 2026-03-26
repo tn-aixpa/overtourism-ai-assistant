@@ -25,5 +25,5 @@ def load_state(session_id: Optional[str]) -> Optional[AgentState]:
 def save_state(key: str, state: AgentState) -> None:
     _STATE_STORE[key] = state
 
-    state.save()
+    #state.save()
     #state.dump_to_file(f"logs/state_{state.session_id}.json")

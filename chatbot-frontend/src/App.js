@@ -11,6 +11,7 @@ function App() {
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const [activeContext, setActiveContext] = useState("");
+  const [language, setLanguage] = useState("English");
 
   // TEMPORARY: session id generation
   const generateSessionId = () => {
@@ -65,6 +66,7 @@ function App() {
     const formData = new FormData();
     formData.append("message", input);
     formData.append("session_id", sessionId);
+    formData.append("user_lang", language);
 
     attachments.forEach((file) => formData.append("files", file));
 
@@ -98,17 +100,57 @@ function App() {
     setLoading(false);
   };
 
+  // Save conversation
+  const saveConversation = async () => {
+    if (!sessionId) return;
+
+    try {
+      const res = await fetch(`http://localhost:9000/agent/save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+
+      const data = await res.json();
+      alert(data.message || "Conversation saved!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save conversation.");
+    }
+  };
+
   return (
     <div className="app">
       {/* HEADER */}
       <header className="header">
         <h2>Digital Twin Agent</h2>
-        <span className="session">Session: {sessionId}</span>
+
+        <div className="header-right">
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="language-select"
+          >
+            <option value="English">English</option>
+            <option value="Italian">Italian</option>
+          </select>
+
+          <span className="session">Session: {sessionId}</span>
+        </div>
       </header>
 
       {/* CONTEXT */}
       <header className="context-header">
         <span className="context">Active context: {activeContext || "-"}</span>
+        <button 
+          className="save-btn" 
+          onClick={saveConversation} 
+          disabled={!sessionId}
+        >
+          💾 Save conversation
+        </button>
       </header>
 
 

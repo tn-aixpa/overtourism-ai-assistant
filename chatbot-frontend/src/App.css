@@ -20,6 +20,17 @@ body {
   align-items: center;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
 /* SESSION TEXT */
 .session {
   font-size: 14px;
@@ -34,6 +45,19 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.save-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+}
+.save-btn:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
 }
 
 /* CHAT AREA CENTERED + 80% WIDTH */
