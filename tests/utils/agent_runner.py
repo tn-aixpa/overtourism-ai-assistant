@@ -108,10 +108,22 @@ class AgentTestRunner:
 
     def run(self, max_steps=50):
         steps = 0
-        while steps < max_steps:
+        # Run the first message
+        self.state = invoke_state(self.app, self.state)
+        
+        while self.pending_user_inputs and steps < max_steps:
             steps += 1
-            state = self.step()
-            if not state.waiting_for and not self.pending_user_inputs:
-                break
+            
+            if self.state.waiting_for:
+                # Agent explicitly waiting — pop and inject as before
+                user_reply = self.pending_user_inputs.pop(0)
+            else:
+                # Normal conversational turn — just pop next message
+                user_reply = self.pending_user_inputs.pop(0)
+
+            self.state.add_user_message(user_reply, user_reply)
+            self.state.user_input = user_reply if self.state.waiting_for else None
+            self.state = invoke_state(self.app, self.state)
+
         return AgentTestResult(self.state)
     

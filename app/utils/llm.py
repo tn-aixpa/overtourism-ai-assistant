@@ -13,6 +13,7 @@ llm = ChatOllama(
     model=MODEL,
     base_url="http://localhost:11434",
     temperature=0,
+    keep_alive=-1
 )
 
 def format_messages(messages):

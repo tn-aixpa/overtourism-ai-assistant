@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm_routing import extract_scenario_data
+from app.utils.llm_reasoning import extract_scenario_data
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 
@@ -23,13 +23,13 @@ def extract_scenario(state: AgentState) -> AgentState:
     extracted_all_scenario = True
     required_fileds = [f for f, v in state.cognitive.scenario_info_to_extract.items() if v["required"]]
     validated_scenarios = {}
+    validation_errors = []
     for scenario in scenarios:
         if not all(elem in scenario for elem in required_fileds):    
             extracted_all_scenario = False
             break
 
         # validate indexes
-        validation_errors = []
         if "indexes_to_change" in scenario:
             validated_scenarios[scenario['title']] = []
             for key, value in scenario["indexes_to_change"].items():
@@ -58,7 +58,7 @@ def extract_scenario(state: AgentState) -> AgentState:
                         else:
                             validated_scenarios[scenario['title']].append({key: [base_val_min, current_val_max]})
                 except Exception as e:
-                    validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid.")       
+                    validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid - {e}.")       
     
     if not extracted_all_scenario:
         state.cognitive.extracted_all_scenario = False

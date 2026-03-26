@@ -13,10 +13,6 @@ def run_agent(request) -> AgentState:
         ),
         session_id=request.session_id,
         user_lang=request.user_lang,
-        _id=request.cognitive.scenario_ids,
-
-        # Preserve incoming data and timestamp
-        data=request.cognitive.data,
 
         next_action=None,
     )

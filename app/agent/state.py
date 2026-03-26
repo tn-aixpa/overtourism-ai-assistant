@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum, Enum
 import json
 
-from app.config import MAX_CONTEXT_WINDOW
+from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE
 
 @dataclass
 class ConversationMessage:
@@ -73,14 +73,17 @@ class CognitiveState:
     elements_to_list: List[str] = field(default_factory=list)
     partial_list: Dict[str, Any] = field(default_factory=dict)
 
+    # Active context
+    active_context_type: str = "" #problem, proposal, scenario
+    active_context: List[str] = field(default_factory=list)
+    previous_context: List[str] = field(default_factory=list)
+
     # Problem context
-    problem_id: str = ""
     problem_info_to_extract: Dict[str, Any] = field(default_factory=dict)
     extracted_problem_info: Dict[str, Any] = field(default_factory=dict)
     extracted_all_problem: bool = False
 
     # Scenario context
-    scenario_ids: List[str] = field(default_factory=list)
     scenario_info_to_extract: Dict[str, Any] = field(default_factory=dict)
     extracted_all_scenario: bool = False
 
@@ -129,6 +132,7 @@ class AgentState:
         SCENARIO_PREFERENCE = "SCENARIO_PREFERENCE"
         SCENARIO_INPUT = "SCENARIO_INPUT"
         SCENARIO_CONFIRMATION = "SCENARIO_CONFIRMATION"
+        CONTEXT_INPUT = "CONTEXT_INPUT"
 
     waiting_for: Optional["AgentState.WaitingFor"] = None
     # Raw user input used to resume from WAIT_USER_INPUT.
@@ -142,6 +146,9 @@ class AgentState:
     error_code: str = ""
     error_node: str = ""
     error_details: str = ""
+
+    # Messages to include in response
+    messages_to_include = []
 
     @property
     def last_node(self):
@@ -183,11 +190,21 @@ class AgentState:
             return self.conversation.messages[-1]
         return None
 
-    def get_reasoning_context(self, n: Optional[int] = None):
+    def get_reasoning_context(self, n: Optional[int] = DEFAULT_REASONING_CONTEXT_SIZE):
         return self.conversation.get_context_window_en(n)
 
-    def get_ui_context(self, n: Optional[int] = None):
+    def get_ui_context(self, n: Optional[int] = DEFAULT_REASONING_CONTEXT_SIZE):
         return self.conversation.get_context_window_localized(n)
+    
+    def get_active_context_string(self):
+        context_type = self.cognitive.active_context_type
+        contexts = self.cognitive.active_context or []
+
+        if context_type:
+            plural = "s" if len(contexts) > 1 else ""
+            return f"{context_type}{plural} {', '.join(contexts)}"
+        
+        return ""
     
     # -------------------------
     # Dump state
@@ -200,6 +217,9 @@ class AgentState:
 
         if isinstance(obj, Enum):
             return obj.value
+
+        if isinstance(obj, set):           # <-- add this
+            return sorted(self._serialize(i) for i in obj)
 
         if isinstance(obj, list):
             return [self._serialize(i) for i in obj]

@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm_routing import extract_problem_data, assess_scenario_strategy
+from app.utils.llm_reasoning import extract_problem_data, assess_scenario_strategy
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 

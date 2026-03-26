@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 import logging
 
-from app.schemas import AgentRequest, AgentResponse
+from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph import app as agent_app
 from app.agent.memory import generate_key, load_state, save_state
@@ -14,53 +14,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-def load_demo_data(state: AgentState) -> AgentState:
-    import json
-    from app.utils.data import parse_data
-    state.cognitive.problem_info_to_extract = {
-        "problem_title": {"description": "The title of the problem", "required": True},
-        "objectives": {"description": "The objectives of the problem", "required": True},
-        "problem_description": {"description": "A detailed description of the problem the that the user wants to address, that will provide context for the analysis", "required": True},
-        "available_subsystems": {"description": "The available subsystems related to the problem", "required": False},
-        "additional_data": {"description": "Any additional data relevant to the problem", "required": False},
-    }
-
-    state.cognitive.problem_id = "parcheggi_200"
-
-    state.cognitive.scenario_info_to_extract = {
-        "title": {"description": "The title of the scenario", "required": True},
-        "description": {"description": "Describes the proposal", "required": False},
-        "additional_data": {"description": "Any additional data relevant to the problem, links or attachments", "required": False},
-        "context_conditions": {"description": "Elements/factors that can impact the proposed solution", "required": False},
-        "potential_impact": {"description": "Potential impact of the proposal", "required": False},
-        "indexes_to_change": {"description": "Indexes of simulation to change", "required": True}
-    }
-
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()), True)
-
-    state.cognitive.scenario_ids = ["model_0", "model_3"]
-    state.cognitive.data = {}
-
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
-    with open(f"tests/data/test_1.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
-    return state
-
 @router.post("/agent", response_model=AgentResponse)
 async def run_agent_endpoint(
     message: str = Form(...),
     user_lang: str = Form(default="English"),
     session_id: str = Form(...),
-    demo: bool = Form(default=False),
     files: list[UploadFile] = File([]),
 ) -> AgentResponse:
     """
     Main entrypoint for the AI agent.
 
     Responsibilities:
-    - Resolve memory scope using (session_id, problem_id, scenario_ids)
+    - Resolve memory scope using (session_id, active_context)
     - Load existing AgentState or create a new one
     - Inject the new user message and data
     - Run LangGraph
@@ -77,10 +42,6 @@ async def run_agent_endpoint(
 
         if not state:
             state = AgentState(session_id=key, user_lang=user_lang)
-
-            #TODO: remove this part later
-            if demo:
-                state = load_demo_data(state)
 
         # inject user messages
         assert message, "No message provided in the request"
@@ -118,6 +79,7 @@ async def run_agent_endpoint(
                 return AgentResponse(
                     response=final_state.get_last_message().content_localized,
                     session_id=key,
+                    active_context=final_state.get_active_context_string()
                 )
 
             state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
@@ -136,6 +98,7 @@ async def run_agent_endpoint(
             return AgentResponse(
                 response=response_text,
                 session_id=key,
+                active_context=final_state.get_active_context_string()
             )
 
         except Exception as e:
@@ -144,6 +107,7 @@ async def run_agent_endpoint(
             return AgentResponse(
                 response=str(e),
                 session_id=key,
+                active_context=final_state.get_active_context_string()
             )
     except HTTPException:
         raise

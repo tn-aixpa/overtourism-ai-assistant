@@ -20,9 +20,9 @@ def classify_intent(message: str, history: List[ConversationMessage] = None) -> 
 
     history_block = ""
     if history:
-        history_block = """
+        history_block = f"""
 Conversation so far
-{format_messages(messages)}\n\n
+{format_messages(history)}\n\n
 """
     prompt = f"""You are an intent classifier for a digital-twin platform about {context}.
 
@@ -43,7 +43,7 @@ ACTIONS:
      Often follows a LIST_AVAILABLE response.
      OR the user wants to remove a problem, proposal, or scenario from their active context.
      OR the user wants to change the context to a given problem/proposal/scenario to another.
-   Signals: "I want to focus on", "let's work on", "let's explore", "I am interested in",
+   Signals: "activate X", "I want to focus on", "let's work on", "let's explore", "I am interested in",
             "set the context to", "select", "open", "use problem X", "the last one",
             "the first one", "that one", "I'm no longer interested in","remove X from context",
             "deselect", "close", "stop working on", "forget about X", "clear the context"..
@@ -69,8 +69,9 @@ ACTIONS:
 7. INTERACT_SCENARIO
    → User wants to analyse, explore, compare or get information about EXISTING scenarios
      that are already on the platform.
+     Questions related to indexes, constraints belong to this action.
    Signals: "explain scenario", "what does scenario X show", "compare scenario A and B",
-            "interpret the results".
+            "interpret the results", "what is the most critical index".
 
 8. INVALID
    → Anything unrelated to {context}, or too vague to classify into 1-7.
@@ -505,4 +506,52 @@ USER MESSAGE:
 {message}
 """
     
+    return llm_interaction(prompt)
+
+# ---------------------------------------------------------------------------
+# UNDERSTAND IF THERE IS THE NEED TO ACTIVATE/DAECTIVATE THINGS FROM CONTEXT
+# ---------------------------------------------------------------------------
+
+def get_context_activation_deactivation_list(last_message, message_history, current_context, available_ids):
+    prompt = f"""
+You are a context management assistant. Your sole task is to analyze a user's message and return a JSON dictionary indicating which items should be activated or deactivated in the current context.
+
+## Available IDs
+These are the only valid IDs you may reference:
+{available_ids}
+
+## Current Context
+The following IDs are currently active:
+{current_context}
+
+## Message History
+{message_history}
+
+## User's Last Message
+{last_message}
+
+## Your Task
+Analyze the user's last message and return a JSON dictionary with exactly this format:
+{{"activate": [], "deactivate": []}}
+
+Follow these rules strictly:
+
+1. **Explicit activation**: If the user explicitly asks to activate, enable, focus on, or select a problem, proposal, or solution, add its ID to "activate".
+
+2. **Implicit activation**: If the user mentions or references one or more available IDs — whether asking for information, modifications, or comparisons — without explicitly activating them, still add those IDs to "activate".
+
+3. **Relative references**: The user may refer to items indirectly (e.g. "the first one", "the last one", "the second option"). Use the message history to resolve what item they are referring to, then add the corresponding ID to "activate".
+
+4. **Explicit deactivation**: If the user explicitly asks to remove, deactivate, or dismiss an item, or says they are no longer interested in it, add its ID to "deactivate".
+
+5. **Strict ID validation**: Every ID in both "activate" and "deactivate" MUST be drawn from the available IDs list above. Never invent or infer IDs that are not in that list.
+
+6. **No overlap**: An ID should not appear in both "activate" and "deactivate" in the same response.
+
+7. **Empty lists are valid**: If the user's message does not warrant any activation or deactivation, return empty lists.
+
+## Output
+Return ONLY the JSON dictionary. No explanation, no preamble, no markdown formatting.
+"""
+
     return llm_interaction(prompt)

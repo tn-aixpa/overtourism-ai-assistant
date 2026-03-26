@@ -4,10 +4,13 @@ from typing import Optional
 # consider using gettext for i18n support
 
 class ErrorCode(Enum):
-    INVALID_REQUEST = "E001"
-    INVALID_REQUEST_STATE = "E002"
-    REQUEST_ERROR = "E003"
-    NOTHING_TO_LIST = "E004"
+    REQUEST_ERROR = "E001"
+    INVALID_REQUEST = "E002"
+    INVALID_CONTEXT = "E003"
+    INVALID_REQUEST_STATE = "E004"
+    NOTHING_TO_LIST = "E005"
+
+
 
 class GraphError(Exception):
     def __init__(self, code: ErrorCode, details: Optional[str] = None):
@@ -17,15 +20,17 @@ class GraphError(Exception):
 
 ERROR_TRANSLATIONS = {
     "English": {
-        ErrorCode.INVALID_REQUEST: "I'm sorry, I can't answer this type of request.",
-        ErrorCode.INVALID_REQUEST_STATE: "Invalid request in current state.",
         ErrorCode.REQUEST_ERROR: "Something went wrong while processing your request.",
+        ErrorCode.INVALID_REQUEST: "I'm sorry, I can't answer this type of request.",
+        ErrorCode.INVALID_CONTEXT: "Error: the active context does not support the requested operation.",
+        ErrorCode.INVALID_REQUEST_STATE: "Invalid request in current state.",
         ErrorCode.NOTHING_TO_LIST: "Sorry, I didn't underestand your request, I can list problems, proposals and scenarios."
     },
     "Italian": {
-        ErrorCode.INVALID_REQUEST: "Mi dispiace, non posso rispondere a questo tipo di richiesta.",
-        ErrorCode.INVALID_REQUEST_STATE: "Richiesta non valida nello stato corrente.",
         ErrorCode.REQUEST_ERROR: "Errore durante l'elaborazione della richiesta.",
+        ErrorCode.INVALID_REQUEST: "Mi dispiace, non posso rispondere a questo tipo di richiesta.",
+        ErrorCode.INVALID_CONTEXT: "Errore: il contesto attualmente attivo non supporta l'operazione richiesta.",
+        ErrorCode.INVALID_REQUEST_STATE: "Richiesta non valida nello stato corrente.",
         ErrorCode.NOTHING_TO_LIST: "Scusa, non ho capito la tua richiesta, Posso darti la lista di problemi, porposte o scenari."
     },
 }

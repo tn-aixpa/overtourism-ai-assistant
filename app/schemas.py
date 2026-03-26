@@ -9,8 +9,8 @@ class ConversationMessage(BaseModel):
 class CognitivePayload(BaseModel):
     next_action: Optional[str] = None
 
-    problem_id: str = ""
-    scenario_ids: List[str] = Field(default_factory=list)
+    active_context_type: str = ""
+    active_context: List[str] = Field(default_factory=list)
 
     selected_roles: List[str] = Field(default_factory=list)
     expert_answers: Dict[str, Any] = Field(default_factory=dict)
@@ -28,5 +28,6 @@ class AgentRequest(BaseModel):
 class AgentResponse(BaseModel):
     response: Optional[str] = None
     session_id: str
+    active_context: str
 
     model_config = ConfigDict(extra="allow")

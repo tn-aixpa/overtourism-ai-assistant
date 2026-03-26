@@ -54,6 +54,7 @@ def compare_router(state: AgentState):
 
 graph = StateGraph(AgentState)
 
+#TODO: add attempt to context activation if needed, COMPARE_SCENARIOS no longer exists
 add_safe_node(graph, "select_role", select_role_router)
 add_safe_node(graph, "interact_scenario", interact_router)
 add_safe_node(graph, "compare_scenarios", compare_router)

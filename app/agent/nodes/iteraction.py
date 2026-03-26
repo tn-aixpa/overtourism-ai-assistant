@@ -2,7 +2,7 @@ import logging
 
 from app.agent.state import AgentState
 from app.config import ALLOWED_ROLES
-from app.utils.llm_routing import select_role_llm
+from app.utils.llm_reasoning import select_role_llm
 from app.utils.llm_text_generation import answer_question, answer_question_comparison, synthesize_llm
 
 from app.utils.error_codes import ErrorCode, GraphError
@@ -11,44 +11,45 @@ from app.utils.common import translate_from_eng
 logger = logging.getLogger(__name__)
 
 def select_role(state: AgentState) -> AgentState:
-    question = state.get_last_user_message().content_en
-    raw = select_role_llm(question, ALLOWED_ROLES)
+    # question = state.get_last_user_message().content_en
+    # raw = select_role_llm(question, ALLOWED_ROLES)
 
-    if "Error" in raw:
-        roles = ["Data Analyst"]
-        return state
+    # if "Error" in raw:
+    #     roles = ["Data Analyst"]
+    #     return state
     
-    # ---- Parse & normalize ----
-    roles = []
-    for r in raw.split(","):
-        key = r.strip()
-        roles.append(key)
+    # # ---- Parse & normalize ----
+    # roles = []
+    # for r in raw.split(","):
+    #     key = r.strip()
+    #     roles.append(key)
 
-    if not roles:
-        roles = ["Data Analyst"]
+    # if not roles:
+    #     roles = ["Data Analyst"]
     
-    state.cognitive.selected_roles = roles
+    # state.cognitive.selected_roles = roles
 
-    logger.info(f"Selected roles: {roles}")
+    # logger.info(f"Selected roles: {roles}")
 
+    state.cognitive.selected_roles = ["Data Analyst"]
     return state
 
 def interact_scenario(state: AgentState) -> AgentState:
 
     # check state
-    if len(state.cognitive.scenario_ids) == 0:
-        logger.error("No active scenario")
-        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No active scenario")       
+    # if len(state.cognitive.scenario_ids) == 0:
+    #     logger.error("No active scenario")
+    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No active scenario")       
     
-    if len(state.cognitive.scenario_ids) > 1:
-        logger.error("Multiple active scenarios")
-        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Select a single scenario")  
+    # if len(state.cognitive.scenario_ids) > 1:
+    #     logger.error("Multiple active scenarios")
+    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Select a single scenario")  
     
 
-    # load data if needed
-    if state.cognitive.scenario_ids[0] not in state.cognitive.data:
-        logger.error("Data for selected scenario unavailable")
-        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Data for selected scenario unavailable")  
+    # # load data if needed
+    # if state.cognitive.scenario_ids[0] not in state.cognitive.data:
+    #     logger.error("Data for selected scenario unavailable")
+    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Data for selected scenario unavailable")  
 
     state.cognitive.expert_answers = {}
 
@@ -75,14 +76,14 @@ def interact_scenario(state: AgentState) -> AgentState:
 def compare_scenarios(state: AgentState) -> AgentState:
 
     # check state
-    if len(state.cognitive.scenario_ids) < 2:
-        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")  
+    # if len(state.cognitive.scenario_ids) < 2:
+    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")  
     
 
-    # load data if needed
-    unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.data]
-    if len(unavailable):
-        raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No data available")  
+    # # load data if needed
+    # unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.data]
+    # if len(unavailable):
+    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No data available")  
 
     state.cognitive.expert_answers = {}
 

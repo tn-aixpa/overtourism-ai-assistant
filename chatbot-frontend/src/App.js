@@ -10,6 +10,7 @@ function App() {
   const textareaRef = useRef(null);
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
+  const [activeContext, setActiveContext] = useState("");
 
   // TEMPORARY: session id generation
   const generateSessionId = () => {
@@ -64,7 +65,6 @@ function App() {
     const formData = new FormData();
     formData.append("message", input);
     formData.append("session_id", sessionId);
-    formData.append("demo", true);
 
     attachments.forEach((file) => formData.append("files", file));
 
@@ -81,6 +81,7 @@ function App() {
       const data = await res.json();
 
       if (data.session_id) setSessionId(data.session_id);
+      if (data.active_context) setActiveContext(data.active_context);
 
       setMessages([
         ...newMessages,
@@ -107,7 +108,7 @@ function App() {
 
       {/* CONTEXT */}
       <header className="context-header">
-        <span className="context">Active context: </span>
+        <span className="context">Active context: {activeContext || "-"}</span>
       </header>
 
 

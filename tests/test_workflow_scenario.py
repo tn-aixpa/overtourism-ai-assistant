@@ -1,10 +1,5 @@
-import json
-
 from app.agent.state import AgentState
-from app.agent.graph import app
-from app.utils.data import parse_data
 from app.config import DRAW_CONVERSATION
-from tests.utils.agent_runner import AgentTestRunner
 
 def setup_scenario_info(state: AgentState):
     state.cognitive.scenario_info_to_extract = {
@@ -17,29 +12,16 @@ def setup_scenario_info(state: AgentState):
     }
     return state
 
-def test_scenario_extraction(empty_state):
+def test_scenario_extraction(agent):
     try:
-        # Initialize agent runner
-        agent = AgentTestRunner(app, empty_state)
-
         # Setup problem and scenario extraction info
-        agent.state.cognitive.problem_id = "parcheggi_200"
         agent.state = setup_scenario_info(agent.state)
 
-        # Preload base data if needed
-        with open("tests/data/test_base.json", "r") as f:
-            agent.state = parse_data(agent.state, json.load(f), True)
 
-        # Simulate user message to create two scenarios
-        user_message = (
-            "I want to create two new scenarios: one where I increase parking spaces of 200 units, "
-            "and the other in which I decrease them of 50"
-        )
-
-        # Run the multi-turn workflow
         result = (
-            agent.start(user_message)
-                .reply("Yes, proceed.")  # user confirms scenario
+            agent.start("Please, activate parcheggi_200")
+                .reply("I want to create two new scenarios: one where I increase available parking spaces of 200 units and the other in which I decrease them of 50")
+                .reply("Yes, please.")
                 .run()
         )
 
@@ -49,7 +31,6 @@ def test_scenario_extraction(empty_state):
             draw_conversation(result.messages, "logs/scenario_creation.png")
 
         # Assertions
-        assert result.state.cognitive.problem_id == "parcheggi_200"
         #WARNING: this test might require revision when impementing scenario running
         runned_scenarios = len([trace for trace in result.state.cognitive.trace.steps if trace.node == "run_scenario_node"])
         assert runned_scenarios == 2

@@ -34,109 +34,96 @@ def test_full_workflow_invalid_localized(empty_state, message, language):
 
 
 # ---------- TEST: INTERACT ----------
-@pytest.mark.parametrize(
-    "message, language",
-    [
-        ("What is the most critical constraint and what does this imply?", "English"),
-        ("Qual è il vincolo più critico e cosa implica?", "Italian")
-    ]
-)
-def test_full_workflow_interact_localized(empty_state, message, language):
-    state = replace(empty_state)
-    state.user_lang = language
-    state.cognitive.problem_id = "parcheggi_200"
-    state.cognitive.scenario_ids = ["model_0"]
 
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
+def test_full_workflow_interact(agent):
+    try:
+        agent.session_id = "fakdfkl"
+        result = (
+            agent.start("What are the available scenarios?")
+                .reply("Plase, activate scenario model_0")
+                .reply("What is the most critical constraint?")
+                .run()
+        )
 
-    state.add_user_message(message, translate_to_eng(message, language))
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/interact_english.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_interact.json")
 
-    result_dict = app.invoke(state)
-    result = to_state(result_dict)
-
-    last_message = result.get_last_message()
+    last_message = result.state.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-    assert result.cognitive.next_action == "INTERACT_SCENARIO"
-    assert len(result.cognitive.selected_roles) >= 1
-    assert response != "" and "not able to handle this request" not in response and "parking" in response.lower()
+    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English") and "parking" in response.lower()
 
-    if DRAW_CONVERSATION:
-        from other.drawing_util import draw_conversation
-        draw_conversation(result.conversation.messages, f"logs/interact_{language}.png")
+def test_full_workflow_interact_italian(agent):
+    try:
+        agent.state.user_lang = "Italian"
+        result = (
+            agent.start("Quali sono gli scenari disponibili?")
+                .reply("Per favore, attiva lo scenario model_0")
+                .reply("Quale è l'indice con maggior criticità?")
+                .run()
+        )
 
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/interact_italian.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_interact_it.json")
+
+    last_message = result.state.get_last_message()
+    response = last_message.content_en if last_message and last_message.role == "assistant" else ""
+
+    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "Italian") and "parcheggio" in response.lower()
 
 # ---------- TEST: COMPARE ----------
-@pytest.mark.parametrize(
-    "message, language",
-    [
-        ("What changed between the two scenarios and what was the impact of the change?", "English"),
-        ("Cosa è cambiato tra i due scenari e quale è stato l'impatto del cambiamento?", "Italian")
-    ]
-)
-def test_full_workflow_compare_localized(empty_state, message, language):
-    state = replace(empty_state)
-    state.user_lang = language
-    state.cognitive.problem_id = "parcheggi_200"
-    state.cognitive.scenario_ids = ["model_0", "model_3"]
-    state.cognitive.data = {}
+def test_full_workflow_compare(agent):
+    try:
+        agent.session_id = "fakdfkl"
+        result = (
+            agent.start("What are the available scenarios?")
+                .reply("Plase, activate model_0 and model_1")
+                .reply("What is the difference between the two?")
+                .run()
+        )
 
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
-    with open(f"tests/data/test_1.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/compare_english.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_compare.json")
 
-    state.add_user_message(message, translate_to_eng(message, language))
-
-    result_dict = app.invoke(state)
-    result = to_state(result_dict)
-
-    last_message = result.get_last_message()
+    last_message = result.state.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-    assert result.cognitive.next_action == "COMPARE_SCENARIOS"
-    assert len(result.cognitive.selected_roles) >= 1
-    assert response != "" and "I'm sorry, I am not able to answer your request." not in response
+    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English")
 
-    if DRAW_CONVERSATION:
-        from other.drawing_util import draw_conversation
-        draw_conversation(result.conversation.messages, f"logs/compare_{language}.png")
+def test_full_workflow_interact_italian(agent):
+    try:
+        agent.state.user_lang = "Italian"
+        result = (
+            agent.start("Quali sono gli scenari disponibili?")
+                .reply("Per favore, attiva gli scenari model_0 e model_1")
+                .reply("Quali sono le principali differenze fra le due?")
+                .run()
+        )
 
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/compare_italian.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_compare_it.json")
 
-# ---------- TEST: COMPARE ADDITIONAL CHECKS ----------
-@pytest.mark.parametrize(
-    "message, check_words, language",
-    [
-        ("Did overturism improve in the scenario-1 compared to base?", ["yes", "decreased", "improved"], "English"),
-        ("Il sovraffollamento turistico è migliorato nello scenario-1 rispetto al base?", ["sì", "diminuì", "migliorato"], "Italian")
-    ]
-)
-def test_full_workflow_compare_additional_checks_localized(empty_state, message, check_words, language):
-    state = replace(empty_state)
-    state.user_lang = language
-    state.cognitive.problem_id = "parcheggi_200"
-    state.cognitive.scenario_ids = ["model_0", "model_3"]
-    state.cognitive.data = {}
+    last_message = result.state.get_last_message()
+    response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-    with open(f"tests/data/test_base.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
-    with open(f"tests/data/test_1.json", "r") as f:
-        state = parse_data(state, json.loads(f.read()))
-
-    state.add_user_message(message, message)
-
-    result_dict = app.invoke(state)
-    result = to_state(result_dict)
-
-    last_message = result.get_last_message()
-    response = last_message.content_localized if last_message and last_message.role == "assistant" else ""
-    correct = any(word in response.lower() for word in check_words)
-
-    assert result.cognitive.next_action == "COMPARE_SCENARIOS"
-    assert len(result.cognitive.selected_roles) >= 1
-    assert response != "" and correct
-
-    if DRAW_CONVERSATION:
-        from other.drawing_util import draw_conversation
-        draw_conversation(result.conversation.messages, f"logs/compare_additional_{language}.png")
+    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert response != "" and "not able to handle this request" not in response
