@@ -30,13 +30,13 @@ def to_state(result_dict) -> AgentState:
     return AgentState(**result_dict)
 
 def translate_from_eng(msg, user_lang):
-    if user_lang == "English":
-        return msg
-    msg = translate(msg, "English", user_lang)
+    # if user_lang == "English":
+    #     return msg
+    # msg = translate(msg, "English", user_lang)
     return msg
 
 def translate_to_eng(msg, user_lang):
-    if user_lang == "English":
-        return msg
-    msg = translate(msg, user_lang, "English")
+    # if user_lang == "English":
+    #     return msg
+    # msg = translate(msg, user_lang, "English")
     return msg

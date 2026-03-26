@@ -169,9 +169,10 @@ translate_prompt = ChatPromptTemplate.from_template(
 )
 
 def translate(text, input_language, target_language):
-    chain = translate_prompt | llm
-    return chain.invoke({
-        "text": text,
-        "input_language": input_language,
-        "target_language": target_language
-    }).content
+    # chain = translate_prompt | llm
+    # return chain.invoke({
+    #     "text": text,
+    #     "input_language": input_language,
+    #     "target_language": target_language
+    # }).content
+    return text

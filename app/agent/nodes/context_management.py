@@ -5,7 +5,7 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.error_codes import ErrorCode, GraphError
-from app.utils.llm_reasoning import get_context_activation_deactivation_list
+from app.utils.llm_structured_extractions import get_context_activation_deactivation_list
 from app.tools.backend_tools import get_data_from_context, get_problems
 from app.utils.messages import get_message, MessageCode
 

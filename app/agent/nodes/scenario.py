@@ -4,7 +4,7 @@ from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm_reasoning import extract_scenario_data
+from app.utils.llm_structured_extractions import extract_scenario_data
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 
