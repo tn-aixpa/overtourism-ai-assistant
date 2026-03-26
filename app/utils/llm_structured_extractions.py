@@ -115,7 +115,7 @@ MESSAGE HISTORY:
 """
 
     
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # SCENARIO DATA EXTRACTION
@@ -208,7 +208,7 @@ MESSAGE HISTORY:
 {format_messages(messages)}
 """
     
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # UNDERSTAND IF THERE IS THE NEED TO ACTIVATE/DAECTIVATE THINGS FROM CONTEXT
@@ -256,4 +256,4 @@ Follow these rules strictly:
 Return ONLY the JSON dictionary. No explanation, no preamble, no markdown formatting.
 """
 
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)

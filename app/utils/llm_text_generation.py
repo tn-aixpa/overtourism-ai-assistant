@@ -37,7 +37,7 @@ Question: {question}
         with open("logs/last_prompt.txt", "w") as f:
             f.write(prompt)
 
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)
     
 # ---------------------------------------------------------------------------
 # ANSWER QUESTION
@@ -61,7 +61,7 @@ Scenario Data: {data}
 Question: {question}
 """
 
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # SYNTESIZE MULTIPLE EXPERTS ANSWERS
@@ -86,7 +86,7 @@ Expert answers:
     for role, answer in expert_answers.items():
         prompt += f"\n[{role}]\n{answer}\n"
 
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # LISTING AVAILABLE MESSAGE
@@ -157,7 +157,7 @@ On the platform there are:\n-one problem: P1,\n-two proposals: p0, p1,\n-5 scena
 INPUT:
 {partial_lists}
 """
-    return llm_interaction(prompt)
+    return llm_interaction(prompt, lightweight_llm=True)
 
 # ---------------------------------------------------------------------------
 # TRANSLATION

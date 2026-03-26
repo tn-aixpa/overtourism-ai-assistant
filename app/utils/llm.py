@@ -38,7 +38,7 @@ def format_messages(messages):
     )
 
 
-def llm_interaction(prompt: str, max_tokens: int = 1024, low_weight_llm=True) -> str:
+def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm=True) -> str:
     try:
         t1 = time()
 
@@ -47,7 +47,7 @@ def llm_interaction(prompt: str, max_tokens: int = 1024, low_weight_llm=True) ->
             result = response.content.strip()
             el = time() - t1
         else:
-            if low_weight_llm:
+            if lightweight_llm:
                 MODEL = "claude-haiku-4-5"
             else:
                 MODEL = "claude-sonnet-4-5"
