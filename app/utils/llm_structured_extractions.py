@@ -257,3 +257,111 @@ Return ONLY the JSON dictionary. No explanation, no preamble, no markdown format
 """
 
     return llm_interaction(prompt, lightweight_llm=False)
+
+# ---------------------------------------------------------------------------
+# DECIDE WHAT NEEDS TO BE LISTED
+# ---------------------------------------------------------------------------
+
+def assess_what_to_list(message, conversation_history=None, active_context=None):
+    """
+    conversation_history: optional list of dicts with 'role' and 'content' keys,
+                          e.g. [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+    active_context: optional string describing the currently active item in the agent state,
+                    e.g. "problem: Flooding in sector 4"
+    """
+
+    context_block = ""
+    if active_context:
+        context_block = f"""
+ACTIVE CONTEXT:
+The agent currently has this item selected/active: {active_context}
+Use this to resolve implicit references when appropriate.
+"""
+
+    history_block = ""
+    if conversation_history:
+        formatted = "\n".join(
+            f"{turn['role'].upper()}: {turn['content']}"
+            for turn in conversation_history
+        )
+        history_block = f"""
+CONVERSATION HISTORY (for resolving references only):
+{formatted}
+"""
+
+    prompt = f"""
+SYSTEM ROLE:
+You are a deterministic structured data extractor.
+Your output is parsed automatically by a machine. Any deviation from the format will cause a system failure.
+
+TASK:
+Extract two things from the user message:
+1. What the user wants to LIST (the target).
+2. What specific item they want to filter by (the subject), if any.
+
+STRICT OUTPUT CONTRACT (MANDATORY):
+- Output ONLY a valid Python dict literal. Nothing else.
+- The response MUST start with "{{" and end with "}}".
+- No prose, no explanation, no markdown, no code fences.
+- Keys must be exactly: "to_list" and "subject"
+- "to_list": a list of strings. Allowed values ONLY: "problems", "proposals", "scenarios". Max 3 items.
+- "subject": one of:
+    - A string with the name/identifier of the item, either:
+        · Explicitly named by the user (e.g. "Alpha", "problem X"), OR
+        · Resolved from ACTIVE CONTEXT or CONVERSATION HISTORY when the user uses an
+          implicit reference (e.g. "this", "that", "it", "the current", "last", "latest",
+          "previous", "the one", "this one", "that one")
+      Resolution priority: ACTIVE CONTEXT first, then CONVERSATION HISTORY.
+    - None if no subject is referenced, OR if an implicit reference exists but
+      cannot be resolved from either ACTIVE CONTEXT or CONVERSATION HISTORY.
+
+DECISION RULES:
+- Include an item in "to_list" ONLY if the user EXPLICITLY asks to list or retrieve it.
+- Set "subject" to the user's explicitly named item if they name one directly.
+- If the user uses an implicit reference, attempt to resolve it:
+    1. Check ACTIVE CONTEXT — if it matches the reference, extract and use its name.
+    2. Check CONVERSATION HISTORY — if a recent specific item was mentioned, use its name.
+    3. If unresolvable → None.
+- If nothing is explicitly requested → {{"to_list": [], "subject": None}}
+- NEVER infer, assume, or guess beyond these rules. NEVER explain.
+
+EXAMPLES:
+
+User: "List the problems"
+Output: {{"to_list": ["problems"], "subject": None}}
+
+User: "What proposals are there for problem X?"
+Output: {{"to_list": ["proposals"], "subject": "X"}}
+
+User: "Give me scenarios for proposal Alpha"
+Output: {{"to_list": ["scenarios"], "subject": "Alpha"}}
+
+User: "Give me problems and scenarios"
+Output: {{"to_list": ["problems", "scenarios"], "subject": None}}
+
+--- With active_context = "problem_1" ---
+
+User: "What proposals have been made for this problem?"
+Output: {{"to_list": ["proposals"], "subject": "problem_1"}}
+
+User: "Show me scenarios for it"
+Output: {{"to_list": ["scenarios"], "subject": "problem_1"}}
+
+--- With no active_context, but history mentions "proposal Beta" ---
+
+User: "Give me scenarios for the last one"
+Output: {{"to_list": ["scenarios"], "subject": "Beta"}}
+
+--- With no active_context and no relevant history ---
+
+User: "What proposals have been made for this problem?"
+Output: {{"to_list": ["proposals"], "subject": None}}
+
+User: "What do you think?"
+Output: {{"to_list": [], "subject": None}}
+
+{context_block}{history_block}
+USER MESSAGE:
+{message}
+"""
+    return llm_interaction(prompt, lightweight_llm=False)

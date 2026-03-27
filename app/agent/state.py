@@ -71,6 +71,7 @@ class CognitiveState:
 
     # Listing
     elements_to_list: List[str] = field(default_factory=list)
+    filter_list_by: str = None
     partial_list: Dict[str, Any] = field(default_factory=dict)
 
     # Active context
