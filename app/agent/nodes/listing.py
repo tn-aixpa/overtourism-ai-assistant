@@ -61,15 +61,15 @@ def assess_list(state: AgentState) -> AgentState:
 
 def get_list(state: AgentState) -> AgentState:
 
-    if not state.downloaded_data:
-        downloaded_data = get_problems.invoke({})
-        state.downloaded_data = downloaded_data
+    if not state.cognitive.available_entries:
+        available_entries = get_problems.invoke({})
+        state.cognitive.available_entries = available_entries
 
     subject = state.cognitive.filter_list_by
     allowed_set = None  # will stay None if no filtering is needed
 
     if subject:
-        connections_dict = state.downloaded_data["connections_dict"]
+        connections_dict = state.cognitive.available_entries["connections_dict"]
         allowed_entries = []
 
         if subject in connections_dict["problem_to_proposals"]:
@@ -96,7 +96,7 @@ def get_list(state: AgentState) -> AgentState:
     state.cognitive.partial_list = {}
 
     for to_list in state.cognitive.elements_to_list:
-        full_list = state.downloaded_data["ids_dict"][to_list]
+        full_list = state.cognitive.available_entries["ids_dict"][to_list]
 
         if allowed_set is not None:
             filtered_list = [el for el in full_list if el in allowed_set]

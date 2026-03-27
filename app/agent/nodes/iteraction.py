@@ -47,7 +47,7 @@ def interact_scenario(state: AgentState) -> AgentState:
     
 
     # # load data if needed
-    # if state.cognitive.scenario_ids[0] not in state.cognitive.data:
+    # if state.cognitive.scenario_ids[0] not in state.cognitive.context_data:
     #     logger.error("Data for selected scenario unavailable")
     #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Data for selected scenario unavailable")  
 
@@ -58,7 +58,7 @@ def interact_scenario(state: AgentState) -> AgentState:
 
         answer = answer_question(
             question=state.get_last_user_message().content_en,
-            data=state.cognitive.data,
+            data=state.cognitive.context_data,
             role=role,
         )
         logger.info(f"Answer for role {role}: {answer}")
@@ -81,7 +81,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
     
 
     # # load data if needed
-    # unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.data]
+    # unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.context_data]
     # if len(unavailable):
     #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No data available")  
 
@@ -92,7 +92,7 @@ def compare_scenarios(state: AgentState) -> AgentState:
 
         answer = answer_question_comparison(
             question=state.get_last_user_message().content_en,
-            data=state.cognitive.data,
+            data=state.cognitive.context_data,
             role=role,
         )
         state.cognitive.expert_answers[role] = answer

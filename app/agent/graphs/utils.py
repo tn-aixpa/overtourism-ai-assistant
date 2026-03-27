@@ -17,18 +17,18 @@ def safe(node_fn, node_name):
             return node_fn(state)
 
         except GraphError as ge:
-            state.error_code = ge.code
-            state.error_details = ge.details
-            state.error_node = node_name
+            state.cognitive.error_code = ge.code
+            state.cognitive.error_details = ge.details
+            state.cognitive.error_node = node_name
             return Command(update=state, goto="error", graph=Command.PARENT)
 
         except GraphInterrupt as gi:
             raise gi  
 
         except Exception as e:
-            state.error_code = ErrorCode.REQUEST_ERROR
-            state.error_details = str(e)
-            state.error_node = node_name
+            state.cognitive.error_code = ErrorCode.REQUEST_ERROR
+            state.cognitive.error_details = str(e)
+            state.cognitive.error_node = node_name
             return Command(update=state, goto="error", graph=Command.PARENT)
 
     return _safe

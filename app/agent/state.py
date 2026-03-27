@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum, Enum
 import json
 
-from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE
+from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, ALLOWED_OPERATIONS
 
 @dataclass
 class ConversationMessage:
@@ -69,6 +69,9 @@ class CognitiveState:
     # Routing
     next_action: Optional[str] = None
 
+    # Operations
+    allowed_operations = ALLOWED_OPERATIONS
+
     # Listing
     elements_to_list: List[str] = field(default_factory=list)
     filter_list_by: str = None
@@ -97,11 +100,21 @@ class CognitiveState:
     expert_answers: Dict[str, str] = field(default_factory=dict)
 
     # Data layer
-    data: Dict[str, Any] = field(default_factory=dict)
+    available_entries: Dict[str, Any] = field(default_factory=dict)
+    context_data: Dict[str, Any] = field(default_factory=dict)
     editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
     # Tracing
     trace: TraceBuffer = field(default_factory=TraceBuffer)
+
+    # Error handling
+    error_code: str = ""
+    error_node: str = ""
+    error_details: str = ""
+
+    # Messages to include in response
+    messages_to_include: List[str] = field(default_factory=list)
+    additional_output_information: Dict[str, Any] = field(default_factory=dict)
 
     def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
@@ -115,8 +128,6 @@ class AgentState:
     session_id: str = ""
     user_lang: str = "English"
 
-    downloaded_data: Dict[str, Any] = field(default_factory=dict)
-
     # Workflow orchestration
     class Workflow(StrEnum):
         INTENT = "intent"
@@ -125,6 +136,7 @@ class AgentState:
         INTERACTION = "interaction"
         SCENARIO_RUNNER = "scenario_runner"
 
+    resume_nome: Dict[str, str] = field(default_factory=dict)
     active_workflow: Optional["AgentState.Workflow"] = None
 
     class WaitingFor(StrEnum):
@@ -142,14 +154,6 @@ class AgentState:
 
     # Cognitive Layer (English only)
     cognitive: CognitiveState = field(default_factory=CognitiveState)
-
-    # Error handling
-    error_code: str = ""
-    error_node: str = ""
-    error_details: str = ""
-
-    # Messages to include in response
-    messages_to_include = []
 
     @property
     def last_node(self):

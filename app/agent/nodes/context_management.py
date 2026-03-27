@@ -15,17 +15,17 @@ logger = logging.getLogger(__name__)
 def assess_context_request(state: AgentState) -> AgentState:
     logger.info("Entered assess_context_request node")
 
-    if not state.downloaded_data:
+    if not state.cognitive.available_entries:
         logger.info("Loading context information")
-        downloaded_data = get_problems.invoke({})
-        state.downloaded_data = downloaded_data
+        available_entries = get_problems.invoke({})
+        state.cognitive.available_entries = available_entries
 
 
     activation_deactivation_list = get_context_activation_deactivation_list(
         state.get_last_message(),
         state.get_reasoning_context(),
         state.cognitive.active_context,
-        state.downloaded_data.get("all_ids", [])
+        state.cognitive.available_entries.get("all_ids", [])
     )
 
     try:
@@ -41,7 +41,7 @@ def assess_context_request(state: AgentState) -> AgentState:
         return state
 
     # Shortcuts to your data
-    ids_dict = state.downloaded_data.get("ids_dict", {})
+    ids_dict = state.cognitive.available_entries.get("ids_dict", {})
     problems = ids_dict.get("problems", set())
     proposals = ids_dict.get("proposals", set())
     scenarios = ids_dict.get("scenarios", set())
@@ -74,7 +74,7 @@ def assess_context_request(state: AgentState) -> AgentState:
     if proposal_activations:
         if len(proposal_activations) > 1:
             raise GraphError(ErrorCode.INVALID_CONTEXT, "I tried to activete a proposal but more than one was provided")
-        if len(activate) > len(problem_activations):
+        if len(activate) > len(proposal_activations):
             raise GraphError(ErrorCode.INVALID_CONTEXT, "I am not sure about what context you want to use, can you please specify it?")
    
         selected_proposal = next(iter(proposal_activations))
@@ -129,14 +129,14 @@ def handle_context(state: AgentState) -> AgentState:
     extracted_data = get_data_from_context.invoke({
         "context_type": state.cognitive.active_context_type,
         "context": list(state.cognitive.active_context),
-        "relations": state.downloaded_data["connections_dict"],
+        "relations": state.cognitive.available_entries["connections_dict"],
         "extract_editable": extract_editable
     })
     retrieved = extracted_data["retrieved"]
     editable_indexes = extracted_data["editable_indexes"]
     state.add_trace("node_execution", node="handle_context", data={"extracted": str(retrieved)})
 
-    state.cognitive.data = retrieved
+    state.cognitive.context_data = retrieved
 
     if extract_editable:
         state.cognitive.editable_indexes = editable_indexes
@@ -148,14 +148,17 @@ def routing_after_context(state: AgentState) -> AgentState:
     logger.info("Entering routing_after_context node")
 
     if state.cognitive.next_action == "CONTEXT_MANAGEMENT":
+
         context = ",".join(state.cognitive.active_context)
-        state.add_assistant_message(
-            get_message(MessageCode.CHANGED_CONTEXT, state.user_lang, new_context=context),
-            get_message(MessageCode.CHANGED_CONTEXT, "English", new_context=context)
-        )
-        return Command(update=state, goto=END)
+        state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, "English", new_context=context)]
+        state.cognitive.additional_output_information = [
+            state.cognitive.context_data,
+            state.cognitive.allowed_operations
+        ]
+
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
     
     else:
-        #TODO
-        pass
-    return state
+        node = state.resume_nome["node"]
+        subgraph = state.resume_nome["subgraph"]
+        return Command(update=state, goto=node, graph=subgraph)
