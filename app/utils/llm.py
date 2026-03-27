@@ -1,7 +1,7 @@
 import anthropic
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
-from time import time
+from time import time, sleep
 import re
 import os
 import logging
@@ -22,6 +22,7 @@ if USE_LOCAL_LLM:
     # Initialize local Ollama model
     # https://ollama.com/search
     # mistral, tinyllama, phi3:mini, gemma2:2b, llama3:8b, qwen3.5:2b, llama3.2:1b, gpt-oss:20b
+
     MODEL = "gpt-oss:20b"
     llm = ChatOllama(
         model=MODEL,
@@ -32,10 +33,31 @@ if USE_LOCAL_LLM:
 else:
     llm = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
+
 def format_messages(messages):
     return "\n".join(
         f"{m['role'].upper()}: {m['content']}" for m in messages
     )
+
+
+def _call_anthropic_with_retry(model: str, max_tokens: int, prompt: str, max_retries: int = 5):
+    """Call Anthropic API with exponential backoff retry on overload errors."""
+    for attempt in range(max_retries):
+        try:
+            return llm.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529:
+                if attempt == max_retries - 1:
+                    raise  # Exhausted retries, propagate the error
+                wait_time = 2 ** attempt + 1  # 2, 3, 5, 9, 17 seconds...
+                logger.warning(f"Anthropic overloaded (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s...")
+                sleep(wait_time)
+            else:
+                raise  # Non-529 errors are not retried
 
 
 def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm=True) -> str:
@@ -52,15 +74,11 @@ def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm=True) -
             else:
                 MODEL = "claude-sonnet-4-5"
 
-            response = llm.messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            response = _call_anthropic_with_retry(MODEL, max_tokens, prompt)
             result = response.content[0].text.strip()
             el = time() - t1
 
-            #compute pricing
+            # Compute pricing
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
             pricing = ANTHROPIC_PRICING.get(MODEL)
@@ -72,10 +90,8 @@ def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm=True) -
             with open("logs/costs.csv", "a+") as f:
                 f.write(f"{MODEL};{input_tokens};{output_tokens};{call_cost}\n")
 
-       
         with open("logs/times_" + re.sub(r'\W+', '', MODEL) + "_.txt", "a+") as f:
             f.write(f"{el:.2f}\n")
-
 
         return result
 
