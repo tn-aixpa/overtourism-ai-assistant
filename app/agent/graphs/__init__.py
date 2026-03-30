@@ -2,6 +2,5 @@ from .intent_graph import intent_subgraph
 from .interaction_graph import interaction_subgraph
 from .problem_graph import problem_subgraph
 from .scenario_extraction_subgraph import scenario_extraction_subgraph
-from .scenario_runner_subgraph import scenario_runner_subgraph
 from .list_available_subgraph import list_available_subgraph
 from .context_subgraph import context_subgraph

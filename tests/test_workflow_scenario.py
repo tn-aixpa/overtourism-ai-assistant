@@ -3,8 +3,8 @@ from app.config import DRAW_CONVERSATION
 def test_scenario_extraction(agent):
     try:
         result = (
-            agent.start("Please, activate parcheggi_200")
-                .reply("I want to create two new scenarios: one where I increase available parking spaces of 200 units and the other in which I decrease them of 50")
+            agent.start("Please, activate proposal_1")
+                .reply("I want to create a new scenario with the following:\n- Title: Parking facility\n- Description: create a new parking facility that will increase parking availability and reduce traffic in the city center\n- Index change: `available_parking_spaces` range [350-850]")
                 .reply("No, cancel")
                 .run()
         )

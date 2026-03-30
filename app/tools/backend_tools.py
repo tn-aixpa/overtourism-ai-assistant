@@ -1,8 +1,11 @@
 import requests
 from langchain.tools import tool
+import logging
+import json
 
 from app.utils.data import parse_data, parse_editable_indexes
 
+logger = logging.getLogger(__name__)
 BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
 
 @tool
@@ -122,3 +125,75 @@ def get_data_from_context(context_type, context, relations, extract_editable):
         "retrieved": retrieved,
         "editable_indexes": editable_indexes
     }
+
+
+@tool
+def create_scenario_instance(
+    problem_id: str,
+    session_id: str,
+    scenario_name: str,
+    scenario_description: str,
+    values: dict,
+    proposal_id: str | None = None,
+) -> dict:
+    """
+    Create a new scenario instance for a given problem.
+
+    Args:
+        problem_id: The ID of the problem this scenario belongs to.
+        session_id: The session ID used to generate the unique scenario instance ID.
+        scenario_name: Human-readable name for the new scenario.
+        scenario_description: Description of the scenario.
+        values: Dictionary of input values for the scenario model.
+        proposal_id: Optional proposal ID to link this scenario to a proposal.
+
+    Returns:
+        A dict with a confirmation message, e.g. {"message": "Scenario saved!"}
+    """
+    logger.info("Entered tool create_scenario_instance")
+    BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else
+    url = f"{BACKEND_URL}scenarios/{BASE_SCENARIO_ID}"
+
+    params = {
+        "problem_id": problem_id,
+        "session_id": session_id,
+    }
+    if proposal_id is not None:
+        params["proposal_id"] = proposal_id
+
+    payload = {
+        "scenario_name": scenario_name,
+        "scenario_description": scenario_description,
+        "values": values,
+    }
+
+    headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+    # curl for direct reproduction
+    logger.info("Outgoing create_scenario_instance request:")
+    query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+    curl_command = f"""
+curl -X POST "{url}?{query_string}" \\
+-H "accept: application/json" \\
+-H "Content-Type: application/json" \\
+-d '{json.dumps(payload)}'
+"""
+    logger.info(curl_command)
+
+    # --- actual request ---
+    response = requests.post(url, headers=headers, params=params, json=payload)
+
+    # Log response for comparison
+    logger.info(f"Response status: {response.status_code}")
+    try:
+        logger.info(f"Response body: {response.json()}")
+    except Exception:
+        logger.info(f"Response text: {response.text}")
+
+    response.raise_for_status()
+
+    return response.json()

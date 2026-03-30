@@ -94,7 +94,7 @@ class CognitiveState:
     extracted_all_scenario: bool = False
 
     # Execution state
-    scenarios_to_generate: List[Dict[str, Any]] = field(default_factory=list)
+    scenarios_to_generate: List[ScenarioInfoSchema] = field(default_factory=list)
     validation_errors: str = ""
 
     # Expert reasoning
@@ -136,7 +136,6 @@ class AgentState:
         PROBLEM = "problem"
         SCENARIO_EXTRACTION = "scenario_extraction"
         INTERACTION = "interaction"
-        SCENARIO_RUNNER = "scenario_runner"
 
     resume_nome: Dict[str, str] = field(default_factory=dict)
     active_workflow: Optional["AgentState.Workflow"] = None

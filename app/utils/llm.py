@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage
 from time import time, sleep
 import re
 import os
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,3 +100,7 @@ def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm=True) -
         logger.error(e)
         return f"Error connecting to chatbot: {e}"
     
+def parse_llm_json(raw: str) -> list:
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    return json.loads(cleaned)

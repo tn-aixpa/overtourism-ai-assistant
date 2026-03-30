@@ -201,6 +201,7 @@ Before producing the final answer:
 4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
 5) Verify no empty fields, empty objects, or empty arrays exist.
 6) Verify every solution has at least one entry in "indexes_to_change".
+7) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
 
 Only after passing ALL checks, output the JSON and then STOP.
 

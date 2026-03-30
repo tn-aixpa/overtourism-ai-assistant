@@ -1,11 +1,11 @@
 import logging
-import json
 from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.error_codes import ErrorCode, GraphError
 from app.utils.llm_structured_extractions import get_context_activation_deactivation_list
+from app.utils.llm import parse_llm_json
 from app.tools.backend_tools import get_data_from_context, get_problems
 from app.utils.messages import get_message, MessageCode
 
@@ -29,7 +29,7 @@ def assess_context_request(state: AgentState) -> AgentState:
     )
 
     try:
-        parsed = json.loads(activation_deactivation_list)
+        parsed = parse_llm_json(activation_deactivation_list)
         activate = set(parsed.get("activate", []))
         deactivate = set(parsed.get("deactivate", []))
     except Exception as e:

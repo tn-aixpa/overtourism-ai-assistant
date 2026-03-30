@@ -6,6 +6,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.utils.llm_reasoning import assess_scenario_strategy
 from app.utils.llm_structured_extractions import extract_problem_data
+from app.utils.llm import parse_llm_json
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 
@@ -22,7 +23,7 @@ def extract_problem(state: AgentState) -> AgentState:
 
     assert "Error connecting to chatbot" not in answer
 
-    parsed_data = json.loads(answer)
+    parsed_data = parse_llm_json(answer)
     logger.info(f"Parsed problem information: {parsed_data}")
 
     # Update extracted info
@@ -69,7 +70,7 @@ def generate_scenario_candidates(state: AgentState):
     variations = [] #TODO: implement llm call to generate variations based on base scenario and problem info
     state.cognitive.scenarios_to_generate = variations
     
-    return Command(update=state, goto="scenario_runner", graph=Command.PARENT)
+    return Command(update=state, goto="run_scenario", graph="scenario_extraction")
     
 def CREATE_NEW_PROBLEM_instance_node(state: AgentState) -> AgentState:
     #TODO: call tool, assume state is changed with problem id and data
