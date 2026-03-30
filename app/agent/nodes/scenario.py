@@ -198,13 +198,15 @@ def run_scenario_node(state: AgentState) -> AgentState:
             "proposal_id": proposal_id,
         })
 
-        logger.info(f"result")
+        logger.info(result)
 
         return Command(update=state, goto="run_scenario")
     else:
-        state.add_assistant_message(
-            get_message(MessageCode.SUCCESS_SCENARIO, state.user_lang),
-            get_message(MessageCode.SUCCESS_SCENARIO, "English")
-        )
-        logger.info("No scenarios to run.")
-        return Command(update=state, goto="END")
+        state.resume_nome = {}
+        state.active_workflow = None
+        state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_SCENARIO, "English")]
+        state.cognitive.additional_output_information = []
+
+        #TODO: decide if we want to activate this problem or ask the user if he wants to activate it
+
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
