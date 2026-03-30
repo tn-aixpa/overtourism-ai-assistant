@@ -15,47 +15,13 @@ def error_recovery_node(state: AgentState) -> Command:
         with open("logs/errors.txt", "a+") as f:
             logger.error(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}")
             f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
+        state.cognitive.additional_output_information = [f"Error details {state.cognitive.error_details}"]
 
-    state.cognitive.next_action = None
-    state.add_assistant_message(
-        get_error_message(code, state.user_lang),
-        get_error_message(code, "English")
-    )
+    state.reset_state(reset_errors=False)
 
-    return Command(update=state, goto=END)
+    state.cognitive.messages_to_include = [get_error_message(code, "English")]
 
-def reset_state(state: AgentState, reset_context=True, reset_data=True) -> AgentState:
-    state.waiting_for = None
-    state.user_input = None
-    state.last_node = {}
-    state.cognitive.error_code = ""
-    state.cognitive.error_node = ""
-    state.cognitive.error_details = ""
-    state.cognitive.messages_to_include = []
-
-    # Reset cognitive
-    state.cognitive.elements_to_list = []
-    state.cognitive.filter_list_by = ""
-    state.cognitive.partial_list = {}
-    state.cognitive.extracted_problem_info = {}
-    state.cognitive.extracted_all_problem = False
-    state.cognitive.extracted_all_scenario = False
-    state.cognitive.scenarios_to_generate = []
-    state.cognitive.validation_errors = ""
-    state.cognitive.selected_roles = []
-    state.cognitive.expert_answers = {}
-
-    if reset_context:
-        state.cognitive.active_context_type = ""
-        state.cognitive.active_context = []
-        state.cognitive.previous_context = []
-
-    if reset_data:
-        state.cognitive.context_data = {}
-        state.cognitive.editable_indexes = {}
-        state.cognitive.available_entries = {}
-
-    return state
+    return Command(update=state, goto="generate_output_message")
 
 def generate_output_message(state: AgentState) -> Command:
     logger.info("Entering output generation")

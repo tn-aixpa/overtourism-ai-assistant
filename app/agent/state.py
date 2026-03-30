@@ -252,3 +252,38 @@ class AgentState:
             f.write(f"Saved state for session_id={self.session_id}, last node={self.last_node}\n")
             for trace in self.cognitive.trace.steps:
                 f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")
+
+    def reset_state(self, reset_errors=True, reset_context=True, reset_data=True):
+        self.waiting_for = None
+        self.user_input = None
+
+
+        # Reset cognitive
+        self.cognitive.elements_to_list = []
+        self.cognitive.filter_list_by = ""
+        self.cognitive.partial_list = {}
+        self.cognitive.extracted_problem_info = {}
+        self.cognitive.extracted_all_problem = False
+        self.cognitive.extracted_all_scenario = False
+        self.cognitive.scenarios_to_generate = []
+        self.cognitive.validation_errors = ""
+        self.cognitive.selected_roles = []
+        self.cognitive.expert_answers = {}
+
+        if reset_errors:
+            self.cognitive.error_code = ""
+            self.cognitive.error_node = ""
+            self.cognitive.error_details = ""
+            self.cognitive.messages_to_include = []
+
+        if reset_context:
+            self.cognitive.active_context_type = ""
+            self.cognitive.active_context = []
+            self.cognitive.previous_context = []
+
+        if reset_data:
+            self.cognitive.context_data = {}
+            self.cognitive.editable_indexes = {}
+            self.cognitive.available_entries = {}
+
+        return self
