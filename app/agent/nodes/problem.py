@@ -13,25 +13,30 @@ logger = logging.getLogger(__name__)
 
 def extract_problem(state: AgentState) -> AgentState:
     logger.info("Extracting problem information from conversation context.")
-    answer = extract_problem_data(state.get_reasoning_context(),
-                                  state.cognitive.problem_info_to_extract,
-                                  state.cognitive.extracted_problem_info)
-    
+
+    answer = extract_problem_data(
+        state.get_reasoning_context(),
+        state.cognitive.problem_info_to_extract,
+        state.cognitive.extracted_problem_info
+    )
+
     assert "Error connecting to chatbot" not in answer
 
     parsed_data = json.loads(answer)
     logger.info(f"Parsed problem information: {parsed_data}")
 
+    # Update extracted info
     for key, value in parsed_data.items():
         if value:
             state.cognitive.extracted_problem_info[key] = value
-    
+
+    # Check if all required fields are extracted
     extracted_all_problem = True
-    for key, info in state.cognitive.problem_info_to_extract.items():
-        if info["required"] and key not in state.cognitive.extracted_problem_info:
-            # If any required info is missing, we consider the extraction incomplete
+    for key, field_spec in state.cognitive.problem_info_to_extract.items():
+        if field_spec.required and key not in state.cognitive.extracted_problem_info:
             extracted_all_problem = False
             break
+
     logger.info(f"Extracted all required problem information: {extracted_all_problem}")
     state.cognitive.extracted_all_problem = extracted_all_problem
 

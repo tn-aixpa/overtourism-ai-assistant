@@ -6,6 +6,7 @@ from enum import StrEnum, Enum
 import json
 
 from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, ALLOWED_OPERATIONS
+from app.utils.backend_integration_classes import ProblemInfoSchema, ScenarioInfoSchema
 
 @dataclass
 class ConversationMessage:
@@ -83,12 +84,13 @@ class CognitiveState:
     previous_context: List[str] = field(default_factory=list)
 
     # Problem context
-    problem_info_to_extract: Dict[str, Any] = field(default_factory=dict)
+    problem_info_to_extract = ProblemInfoSchema.default()
+
     extracted_problem_info: Dict[str, Any] = field(default_factory=dict)
     extracted_all_problem: bool = False
 
     # Scenario context
-    scenario_info_to_extract: Dict[str, Any] = field(default_factory=dict)
+    scenario_info_to_extract = ScenarioInfoSchema.default()
     extracted_all_scenario: bool = False
 
     # Execution state
@@ -114,7 +116,7 @@ class CognitiveState:
 
     # Messages to include in response
     messages_to_include: List[str] = field(default_factory=list)
-    additional_output_information: Dict[str, Any] = field(default_factory=dict)
+    additional_output_information: List[str] = field(default_factory=list)
 
     def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))

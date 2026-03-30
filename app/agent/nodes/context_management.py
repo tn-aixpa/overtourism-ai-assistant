@@ -147,12 +147,12 @@ def routing_after_context(state: AgentState) -> AgentState:
     state.add_trace("node_execution", node="routing_after_context")
     logger.info("Entering routing_after_context node")
 
-    if state.cognitive.next_action == "CONTEXT_MANAGEMENT":
+    if not state.resume_nome:
 
         context = ",".join(state.cognitive.active_context)
         state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, "English", new_context=context)]
         state.cognitive.additional_output_information = [
-            state.cognitive.context_data,
+            f"Active contex: {state.get_active_context_string()}",
             state.cognitive.allowed_operations
         ]
 

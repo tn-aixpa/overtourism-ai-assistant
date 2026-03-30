@@ -4,7 +4,7 @@ from langgraph.graph import END
 
 from app.agent.state import AgentState
 from app.utils.error_codes import get_error_message, ErrorCode
-from app.utils.llm_text_generation import generate_answer
+from app.utils.common import build_output_message
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ def error_recovery_node(state: AgentState) -> Command:
 def reset_state(state: AgentState, reset_context=True, reset_data=True) -> AgentState:
     state.waiting_for = None
     state.user_input = None
+    state.last_node = {}
     state.cognitive.error_code = ""
     state.cognitive.error_node = ""
     state.cognitive.error_details = ""
@@ -36,10 +37,8 @@ def reset_state(state: AgentState, reset_context=True, reset_data=True) -> Agent
     state.cognitive.elements_to_list = []
     state.cognitive.filter_list_by = ""
     state.cognitive.partial_list = {}
-    state.cognitive.problem_info_to_extract = {}
     state.cognitive.extracted_problem_info = {}
     state.cognitive.extracted_all_problem = False
-    state.cognitive.scenario_info_to_extract = {}
     state.cognitive.extracted_all_scenario = False
     state.cognitive.scenarios_to_generate = []
     state.cognitive.validation_errors = ""
@@ -59,17 +58,9 @@ def reset_state(state: AgentState, reset_context=True, reset_data=True) -> Agent
     return state
 
 def generate_output_message(state: AgentState) -> Command:
-    output_message = generate_answer(
-        state.get_last_user_message().content_en,
-        state.user_lang,
-        state.cognitive.messages_to_include,
-        state.cognitive.additional_output_information
-    )
-    state.add_assistant_message(
-            output_message,
-            output_message
-        )
-
+    logger.info("Entering output generation")
+    state = build_output_message(state)
+    
     return Command(update=state, goto=END)
 
     #TODO add option for WAIT

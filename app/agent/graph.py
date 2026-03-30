@@ -10,7 +10,7 @@ from app.agent.graphs import (
     list_available_subgraph,
     context_subgraph
 )
-from app.agent.nodes.genearl import error_recovery_node, reset_state, generate_output_message
+from app.agent.nodes.general import error_recovery_node, reset_state, generate_output_message
 from app.agent.nodes.waiting import wait_user_input_node, resume_router
 
 graph = StateGraph(AgentState)

@@ -146,9 +146,10 @@ STRICT OUTPUT CONTRACT:
 - Each item = ONE solution.
 - NEVER output multiple JSON objects concatenated.
 - NEVER output markdown (no ```).
-- NEVER output explanations or extra text.
+- NEVER output explanations or extra text — BEFORE or AFTER the JSON.
 - The response MUST start with "[" and end with "]".
 - The JSON must be directly parsable with json.loads().
+- OUTPUT NOTHING AFTER THE CLOSING "]". No comments, no questions, no follow-ups.
 
 --------------------------------------------------
 
@@ -182,8 +183,9 @@ EXTRA RULES:
 
 - Extract ONLY explicit information.
 - NEVER infer missing details.
-- Remove empty fields entirely.
-- If no solutions exist, return [].
+- Remove empty fields entirely — including empty objects {{}} and empty arrays [].
+- A solution with no entries in "indexes_to_change" is NOT a valid solution. Omit it entirely.
+- If no valid solutions exist, return [].
 - Inside "indexes_to_change" NEVER put a list as 'value' if type is "increase" or "decrease".
 - Inside "indexes_to_change" NEVER put a single number as 'value' if type is "range".
 
@@ -196,10 +198,11 @@ Before producing the final answer:
 1) Verify the output is valid JSON.
 2) Verify the output is a list.
 3) Verify it begins with "[" and ends with "]".
-4) Verify there is NO text outside the JSON.
-5) Verify no empty fields exist.
+4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
+5) Verify no empty fields, empty objects, or empty arrays exist.
+6) Verify every solution has at least one entry in "indexes_to_change".
 
-Only after validation, output the JSON.
+Only after passing ALL checks, output the JSON and then STOP.
 
 --------------------------------------------------
 

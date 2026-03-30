@@ -98,7 +98,7 @@ async def run_agent_endpoint(
             return AgentResponse(
                 response=response_text,
                 session_id=key,
-                active_context=final_state.get_active_context_string()
+                active_context=state.get_active_context_string()
             )
 
         except Exception as e:
@@ -107,7 +107,7 @@ async def run_agent_endpoint(
             return AgentResponse(
                 response=str(e),
                 session_id=key,
-                active_context=final_state.get_active_context_string()
+                active_context=state.get_active_context_string()
             )
     except HTTPException:
         raise

@@ -7,25 +7,56 @@ from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_scenario_data
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
+from app.utils.error_codes import get_error_message, ErrorCode
+
 
 logger = logging.getLogger(__name__)
+
+def assert_active_proposal(state: AgentState) -> Command:
+    logger.info("Checking if there is an active proposal")
+    state.add_trace("node_execution", node="assert_active_proposal")
+
+    if state.cognitive.active_context_type == "proposal":
+        state.resume_nome = {}
+        return Command(update=state, goto="extract_scenario")
+
+    # TODO: when multi-action is implemented remove this resume, keep only output message
+    logger.info("No active prposal, asking user to activate it")
+    state.resume_nome = {
+        "node": "scenario_extraction",
+        "subgraph": Command.PARENT
+    }
+
+    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT, "English")]
+    state.cognitive.additional_output_information = [
+        f"Active contex: {state.get_active_context_string()}",
+        state.cognitive.allowed_operations
+    ]
+    if state.cognitive.active_context_type == "problem":
+        if state.cognitive.available_entries:
+            available_proposals = state.cognitive.available_entries["connections_dict"]["problem_to_proposals"][state.cognitive.active_context[0]]
+            state.cognitive.additional_output_information.append(
+                "Suggested proposals, considering the active problem: " + ", ".join(available_proposals) 
+            )
+
+    return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
 def extract_scenario(state: AgentState) -> AgentState:
     logger.info("Extracting scenario from reasoning context")
     answer = extract_scenario_data(state.get_reasoning_context(),
-                                state.cognitive.editable_indexes)   
+                                state.cognitive.editable_indexes)
+    logger.info(f"Chatbot answer: {answer}")   
 
     assert "Error connecting to chatbot" not in answer
     
-    #TODO: check if it reasonable
-
     scenarios = json.loads(answer)       
     extracted_all_scenario = True
-    required_fileds = [f for f, v in state.cognitive.scenario_info_to_extract.items() if v["required"]]
+
+    required_fields = [f for f, v in vars(state.cognitive.scenario_info_to_extract).items() if v.required]
     validated_scenarios = {}
     validation_errors = []
     for scenario in scenarios:
-        if not all(elem in scenario for elem in required_fileds):    
+        if not all(elem in scenario for elem in required_fields):    
             extracted_all_scenario = False
             break
 
@@ -40,21 +71,26 @@ def extract_scenario(state: AgentState) -> AgentState:
                     if value["type"] == "range":
                         current_val_min = value["value"][0]
                         current_val_max = value["value"][1]
-                        if not (current_val_min <= current_val_min and current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            validation_errors.append(f"The range [{current_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
+                        # Bug fix: was checking current_val_min <= current_val_min (always True)
+                        if not (min_val <= current_val_min and current_val_max <= max_val and (current_val_max - min_val) % step == 0):
+                            validation_errors.append(
+                                f"The range [{current_val_min}-{current_val_max}] is not valid for index {key}. "
+                                f"Please define an interval within [{min_val}-{max_val}] with step {step} "
+                            )
                         else:
                             validated_scenarios[scenario['title']].append({key: [current_val_min, current_val_max]})
                     else:
                         base_val_min = state.cognitive.editable_indexes[key]["loc"]
                         base_val_max = base_val_min + state.cognitive.editable_indexes[key]["scale"]
                         if value["type"] == "increase":
-                            increase_val = value["value"]
-                            current_val_max = base_val_max + increase_val
+                            current_val_max = base_val_max + value["value"]
                         else:
-                            decrease_val = value["value"]
-                            current_val_max = base_val_max - decrease_val
+                            current_val_max = base_val_max - value["value"]
                         if not (current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            validation_errors.append(f"The range [{base_val_min}-{current_val_max}] is not valid for index {key}. Please define an interval within [{min_val}-{max_val}] with step {step} ")
+                            validation_errors.append(
+                                f"The range [{base_val_min}-{current_val_max}] is not valid for index {key}. "
+                                f"Please define an interval within [{min_val}-{max_val}] with step {step} "
+                            )
                         else:
                             validated_scenarios[scenario['title']].append({key: [base_val_min, current_val_max]})
                 except Exception as e:
@@ -62,19 +98,30 @@ def extract_scenario(state: AgentState) -> AgentState:
     
     if not extracted_all_scenario:
         state.cognitive.extracted_all_scenario = False
-        state.cognitive.validation_errors =  f""""Not all scenarios include the required elements ({', '.join(required_fileds)}).\nExtracted info"""
+        state.cognitive.validation_errors = (
+            f"Not all scenarios include the required elements ({', '.join(required_fields)}).\nExtracted info"
+        )
         state.cognitive.scenarios_to_generate = None
+        state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
         return state
-    if not len(validation_errors):
+
+    if not validation_errors:
         state.cognitive.extracted_all_scenario = True
         state.cognitive.validation_errors = ""
         state.cognitive.scenarios_to_generate = validated_scenarios
     else:
         state.cognitive.extracted_all_scenario = False
-        state.cognitive.validation_errors = "The following errors were dected for the scenarios you defined:\n" + "\n- ".join(validation_errors) 
+        state.cognitive.validation_errors = (
+            "The following errors were detected for the scenarios you defined:\n- " + "\n- ".join(validation_errors)
+        )
+        state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
         state.cognitive.scenarios_to_generate = None
 
-    logger.info(f"Extracted scenarios: {state.cognitive.scenarios_to_generate}, extracted_all_scenario: {state.cognitive.extracted_all_scenario}, validation_errors: {state.cognitive.validation_errors}")
+    logger.info(
+        f"Extracted scenarios: {state.cognitive.scenarios_to_generate}, "
+        f"extracted_all_scenario: {state.cognitive.extracted_all_scenario}, "
+        f"validation_errors: {state.cognitive.validation_errors}"
+    )
 
     return state
 

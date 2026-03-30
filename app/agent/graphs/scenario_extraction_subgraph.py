@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph
 
-from app.agent.nodes.scenario import extract_scenario_node, parse_confirmation_node
+from app.agent.nodes.scenario import extract_scenario_node, parse_confirmation_node, assert_active_proposal
 from app.agent.state import AgentState
 from app.agent.graphs.utils import add_safe_node
 
@@ -12,13 +12,14 @@ def scenario_entry_router(state: AgentState):
     if state.waiting_for == AgentState.WaitingFor.SCENARIO_CONFIRMATION:
         return "parse_scenario_confirmation"
     # Default (including SCENARIO_INPUT and first entry)
-    return "extract_scenario"
+    return "assert_active_proposal"
 
 # ---- Build subgraph
 
 graph = StateGraph(AgentState)
 
 graph.add_node("scenario_entry_router", lambda s: s)
+add_safe_node(graph, "assert_active_proposal", assert_active_proposal)
 add_safe_node(graph, "extract_scenario", extract_scenario_node)
 add_safe_node(graph, "parse_scenario_confirmation", parse_confirmation_node)
 
@@ -29,7 +30,7 @@ graph.add_conditional_edges(
     scenario_entry_router,
     {
         "parse_scenario_confirmation": "parse_scenario_confirmation",
-        "extract_scenario": "extract_scenario",
+        "assert_active_proposal": "assert_active_proposal",
     }
 )
 
