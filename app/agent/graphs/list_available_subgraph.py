@@ -12,7 +12,6 @@ add_safe_node(graph, "generate_answer", generate_answer)
 
 graph.add_edge("assess_list", "get_list")
 graph.add_edge("get_list", "generate_answer")
-graph.add_edge("generate_answer", END)
 
 
 graph.set_entry_point("assess_list")

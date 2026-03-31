@@ -91,77 +91,6 @@ Expert answers:
     return llm_interaction(prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
-# LISTING AVAILABLE MESSAGE
-# ---------------------------------------------------------------------------
-
-def get_list_message(partial_lists):
-    prompt = f"""
-SYSTEM ROLE:
-You are a deterministic text generator.
-
---------------------------------------------------
-
-TASK:
-
-Generate a sentence or a short text that summarizes the content of a dictionary.
-
-The dictionary contains up to three keys:
-- "problems"
-- "proposals"
-- "scenarios"
-
-Each key maps to a list of strings.
-
---------------------------------------------------
-
-STRICT RULES:
-
-- Do NOT add explanations or extra text.
-- Respect this order: problems → proposals → scenarios.
-- Only include keys that exist AND have at least one element.
-- Use correct singular/plural grammar:
-    - 1 → "one problem"
-    - 2+ → "two problems", etc.
-- Start the sentence with a something like: "On the platform there is", "I have found", "There is". Use plural forms (e.g. "there are") if needed.
-- If there are many elments prefer bullet points, otherwise try to build a single sentence.
-
---------------------------------------------------
-
-EXAMPLES:
-
-Input:
-{{"problems": ["P1"]}}
-Output:
-On the platform there is one problem: P1.
-
-Input:
-{{"problems": ["P1"], "scenarios": ["s0", "s1"]}}
-Output:
-On the platform there are one problem (P1) and two scenarios (s0 and s1).
-
-Input:
-{{"proposals": ["p0"]}}
-Output:
-On the platform there is one proposal: p0.
-
-Input:
-{{"problems": ["P1"], "proposals": ["p0"], "scenarios": ["s0", "s1"]}}
-Output:
-On the platform there are one problem (P1), one proposal (p0) and two scenarios (s0 and s1).
-
-Input:
-{{"problems": ["P1"], "proposals": ["p0", "p1"], "scenarios": ["s0", "s1", "s2", "s3","s4"]}}
-Output:
-On the platform there are:\n-one problem: P1,\n-two proposals: p0, p1,\n-5 scenarios: s0, s1, s2, s3, s4.
-
---------------------------------------------------
-
-INPUT:
-{partial_lists}
-"""
-    return llm_interaction(prompt, lightweight_llm=True)
-
-# ---------------------------------------------------------------------------
 # ANSWER GENERATION
 # ---------------------------------------------------------------------------
 
@@ -192,13 +121,13 @@ The following supplementary data was collected from the agent state (may include
 {question}
 
 ## Agent Messages
-The following messages were collected during the process of answering the question. They may include partial answers, intermediate state, errors, or tool outputs:
+The following messages represent the core findings of the answering process. **Every message below must be reflected in your final answer**, rephrased in natural language as needed:
 {formatted_messages}
 {additional_context_section}
 ## Instructions
-- Analyze all agent messages and any additional context provided, extracting what is relevant to the user's question.
-- Prioritize information from **Agent Messages** as the primary source; use **Additional Context** only to enrich or clarify the answer.
-- If some messages contain errors or failures, acknowledge them only if they materially affect the final answer — otherwise, discard them silently.
+- **Your answer must incorporate all Agent Messages.** Rephrase them naturally, but do not omit any — even partial or uncertain findings must be represented.
+- If a message contains an error or failure that is relevant to the user's question, surface it clearly. If it is purely internal/technical and irrelevant to the user, you may rephrase it in user-friendly terms rather than silently dropping it.
+- Use **Additional Context** only to enrich, clarify, or provide background for the Agent Messages — never as a replacement for them.
 - If the available information is incomplete, provide the best possible answer from what is available and clearly state what could not be determined.
 - Do not expose internal agent names, node names, workflow states, field names, or any system implementation details in your response.
 - Write your response in the following language: **{language}**

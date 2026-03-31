@@ -5,7 +5,6 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import assess_what_to_list
-from app.utils.llm_text_generation import get_list_message, translate
 
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import get_problems
@@ -47,11 +46,10 @@ def assess_list(state: AgentState) -> AgentState:
         subject = None
 
     if not len(to_list):
-        state.add_assistant_message(
-            get_error_message(ErrorCode.NOTHING_TO_LIST),
-            get_error_message(ErrorCode.NOTHING_TO_LIST, state.user_lang)
-        )
-        return Command(update=state, goto=END)
+        state.cognitive.messages_to_include = [get_error_message(ErrorCode.NOTHING_TO_LIST)]
+        state.cognitive.additional_output_information = []
+
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
     state.cognitive.elements_to_list = to_list
     state.cognitive.filter_list_by = subject  # store the extracted subject
@@ -112,18 +110,20 @@ def get_list(state: AgentState) -> AgentState:
 
     return state
 
-def generate_answer(state: AgentState) -> AgentState:
-    answer = get_list_message(state.cognitive.partial_list)
-    state.cognitive.partial_list = {}
-    state.cognitive.elements_to_list = []
+def generate_answer(state: AgentState) -> Command:
 
-    assert "Error connecting to chatbot" not in answer
-
-    logger.info(f"Generated answer: {answer}")
-    state.add_trace("node_execution", node="generate_answer", data={"retrieved": answer})
+    state.add_trace("node_execution", node="generate_answer")
 
     #TODO: handle this better for when using localized names for elements
-    state.add_assistant_message(answer, translate(answer, "English", state.user_lang))
+    state.cognitive.messages_to_include = [
+        f"For the active context the available items are {state.cognitive.partial_list}",
+    ]
+    state.cognitive.additional_output_information = [
+        f"Strict output order (if present): problems → proposals → scenarios"
+        f"Active context: {state.get_active_context_string()}",
+        f"Items relationshipts: {state.cognitive.available_entries["connections_dict"]}"
+    ]
 
-    return state
+    return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+
     
