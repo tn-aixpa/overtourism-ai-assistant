@@ -83,7 +83,7 @@ function App() {
       const data = await res.json();
 
       if (data.session_id) setSessionId(data.session_id);
-      if (data.active_context) setActiveContext(data.active_context);
+      setActiveContext(data.active_context || "-");
 
       setMessages([
         ...newMessages,
