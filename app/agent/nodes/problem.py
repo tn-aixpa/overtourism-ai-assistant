@@ -13,9 +13,9 @@ from app.tools.backend_tools import create_problem_instance
 logger = logging.getLogger(__name__)
 
 
-def deactive_current_context(state: AgentState) -> Command:
+def deactivate_current_context(state: AgentState) -> Command:
     logger.info("If there is an active context remove it")
-    state.add_trace("node_execution", node="deactive_current_context")
+    state.add_trace("node_execution", node="deactivate_current_context")
 
     if state.cognitive.active_context_type:
         state.reset_state()
@@ -100,7 +100,7 @@ def parse_confirmation_node(state: AgentState):
 
     state.waiting_for = None
     state.user_input = None
-    return Command(update=state, goto="deactive_current_context", graph=Command.PARENT)
+    return Command(update=state, goto="deactivate_current_context", graph=Command.PARENT)
 
 def create_new_problem_instance_node(state: AgentState) -> AgentState:
     state.add_trace("node_execution", node="create_new_problem_instance_node")

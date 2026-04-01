@@ -73,7 +73,6 @@ async def run_agent_endpoint(
         save_state(key, final_state)
 
         active_context = final_state.get_active_context_string()
-        logger.info(f"AAAAAAA {active_context}")
         last_msg = final_state.get_last_message()
         response_text = (
             last_msg.content_localized

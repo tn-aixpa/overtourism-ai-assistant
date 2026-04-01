@@ -141,7 +141,6 @@ def create_proposal_node(state: AgentState) -> AgentState:
     extracted_data = get_RelatedScenario.invoke({
         "scenario_ids": related_scenarios_ids,
     })
-    logger.info(f"AAAAAA: {extracted_data}")
     related_scenarios = extracted_data
     
     payload = {
