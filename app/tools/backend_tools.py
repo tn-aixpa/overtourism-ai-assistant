@@ -4,6 +4,7 @@ import logging
 import json
 
 from app.utils.data import parse_data, parse_editable_indexes
+from app.config import BASE_SCENARIO_ID
 
 logger = logging.getLogger(__name__)
 BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
@@ -70,7 +71,8 @@ def get_problems():
     return {
         "all_ids": all_ids,
         "ids_dict": ids_dict,
-        "connections_dict": connections_dict
+        "connections_dict": connections_dict,
+        "names_dict": names_dict
     }
 
 @tool
@@ -126,6 +128,60 @@ def get_data_from_context(context_type, context, relations, extract_editable):
         "editable_indexes": editable_indexes
     }
 
+@tool
+def create_proposal_instance(
+    problem_id: str,
+    payload: dict
+) -> dict:
+    """
+    Create a new proposal instance for a given problem.
+
+    Args:
+        problem_id: The ID of the problem this proposal belongs to.
+        payload: Dictionary of other user defined data
+
+    Returns:
+        A dict with a confirmation message, e.g. {"message": "Scenario saved!"}
+    """
+
+    logger.info("Entered tool create_proposal_instance")
+    url = f"{BACKEND_URL}proposals/"
+
+    params = {
+        "problem_id": problem_id,
+    }
+
+    headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+    # curl for direct reproduction
+    logger.info("Outgoing create_proposal_instance request:")
+    query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+    curl_command = f"""
+curl -X POST "{url}?{query_string}" \\
+-H "accept: application/json" \\
+-H "Content-Type: application/json" \\
+-d '{json.dumps(payload)}'
+"""
+    logger.info(curl_command)
+
+    # --- actual request ---
+    response = requests.post(url, headers=headers, params=params, json=payload)
+
+    # Log response for comparison
+    logger.info(f"Response status: {response.status_code}")
+    try:
+        logger.info(f"Response body: {response.json()}")
+    except Exception:
+        logger.info(f"Response text: {response.text}")
+
+    response.raise_for_status()
+
+    return response.json()
+
 
 @tool
 def create_scenario_instance(
@@ -137,7 +193,7 @@ def create_scenario_instance(
     proposal_id: str | None = None,
 ) -> dict:
     """
-    Create a new scenario instance for a given problem.
+    Create a new scenario instance for a given proposal.
 
     Args:
         problem_id: The ID of the problem this scenario belongs to.
@@ -150,9 +206,10 @@ def create_scenario_instance(
     Returns:
         A dict with a confirmation message, e.g. {"message": "Scenario saved!"}
     """
+    
     logger.info("Entered tool create_scenario_instance")
-    BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else
-    url = f"{BACKEND_URL}scenarios/{BASE_SCENARIO_ID}"
+    
+    url = f"{BACKEND_URL}scenarios/{BASE_SCENARIO_ID}" #TODO: pass correct scenario id
 
     params = {
         "problem_id": problem_id,
@@ -197,3 +254,43 @@ curl -X POST "{url}?{query_string}" \\
     response.raise_for_status()
 
     return response.json()
+
+
+@tool
+def get_RelatedScenario(scenario_ids):
+    """Fetch scenario details from the API."""
+    url = f"{BACKEND_URL}problems"
+    headers = {
+        "accept": "application/json"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    api_response = response.json()
+
+    # Build a lookup dict of scenario_id -> scenario data (first occurrence wins)
+    scenario_lookup = {}
+    for problem in api_response.get("data", []):
+        for proposal in problem.get("proposals", []):
+            for scenario in proposal.get("related_scenarios", []):
+                s_id = scenario["scenario_id"]
+                if s_id not in scenario_lookup:
+                    scenario_lookup[s_id] = {
+                        "scenario_name": scenario["scenario_name"],
+                        "scenario_description": scenario["scenario_description"],
+                        "index_diffs": scenario["index_diffs"]
+                    }
+
+    related_scenarios = []
+    seen_ids = set()
+    for s_id in scenario_ids:
+        if s_id in seen_ids:
+            continue
+        seen_ids.add(s_id)
+        if s_id in scenario_lookup:
+            related_scenarios.append({
+                "scenario_id": s_id,
+                **scenario_lookup[s_id]
+            })
+
+    return related_scenarios

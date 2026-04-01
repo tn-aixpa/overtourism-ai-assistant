@@ -31,6 +31,14 @@ def _wait_instructions(state: AgentState):
             "The problem was successfully created. Do you want to create scenarios for this problem? "
             "If so, do you have specific scenarios in mind or would you like the system to generate some based on the problem information?"
         ), []
+    
+    if waiting_for == AgentState.WaitingFor.PROPOSAL_INPUT:
+        instructions = state.cognitive.messages_to_include[0]
+        return instructions, []
+
+    if waiting_for == AgentState.WaitingFor.PROPOSAL_CONFIRMATION:
+        formatted_proposal = state.cognitive.extracted_proposal_info.format_fields()
+        return f"Do you want to proceed with the following proposal?\n- {formatted_proposal}", []
 
     if waiting_for == AgentState.WaitingFor.SCENARIO_INPUT:
         prefix = (state.cognitive.validation_errors + "\n") if state.cognitive.validation_errors else ""
@@ -41,7 +49,7 @@ def _wait_instructions(state: AgentState):
         return instructions, additional_info
 
     if waiting_for == AgentState.WaitingFor.SCENARIO_CONFIRMATION:
-        items = "\n- ".join(str(x) for x in (state.cognitive.scenarios_to_generate or []))
+        items = "\n- ".join(x.format_fields() for x in state.cognitive.scenarios_to_generate)
         return f"Do you want to proceed with the following scenarios?\n- {items}", []
 
     return "Please provide more details.", []

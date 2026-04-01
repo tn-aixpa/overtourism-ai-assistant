@@ -5,11 +5,12 @@ from app.agent.graphs import (
     intent_subgraph,
     interaction_subgraph,
     problem_subgraph,
+    new_proposal_subgraph,
     scenario_extraction_subgraph,
     list_available_subgraph,
     context_subgraph
 )
-from app.agent.nodes.general import error_recovery_node, reset_state, generate_output_message
+from app.agent.nodes.general import error_recovery_node, generate_output_message
 from app.agent.nodes.waiting import wait_user_input_node, resume_router
 
 graph = StateGraph(AgentState)
@@ -21,9 +22,9 @@ graph.add_node("intent", intent_subgraph)
 graph.add_node("list_available", list_available_subgraph)
 graph.add_node("interaction", interaction_subgraph)
 graph.add_node("problem", problem_subgraph)
+graph.add_node("new_proposal", new_proposal_subgraph)
 graph.add_node("scenario_extraction", scenario_extraction_subgraph)
 graph.add_node("error", error_recovery_node )
-graph.add_node("reset_state", reset_state)
 graph.add_node("generate_output_message", generate_output_message)
 
 graph.add_conditional_edges(

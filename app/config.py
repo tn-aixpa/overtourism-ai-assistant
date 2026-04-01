@@ -14,3 +14,5 @@ ALLOWED_OPERATIONS = """
 - With active proposals you can interact, manage or create new scenarios.
 - With active scenarios you can explore results, decide to compare it another scenario, run new simulation modifying parameters.
 """
+
+BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else

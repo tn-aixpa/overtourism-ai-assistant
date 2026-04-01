@@ -2,6 +2,7 @@ from typing import List
 from app.agent. state import ConversationMessage
 
 from app.utils.llm import llm_interaction, format_messages, DEBUG
+from app.utils.backend_integration_classes import ProposalInfoSchema
 
 # ---------------------------------------------------------------------------
 # PROBLEM DATA EXTRACTION
@@ -116,6 +117,84 @@ MESSAGE HISTORY:
 
     
     return llm_interaction(prompt, lightweight_llm=False)
+
+# ---------------------------------------------------------------------------
+# PROPOSAL DATA EXTRACTION
+# ---------------------------------------------------------------------------
+def extract_proposal_data(messages: List[ConversationMessage], schema: ProposalInfoSchema, available_scenarios, attachment_list) -> str:
+
+    field_specs = schema.format_structure()
+    attachments = "\n".join(f"- {p}" for p in attachment_list) if attachment_list else "No attachments provided."
+
+    prompt = f"""
+
+SYSTEM ROLE:
+
+You are an expert analyst helping to extract structured information about a proposal from a conversation.
+
+--------------------------------------------------
+
+TASK:
+
+Analyze the conversation history and extract the fields listed below. 
+Only extract information that is clearly stated or strongly implied by the conversation — do not invent or hallucinate details.
+
+## Fields to extract
+
+{field_specs}
+
+## Available scenarios
+
+The `connected_scenarios` field must only reference IDs from this list:
+
+{available_scenarios}
+
+## Attachments
+
+The user has provided the following attachments (file paths or URLs). Include relevant ones in `related_data`:
+
+{attachments}
+
+## Output format
+
+Respond ONLY with a valid JSON object. Do not include any explanation or markdown fences. Example structure:
+
+{{
+  "title": "string or null",
+  "description": "string or null",
+  "related_data": ["path/or/url", ...],
+  "context_conditions": "string or null",
+  "potential_impact": "string or null",
+  "connected_scenarios": ["scenario_id", ...]
+}}
+
+If a field cannot be determined from the conversation, set it to null (or [] for list fields).
+
+--------------------------------------------------
+
+SELF-CHECK (MANDATORY BEFORE OUTPUT):
+
+Before producing the final answer:
+
+1) Verify the output is valid JSON.
+2) Verify the output is a list.
+3) Verify it begins with "[" and ends with "]".
+4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
+5) Verify no empty fields, empty objects, or empty arrays exist.
+6) Verify every solution has at least one entry in "indexes_to_change".
+7) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
+
+Only after passing ALL checks, output the JSON and then STOP.
+
+--------------------------------------------------
+
+MESSAGE HISTORY:
+
+{format_messages(messages)}
+"""
+
+    return llm_interaction(prompt, lightweight_llm=False)
+
 
 # ---------------------------------------------------------------------------
 # SCENARIO DATA EXTRACTION

@@ -9,7 +9,7 @@ from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import create_scenario_instance
-from app.utils.backend_integration_classes import ScenarioInfoSchema
+from app.utils.backend_integration_classes import ScenarioInfoSchema, ScenarioInfo, build_schema_data
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +52,9 @@ def extract_scenario(state: AgentState) -> AgentState:
     
     scenarios = parse_llm_json(answer)       
     extracted_all_scenario = True
+    schema = ScenarioInfoSchema.default()
 
-    validated_scenarios: list[ScenarioInfoSchema] = []
+    validated_scenarios: list[ScenarioInfo] = []
     validation_errors = []
     for scenario in scenarios:
         # validate indexes
@@ -92,12 +93,14 @@ def extract_scenario(state: AgentState) -> AgentState:
                     validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid - {e}.")
 
             try:
+                scenario_data = {
+                    "title": scenario.get("title"),
+                    "description": scenario.get("description"),
+                    "indexes_to_change": validated_indexes,
+                }
+
                 validated_scenarios.append(
-                    ScenarioInfoSchema(
-                        title=scenario["title"],
-                        description=scenario["description"],
-                        indexes_to_change=validated_indexes,
-                    )
+                    build_schema_data(schema, scenario_data, ScenarioInfo)
                 )
             except:
                 extracted_all_scenario = False
@@ -155,10 +158,6 @@ def parse_confirmation_node(state: AgentState):
 
     state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
 
-    if state.cognitive.next_action == "CONFIRM_SCENARIO":
-        state.waiting_for = None
-        state.user_input = None
-        return Command(update=state, goto="run_scenario", graph="scenario_extraction")
     
     routes = {
         "EDIT_SCENARIO": "extract_scenario",
@@ -170,9 +169,23 @@ def parse_confirmation_node(state: AgentState):
         state.user_input = None
         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
+    if state.cognitive.next_action == "CONFIRM_SCENARIO":
+        state.waiting_for = None
+        state.user_input = None
+        return Command(update=state, goto="run_scenario", graph="scenario_extraction")
+    
+    if state.cognitive.next_action == "CANCEL_SCENARIO":
+        state.waiting_for = None
+        state.user_input = None
+        state.active_workflow = None
+        state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+        state.cognitive.additional_output_information = []
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+    
+    # assume EDIT_SCENARIO
     state.waiting_for = None
     state.user_input = None
-    return Command(update=state, goto=routes[state.cognitive.next_action])
+    return Command(update=state, goto="extract_scenario")
 
 
 def run_scenario_node(state: AgentState) -> AgentState:
@@ -207,6 +220,6 @@ def run_scenario_node(state: AgentState) -> AgentState:
         state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_SCENARIO, "English")]
         state.cognitive.additional_output_information = []
 
-        #TODO: decide if we want to activate this problem or ask the user if he wants to activate it
+        #TODO: decide if we want to activate this scenario or ask the user if he wants to activate it
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)

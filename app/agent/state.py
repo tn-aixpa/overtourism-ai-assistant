@@ -1,4 +1,5 @@
 
+import dataclasses
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -6,7 +7,14 @@ from enum import StrEnum, Enum
 import json
 
 from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, ALLOWED_OPERATIONS
-from app.utils.backend_integration_classes import ProblemInfoSchema, ScenarioInfoSchema
+from app.utils.backend_integration_classes import (
+    ProblemInfoSchema,
+    ProblemInfo,
+    ProposalInfoSchema,
+    ProposalInfo,
+    ScenarioInfoSchema,
+    ScenarioInfo
+)
 
 @dataclass
 class ConversationMessage:
@@ -85,16 +93,18 @@ class CognitiveState:
 
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
-
     extracted_problem_info: Dict[str, Any] = field(default_factory=dict)
     extracted_all_problem: bool = False
+
+    #Proposal context
+    proposal_info_to_extract = ProposalInfoSchema.default()
+    extracted_all_proposal: bool = False
+    extracted_proposal_info: ProposalInfo = None
 
     # Scenario context
     scenario_info_to_extract = ScenarioInfoSchema.default()
     extracted_all_scenario: bool = False
-
-    # Execution state
-    scenarios_to_generate: List[ScenarioInfoSchema] = field(default_factory=list)
+    scenarios_to_generate: List[ScenarioInfo] = field(default_factory=list)
     validation_errors: str = ""
 
     # Expert reasoning
@@ -134,6 +144,7 @@ class AgentState:
     class Workflow(StrEnum):
         INTENT = "intent"
         PROBLEM = "problem"
+        PROPOSAL_EXTRACTION = "new_proposal"
         SCENARIO_EXTRACTION = "scenario_extraction"
         INTERACTION = "interaction"
 
@@ -143,6 +154,8 @@ class AgentState:
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"
         PROBLEM_CONFIRMATION = "PROBLEM_CONFIRMATION"
+        PROPOSAL_INPUT = "PROPOSAL_INPUT"
+        PROPOSAL_CONFIRMATION = "PROPOSAL_CONFIRMATION"
         SCENARIO_PREFERENCE = "SCENARIO_PREFERENCE"
         SCENARIO_INPUT = "SCENARIO_INPUT"
         SCENARIO_CONFIRMATION = "SCENARIO_CONFIRMATION"
@@ -224,7 +237,10 @@ class AgentState:
         if isinstance(obj, Enum):
             return obj.value
 
-        if isinstance(obj, set):           # <-- add this
+        if isinstance(obj, Exception):
+            return str(obj)
+
+        if isinstance(obj, set):
             return sorted(self._serialize(i) for i in obj)
 
         if isinstance(obj, list):
@@ -233,15 +249,26 @@ class AgentState:
         if isinstance(obj, dict):
             return {k: self._serialize(v) for k, v in obj.items()}
 
-        return obj
+        # Handle any dataclass (FieldSpec, BaseSchema subclasses, etc.)
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return {
+                f.name: self._serialize(getattr(obj, f.name))
+                for f in dataclasses.fields(obj)
+            }
+
+        # Safe fallback
+        try:
+            json.dumps(obj)
+            return obj
+        except (TypeError, ValueError):
+            return repr(obj)
 
     def dump_to_file(self, filepath: str):
         """
         Dump the full AgentState to a JSON file.
         Useful for debugging, replay, or audit logs.
         """
-        raw_dict = asdict(self)
-        serialized = self._serialize(raw_dict)
+        serialized = self._serialize(self.__dict__)
 
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(serialized, f, indent=2, ensure_ascii=False)
