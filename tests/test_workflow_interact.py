@@ -50,7 +50,7 @@ def test_full_workflow_interact(agent):
     last_message = result.state.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
     assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English") and "parking" in response.lower()
 
 # def test_full_workflow_interact_italian(agent):
@@ -73,7 +73,7 @@ def test_full_workflow_interact(agent):
 #     last_message = result.state.get_last_message()
 #     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-#     assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+#     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
 #     assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "Italian") and "parcheggio" in response.lower()
 
 # ---------- TEST: COMPARE ----------
@@ -97,7 +97,7 @@ def test_full_workflow_compare(agent):
     last_message = result.state.get_last_message()
     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-    assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+    assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
     assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English")
 
 # def test_full_workflow_interact_italian(agent):
@@ -120,5 +120,5 @@ def test_full_workflow_compare(agent):
 #     last_message = result.state.get_last_message()
 #     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
 
-#     assert result.state.cognitive.next_action == "INTERACT_SCENARIO"
+#     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
 #     assert response != "" and "not able to handle this request" not in response

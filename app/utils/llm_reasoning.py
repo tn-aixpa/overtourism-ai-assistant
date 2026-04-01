@@ -3,7 +3,7 @@ from app.agent. state import ConversationMessage
 import re
 
 from app.utils.state_variables import VALID_INTENTS
-from app.utils.llm import llm_interaction, format_messages, DEBUG
+from app.utils.llm import llm_interaction, format_messages
 
 # ---------------------------------------------------------------------------
 # INTENT CLASSIFICATION
@@ -13,7 +13,7 @@ def classify_intent(message: str, history: List[ConversationMessage] = None) -> 
     """
     Classify the user's intent given the current message and optional
     conversation history.  Returns one of:
-        LIST_AVAILABLE | INTERACT_SCENARIO | CREATE_NEW_PROBLEM |
+        LIST_AVAILABLE | INTERACT_CONTEXT | CREATE_NEW_PROBLEM |
         CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO | CONTEXT_MANAGEMENT | INVALID
     """
     context = "City management and overtourism"
@@ -66,23 +66,23 @@ ACTIONS:
    Signals: "create a scenario", "run scenario", "modify scenario", "new scenario",
             "let's simulate", "what if we changed".
 
-7. INTERACT_SCENARIO
-   → User wants to analyse, explore, compare or get information about EXISTING scenarios
+7. INTERACT_CONTEXT
+   → User wants to analyse, explore, compare or get information about EXISTING scenarios, proposals
      that are already on the platform.
      Questions related to indexes, constraints belong to this action.
    Signals: "explain scenario", "what does scenario X show", "compare scenario A and B",
-            "interpret the results", "what is the most critical index".
+            "interpret the results", "what is the most critical index", "what is this problem about".
 
 8. INVALID
    → Anything unrelated to {context}, or too vague to classify into 1-7.
 
 DECISION RULES:
-- CONTEXT_MANAGEMENT vs INTERACT_SCENARIO: CONTEXT_MANAGEMENT is about selecting/focusing on an item as context.
-  INTERACT_SCENARIO is about asking analytical questions about it. "Let's work on problem X" → CONTEXT_MANAGEMENT.
-  "What does scenario X show?" → INTERACT_SCENARIO.
+- CONTEXT_MANAGEMENT vs INTERACT_CONTEXT: CONTEXT_MANAGEMENT is about selecting/focusing on an item as context.
+  INTERACT_CONTEXT is about asking analytical questions about it. "Let's work on problem X" → CONTEXT_MANAGEMENT.
+  "What does scenario X show?" → INTERACT_CONTEXT.
 - CONTEXT_MANAGEMENT vs LIST_AVAILABLE: "Show me the problems, then let's focus on the first one" → CONTEXT_MANAGEMENT
   (the selection intent dominates). A pure listing request with no selection intent → LIST_AVAILABLE.
-- CREATE_NEW_SCENARIO vs INTERACT_SCENARIO: if the scenario does NOT exist yet → CREATE.
+- CREATE_NEW_SCENARIO vs INTERACT_CONTEXT: if the scenario does NOT exist yet → CREATE.
   If the scenario already exists and the user just wants to discuss/analyse it → INTERACT.
 - Generic one-word replies ("yes", "ok", "sure") with no prior context → INVALID.
 - Generic one-word replies that follow a CREATE_NEW_PROBLEM or CREATE_NEW_SCENARIO assistant prompt
@@ -103,8 +103,8 @@ User: "I want to create a new proposal to solve the problem" → CREATE_NEW_PROP
 User: "Let's define a new proposal" → CREATE_NEW_PROPOSAL
 User: "Create a scenario where we reduce tourist bus permits by 20%" → CREATE_NEW_SCENARIO
 User: "Run a new scenario with stricter entry limits" → CREATE_NEW_SCENARIO
-User: "What does scenario S3 show about hotel occupancy?" → INTERACT_SCENARIO
-User: "Compare scenario A and scenario B" → INTERACT_SCENARIO
+User: "What does scenario S3 show about hotel occupancy?" → INTERACT_CONTEXT
+User: "Compare scenario A and scenario B" → INTERACT_CONTEXT
 User: "Tell me a joke" → INVALID
 User: "Yes" (no history) → INVALID
 
@@ -154,10 +154,6 @@ Question:
 """
 
     answer = llm_interaction(prompt)
-
-    if DEBUG:
-        with open("logs/debug_select_role.txt", "a") as f:
-            f.write(f"Q: {question}\nA: {answer}\n")
 
     return answer
 

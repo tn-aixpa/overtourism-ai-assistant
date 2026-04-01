@@ -332,7 +332,7 @@
             <mxPoint x="543.5" y="640" as="sourcePoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="pevAOEmnro0O_PZKUrTG-76" parent="1" style="rounded=1;arcSize=20;strokeWidth=2;strokeColor=light-dark(#FFB570,#FFB570);" value="interact_scenario" vertex="1">
+        <mxCell id="pevAOEmnro0O_PZKUrTG-76" parent="1" style="rounded=1;arcSize=20;strokeWidth=2;strokeColor=light-dark(#FFB570,#FFB570);" value="INTERACT_CONTEXT" vertex="1">
           <mxGeometry height="49" width="152" x="470" y="566" as="geometry" />
         </mxCell>
         <mxCell id="pevAOEmnro0O_PZKUrTG-77" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;strokeColor=light-dark(#FFB570,#FFB570);" target="pevAOEmnro0O_PZKUrTG-81">

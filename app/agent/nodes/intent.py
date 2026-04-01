@@ -26,7 +26,7 @@ def route_from_intent(state: AgentState):
         logger.error("Intent classified as INVALID → raising error")
         raise GraphError(ErrorCode.INVALID_REQUEST)
 
-    if action == "INTERACT_SCENARIO":
+    if action == "INTERACT_CONTEXT":
         return Command(update=state, goto="interaction", graph=Command.PARENT)
 
     if action == "CREATE_NEW_PROBLEM":

@@ -1,4 +1,4 @@
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 
 from app.agent.graphs.utils import add_safe_node
 from app.agent.state import AgentState

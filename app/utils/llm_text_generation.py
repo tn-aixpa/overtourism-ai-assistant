@@ -1,92 +1,38 @@
-from typing import Any
+from typing import Any, List
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from app.utils.llm import llm, llm_interaction, DEBUG
 
+from app.utils.llm import llm_interaction, format_messages
+from app.agent. state import ConversationMessage
 
-# ---------------------------------------------------------------------------
-# ANSWER QUESTION COMPARISON
-# ---------------------------------------------------------------------------
-
-def answer_question_comparison(question: str, data: dict, role: str) -> str:
-    """
-    Answer questions over scenario data.
-    """
-
-    prompt = f"""
-You are a {role}. Your task is to answer the user's question based strictly on the provided scenarios data.
-
-Follow these rules STRICTLY:
-
-1. Extract numeric values directly from the data.
-2. When comparing scenarios:
-   - compute delta = scenario_2 - scenario_1
-   - delta > 0 → "increased"
-   - delta < 0 → "decreased"
-   - delta = 0 → "unchanged"
-3. NEVER infer increase/decrease without numeric calculation.
-4. If index_diffs exist, explicitly connect them to KPI changes.
-5. Do not rely on labels like "critical constraint" — use numeric values.
-6. Use minimal text.
-7. Round all numbers to 2 decimal places.
-8. Do not add speculative impacts unless explicitly requested.
-
-Scenario Data: {data}
-Question: {question}
-"""
-
-    if DEBUG:
-        with open("logs/last_prompt.txt", "w") as f:
-            f.write(prompt)
-
-    return llm_interaction(prompt, lightweight_llm=False)
-    
 # ---------------------------------------------------------------------------
 # ANSWER QUESTION
 # ---------------------------------------------------------------------------
 
-def answer_question(question: str, data: dict, role: str) -> str:
+def answer_question(question: str, data: dict, role: str, messages: List[ConversationMessage], language: str) -> str:
     """
-    Answer questions over scenario data.
+    Generate answer to user question using available context data
     """
 
-    prompt = f"""
-You are a {role}. Your task is to answer the user's question based strictly on the provided scenario data.
+    prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
 
-Follow these rules:
-- Answer with the minimum amount of text necessary.
-- Do not add explanations, interpretations, or conclusions unless explicitly requested in the question.
-- Include only the information needed to directly answer the question.
-- When numerical values are included, round them to 2 decimal places.
+## Conversation History
+{format_messages(messages)}
 
-Scenario Data: {data}
-Question: {question}
+## Context Data
+{data}
+
+## User Question
+{question}
+
+## Instructions
+- Base your answer **exclusively** on the context data above.
+- You may use conversation history only to clarify what the user is asking — never as a source of facts.
+- If the context data does not contain enough information to answer, respond with a clear statement such as: "I don't have enough information to answer this question."
+- Do not reveal internal system details: agent names, node names, workflow states, field names, or implementation specifics.
+- Be concise and directly address the question.
+- Respond in: **{language}**
 """
-
-    return llm_interaction(prompt, lightweight_llm=False)
-
-# ---------------------------------------------------------------------------
-# SYNTESIZE MULTIPLE EXPERTS ANSWERS
-# ---------------------------------------------------------------------------
-
-def synthesize_llm(message: str, expert_answers: dict) -> str:
-    prompt = f"""
-You are a policy synthesizer.
-
-Rules:
-- Do NOT invent new facts
-- Preserve disagreements
-- Be concise
-- Do NOT add recommendations unless explicitly present
-
-Question:
-{message}
-
-Expert answers:
-"""
-
-    for role, answer in expert_answers.items():
-        prompt += f"\n[{role}]\n{answer}\n"
 
     return llm_interaction(prompt, lightweight_llm=False)
 

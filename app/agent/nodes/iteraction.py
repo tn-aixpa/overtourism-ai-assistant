@@ -1,14 +1,37 @@
 import logging
+from langgraph.types import Command
+from langgraph.graph import  END
 
 from app.agent.state import AgentState
 from app.config import ALLOWED_ROLES
 from app.utils.llm_reasoning import select_role_llm
-from app.utils.llm_text_generation import answer_question, answer_question_comparison, synthesize_llm
+from app.utils.llm_text_generation import answer_question
 
-from app.utils.error_codes import ErrorCode, GraphError
-from app.utils.common import translate_from_eng
+from app.utils.error_codes import ErrorCode, get_error_message
 
 logger = logging.getLogger(__name__)
+
+def assert_active_context(state: AgentState) -> Command:
+    logger.info("Checking if there is an active context")
+    state.add_trace("node_execution", node="assert_active_context")
+
+    if state.cognitive.active_context_type:
+        return Command(update=state, goto="select_role")
+
+    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT, "English")]
+    state.cognitive.additional_output_information = [
+        f"Active contex: {state.get_active_context_string()}",
+        state.cognitive.allowed_operations
+    ]
+    if state.cognitive.active_context_type == "":
+        if state.cognitive.available_entries:
+            available_problems = state.cognitive.available_entries["ids_dict"]["problems"]
+            state.cognitive.additional_output_information.append(
+                "Available problems are: " + ", ".join(available_problems) 
+            )
+
+    return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+
 
 def select_role(state: AgentState) -> AgentState:
     # question = state.get_last_user_message().content_en
@@ -34,93 +57,31 @@ def select_role(state: AgentState) -> AgentState:
     state.cognitive.selected_roles = ["Data Analyst"]
     return state
 
-def interact_scenario(state: AgentState) -> AgentState:
-
-    # check state
-    # if len(state.cognitive.scenario_ids) == 0:
-    #     logger.error("No active scenario")
-    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No active scenario")       
-    
-    # if len(state.cognitive.scenario_ids) > 1:
-    #     logger.error("Multiple active scenarios")
-    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Select a single scenario")  
-    
-
-    # # load data if needed
-    # if state.cognitive.scenario_ids[0] not in state.cognitive.context_data:
-    #     logger.error("Data for selected scenario unavailable")
-    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "Data for selected scenario unavailable")  
+def interact_context(state: AgentState) -> AgentState:
 
     state.cognitive.expert_answers = {}
 
     # answer user question
+    state.cognitive.messages_to_include = []
+    state.cognitive.additional_output_information = []
     for role in state.cognitive.selected_roles:
-
         answer = answer_question(
             question=state.get_last_user_message().content_en,
             data=state.cognitive.context_data,
             role=role,
-        )
+            messages=state.get_reasoning_context(),
+            language=state.user_lang
+        ).strip()
         logger.info(f"Answer for role {role}: {answer}")
-        state.cognitive.expert_answers[role] = answer
+        state.cognitive.messages_to_include.append(f"{role} answered: {answer}")
     
-    if len(state.cognitive.selected_roles) == 1:
-        #TODO: check this
-        state.add_assistant_message(
-            translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
-            next(iter(state.cognitive.expert_answers.values()))
-        )
-
-    return state
-
-def compare_scenarios(state: AgentState) -> AgentState:
-
-    # check state
-    # if len(state.cognitive.scenario_ids) < 2:
-    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "There should be at least two active scenarios")  
-    
-
-    # # load data if needed
-    # unavailable = [sim for sim in state.cognitive.scenario_ids if sim not in state.cognitive.context_data]
-    # if len(unavailable):
-    #     raise GraphError(ErrorCode.INVALID_REQUEST_STATE, "No data available")  
-
-    state.cognitive.expert_answers = {}
-
-    # answer user question
-    for role in state.cognitive.selected_roles:
-
-        answer = answer_question_comparison(
-            question=state.get_last_user_message().content_en,
-            data=state.cognitive.context_data,
-            role=role,
-        )
-        state.cognitive.expert_answers[role] = answer
-    
-    if len(state.cognitive.selected_roles) == 1:
-        #TODO: check this
-        state.add_assistant_message(
-            translate_from_eng(next(iter(state.cognitive.expert_answers.values())), state.user_lang),
-            next(iter(state.cognitive.expert_answers.values()))
-        )
+    if len(state.cognitive.selected_roles) > 1:
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
         
-    return state
 
-
-def synthesize_answers(state: AgentState) -> AgentState:
-    logger.info("Entered SYNTHESIZE_ANSWERS node")
-    # Safety check
-    state.add_trace("node_execution", node="synthesize_answers")
-    assert len(state.cognitive.expert_answers) > 1
-    
-    answer = synthesize_llm(state.get_last_user_message().content_en,
-                            state.cognitive.expert_answers)
-    assert not answer.startswith("Error")
-
-    logger.info(f"Synthesized answer: {answer}")
+    state.cognitive.messages_to_include = []
     state.add_assistant_message(
-        translate_from_eng(answer, state.user_lang),
+        answer,
         answer
     )
-
-    return state
+    return Command(update=state, goto=END, graph=Command.PARENT)

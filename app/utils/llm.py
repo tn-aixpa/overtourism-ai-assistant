@@ -9,7 +9,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEBUG = False
 USE_LOCAL_LLM = False  # Toggle: True = Ollama, False = Anthropic
 
 ANTHROPIC_PRICING = {

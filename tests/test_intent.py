@@ -13,11 +13,11 @@ from app.agent.state import AgentState
         ("What scenarios have been identfied?", "LIST_AVAILABLE", False),
         ("Can you please list what problems, proposals and scenarios are there?", "LIST_AVAILABLE", False),
 
-        # --- INTERACT_SCENARIO ---
-        ("Explain the results of scenario simA", "INTERACT_SCENARIO", False),
-        ("Analyze the outcome of simA", "INTERACT_SCENARIO", False),
-        ("Compare ther results of the two scenarios simA and simB", "INTERACT_SCENARIO", False),
-        ("Explain the differences between the scenarios", "INTERACT_SCENARIO", False),
+        # --- INTERACT_CONTEXT ---
+        ("Explain the results of scenario simA", "INTERACT_CONTEXT", False),
+        ("Analyze the outcome of simA", "INTERACT_CONTEXT", False),
+        ("Compare ther results of the two scenarios simA and simB", "INTERACT_CONTEXT", False),
+        ("Explain the differences between the scenarios", "INTERACT_CONTEXT", False),
 
         # --- CREATE NEW PROBLEM ---
         ("In Molveno there is a problem related to the fact that there are not enough parking spaces which leads to people parking off-spot and long queues. The administration would like to have 3 different strategies to tackle this problem.", "CREATE_NEW_PROBLEM", False),
