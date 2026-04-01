@@ -2,98 +2,59 @@ from typing import List
 from app.agent. state import ConversationMessage
 
 from app.utils.llm import llm_interaction, format_messages, DEBUG
-from app.utils.backend_integration_classes import ProposalInfoSchema
+from app.utils.backend_integration_classes import ProposalInfoSchema, ProblemInfoSchema
 
 # ---------------------------------------------------------------------------
 # PROBLEM DATA EXTRACTION
 # ---------------------------------------------------------------------------
 
-def extract_problem_data(messages: List[ConversationMessage], problem_info_to_extract: dict, extracted_problem_info: dict) -> str:
+def extract_problem_data(messages: List[ConversationMessage], schema: ProblemInfoSchema, attachment_list) -> str:
     #TODO: might need to revise to add the possiblity to change/integrate/remove a field
 
-    all_keys = list(problem_info_to_extract.keys())
+
+    field_specs = schema.format_structure()
+    attachments = "\n".join(f"- {p}" for p in attachment_list) if attachment_list else "No attachments provided."
 
     prompt = f"""
+
 SYSTEM ROLE:
 
-You are a deterministic structured data extractor.
-
-Your output is parsed automatically by a machine.
-If the output is not valid JSON, the system will fail.
+You are an expert analyst helping to extract structured information about a problem from a conversation.
 
 --------------------------------------------------
 
 TASK:
 
-Extract structured information about a REAL-WORLD problem
-from the conversation.
+Analyze the conversation history and extract the fields listed below. 
+Only extract information that is clearly stated or strongly implied by the conversation — do not invent or hallucinate details.
 
---------------------------------------------------
+## Fields to extract
 
-STRICT OUTPUT CONTRACT:
+{field_specs}
 
-- Output MUST be valid JSON.
-- Output ONLY ONE JSON object.
-- NEVER output markdown.
-- NEVER output explanations or extra text.
-- NEVER output role prefixes like "ASSISTANT:".
-- The response MUST start with "{{" and end with "}}".
-- The JSON must be directly parsable with json.loads().
-- All fields must contain textual values except for available_subsystems.
-- Remove empty fields entirely.
 
---------------------------------------------------
+## Attachments
 
-SCHEMA (STRICT):
+The user has provided the following attachments (file paths or URLs). Include relevant ones in `additional_data`:
 
-A dictionary with pairs (key, value)
+{attachments}
 
-Allowed index keys:
-{', '.join(list(all_keys))}
+## Available subsystems
+Available subsystems that are allowed in 'available_subsystems' are: parking, beach, restaurants, hotels
 
---------------------------------------------------
+## Output format
 
-DEFINITION OF A VALID PROBLEM:
+Respond ONLY with a valid JSON object. Do not include any explanation or markdown fences. Example structure:
 
-A valid problem MUST include explicit real-world content such as:
+{{
+  "problem_title": "string",
+  "objectives": "string",
+  "problem_description": "string",
+  "available_subsystems": ["string", "..."],
+  "additional_data": ["path/or/url", ...]
+}}
 
-- a described situation
-- an issue, constraint, difficulty, or goal
-- concrete context
-
---------------------------------------------------
-
-META-INTENT IS NOT A PROBLEM:
-
-Statements about creating, defining, planning,
-or wanting to make a problem are NOT problems.
-
-Examples that MUST produce empty output:
-
-- "I want to create a new problem."
-- "Let's define a problem."
-- "Add a problem."
-
-If ONLY meta-intent exists, treat it as NO DATA.
-
---------------------------------------------------
-
-EMPTY RESULT RULE (VERY IMPORTANT):
-
-If no valid real-world problem exists in the conversation
-
-Do NOT invent placeholder titles or descriptions.
-Do NOT summarize meta-intent.
-Remove all empty keys from the output dictionary.
-
---------------------------------------------------
-
-EXTRACTION RULES:
-
-- Extract ONLY explicit information.
-- NEVER infer missing details.
-- NEVER fabricate content.
-- Field 'problem_title' should be short (2-3 words) when present.
+If a field cannot be determined from the conversation, set it to null (or [] for list fields).
 
 --------------------------------------------------
 
@@ -102,11 +63,14 @@ SELF-CHECK (MANDATORY BEFORE OUTPUT):
 Before producing the final answer:
 
 1) Verify the output is valid JSON.
-2) Verify there is NO text outside the JSON.
-3) Verify no empty fields exist.
-4) If no valid problem exists, output {{}}.
+2) Verify the output is a list.
+3) Verify it begins with "[" and ends with "]".
+4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
+5) Verify no empty fields, empty objects, or empty arrays exist.
+6) Verify every solution has at least one entry in "indexes_to_change".
+7) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
 
-Only after validation, output the JSON.
+Only after passing ALL checks, output the JSON and then STOP.
 
 --------------------------------------------------
 

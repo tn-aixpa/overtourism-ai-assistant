@@ -93,7 +93,7 @@ class CognitiveState:
 
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
-    extracted_problem_info: Dict[str, Any] = field(default_factory=dict)
+    extracted_problem_info: ProblemInfo = None
     extracted_all_problem: bool = False
 
     #Proposal context

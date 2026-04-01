@@ -1,88 +1,54 @@
-import json
 import logging
-from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.llm_reasoning import assess_scenario_strategy
 from app.utils.llm_structured_extractions import extract_problem_data
 from app.utils.llm import parse_llm_json
 from app.utils.common import parse_confirmation
 from app.utils.messages import get_message, MessageCode
+from app.utils.backend_integration_classes import ProblemInfoSchema, ProblemInfo, build_schema_data
+from app.tools.backend_tools import create_problem_instance
+
 
 logger = logging.getLogger(__name__)
 
+
+def deactive_current_context(state: AgentState) -> Command:
+    logger.info("If there is an active context remove it")
+    state.add_trace("node_execution", node="deactive_current_context")
+
+    if state.cognitive.active_context_type:
+        state.reset_state()
+    
+    return state
+
 def extract_problem(state: AgentState) -> AgentState:
     logger.info("Extracting problem information from conversation context.")
+    atttachments_list = []
 
     answer = extract_problem_data(
         state.get_reasoning_context(),
         state.cognitive.problem_info_to_extract,
-        state.cognitive.extracted_problem_info
+        atttachments_list
     )
 
     assert "Error connecting to chatbot" not in answer
 
-    parsed_data = parse_llm_json(answer)
-    logger.info(f"Parsed problem information: {parsed_data}")
+    problem = parse_llm_json(answer)
+    logger.info(f"Parsed problem information: {problem}")
 
-    # Update extracted info
-    for key, value in parsed_data.items():
-        if value:
-            state.cognitive.extracted_problem_info[key] = value
+    schema = ProblemInfoSchema.default()
 
-    # Check if all required fields are extracted
-    extracted_all_problem = True
-    for key, field_spec in state.cognitive.problem_info_to_extract.items():
-        if field_spec.required and key not in state.cognitive.extracted_problem_info:
-            extracted_all_problem = False
-            break
-
-    logger.info(f"Extracted all required problem information: {extracted_all_problem}")
-    state.cognitive.extracted_all_problem = extracted_all_problem
+    try:
+        state.cognitive.extracted_problem_info = build_schema_data(schema, problem, ProblemInfo)
+        state.cognitive.extracted_all_problem = True
+    except Exception as e:
+        state.cognitive.messages_to_include = [str(e)]
+        state.cognitive.extracted_problem_info = None
+        state.cognitive.extracted_all_problem = False
 
     return state
 
-def decide_scenario_strategy(state: AgentState) -> AgentState:
-    logger.info("Deciding scenario generation strategy based on reasoning context.")
-    answer = assess_scenario_strategy(state.get_reasoning_context()).strip()
-
-    VALID_ACTIONS = {
-        "GENERATE_SCENARIOS",
-        "GENERATE_AGENTIC_SCENARIOS",
-        "ASK_USER_PREFERENCE",
-        "NO_SCENARIOS",
-    }
-
-    if answer not in VALID_ACTIONS:
-        state.cognitive.next_action = "ASK_USER_PREFERENCE"
-    else:
-        state.cognitive.next_action = answer
-
-    logger.info(f"Decided scenario generation strategy: {state.cognitive.next_action}")
-    return state
-
-def generate_scenario_candidates(state: AgentState):
-    #generate base scenario first   
-    #request llm for possible variations and improvements of the base scenario
-    logger.info("Generating scenario candidates based on the extracted problem information.")
-    state.add_trace("tool_call_mocked", node="generate_scenario_candidates", data={"tool": "AI scenario generation"})
-    variations = [] #TODO: implement llm call to generate variations based on base scenario and problem info
-    state.cognitive.scenarios_to_generate = variations
-    
-    return Command(update=state, goto="run_scenario", graph="scenario_extraction")
-    
-def CREATE_NEW_PROBLEM_instance_node(state: AgentState) -> AgentState:
-    #TODO: call tool, assume state is changed with problem id and data
-    logger.info("Creating problem instance based on the extracted problem information.")
-    state.add_trace("tool_call_mocked", node="CREATE_NEW_PROBLEM_instance_node", data={"tool": "problem_creation"})
-    success = True
-    assert success
-    # state.add_assistant_message(
-    #     get_message(MessageCode.SUCCESS_PROBLEM, state.user_lang),
-    #     get_message(MessageCode.SUCCESS_PROBLEM, "English")
-    # )
-    return state
 
 def extract_problem_node(state: AgentState):
     logger.info("Entering problem extraction node")
@@ -109,47 +75,65 @@ def parse_confirmation_node(state: AgentState):
 
     state.add_trace("node_execution", node="parse_confirmation_node", data={"intent": state.cognitive.next_action})
 
-    if state.cognitive.next_action == "EDIT_PROBLEM":
-        state.waiting_for = None
-        return Command(update=state, goto="extract_problem", graph=Command.PARENT)
-    
-    routes = {
-        "CONFIRM_PROBLEM": "CREATE_NEW_PROBLEM_instance",
-        "CANCEL_PROBLEM": END,
-    }
     if state.cognitive.next_action == "WAIT_CONFIRMATION_PROBLEM":
         state.active_workflow = AgentState.Workflow.PROBLEM
         state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
         state.user_input = None
         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+    
+    if state.cognitive.next_action == "CONFIRM_PROBLEM":
+        state.waiting_for = None
+        state.user_input = None
+        return Command(update=state, goto="create_new_problem_instance")
+    
+    if state.cognitive.next_action == "CANCEL_PROPOSAL":
+        state.waiting_for = None
+        state.user_input = None
+        state.active_workflow = None
+        state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+        state.cognitive.additional_output_information = []
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+
+
+    if state.cognitive.next_action == "EDIT_PROBLEM":
+        state.waiting_for = None
 
     state.waiting_for = None
     state.user_input = None
-    return Command(update=state, goto=routes[state.cognitive.next_action])
+    return Command(update=state, goto="deactive_current_context", graph=Command.PARENT)
 
-def decide_strategy_node(state: AgentState):
-    logger.info("Entering scenario strategy decision node")
-    state = decide_scenario_strategy(state)
-    state.add_trace("node_execution", node="decide_strategy_node", data={"intent": state.cognitive.next_action})
+def create_new_problem_instance_node(state: AgentState) -> AgentState:
+    state.add_trace("node_execution", node="create_new_problem_instance_node")
+    
+    problem = state.cognitive.extracted_problem_info
+    logger.info(f"Creating instance for problem: {problem}")
+    
+    payload = {
+        "problem_name": problem.problem_title,
+        "problem_description": problem.problem_description,
+        # "created": "string",
+        # "updated": "string",
+        "objective": problem.objectives,
+        "groups": problem.available_subsystems,
+        "links": problem.additional_data,
+        # "proposals": []
+    }
 
-    logger.info(f"Decided next action based on scenario strategy: {state.cognitive.next_action}")
-    if state.cognitive.next_action == "GENERATE_SCENARIOS":
-        state.waiting_for = None
-        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
-    if state.cognitive.next_action == "GENERATE_AGENTIC_SCENARIOS":
-        state.waiting_for = None
-        return Command(update=state, goto="generate_scenario_candidates", graph=Command.PARENT)
-    if state.cognitive.next_action == "ASK_USER_PREFERENCE":
-        state.active_workflow = AgentState.Workflow.PROBLEM
-        state.waiting_for = AgentState.WaitingFor.SCENARIO_PREFERENCE
-        state.user_input = None
-        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
-    if state.cognitive.next_action == "NO_SCENARIOS":
-        state.waiting_for = None
-        state.add_assistant_message(
-            get_message(MessageCode.GENRAL_EXIT_MESSAGE, state.user_lang),
-            get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")
-        )
-        return Command(update=state, goto=END)
+    # remove empty fields (recommended)
+    payload = {k: v for k, v in payload.items() if v not in [None, "", [], {}]}
 
-    raise ValueError(f"Invalid scenario strategy action: {state.cognitive.next_action}")
+    result = create_problem_instance.invoke({
+        "payload": payload,
+    })
+
+
+    logger.info(result)
+
+    state.resume_nome = {}
+    state.active_workflow = None
+    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROBLEM, "English")]
+    state.cognitive.additional_output_information = []
+
+    #TODO: decide if we want to activate this problem or ask the user if he wants to activate it
+
+    return Command(update=state, goto="generate_output_message", graph=Command.PARENT)

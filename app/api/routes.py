@@ -65,50 +65,28 @@ async def run_agent_endpoint(
             state.user_input = None
 
         # Run LangGraph agent
-        try:
 
-            updated_state_dict = agent_app.invoke(state)
-            
-            if "__interrupt__" in updated_state_dict:                
-                # Build the actual updated state before saving
-                state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
-                final_state = AgentState(**state_dict)
-                
-                save_state(key, final_state)
-                
-                return AgentResponse(
-                    response=final_state.get_last_message().content_localized,
-                    session_id=key,
-                    active_context=final_state.get_active_context_string()
-                )
+        updated_state_dict = agent_app.invoke(state)
 
-            state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
-                       
-            final_state = AgentState(**state_dict)
+        state_dict = {k: v for k, v in updated_state_dict.items() if k != "__interrupt__"}
+        final_state = AgentState(**state_dict)
+        save_state(key, final_state)
 
-            save_state(key, final_state)
+        active_context = final_state.get_active_context_string()
+        logger.info(f"AAAAAAA {active_context}")
+        last_msg = final_state.get_last_message()
+        response_text = (
+            last_msg.content_localized
+            if last_msg and last_msg.role == "assistant"
+            else get_error_message(ErrorCode.REQUEST_ERROR, final_state=state.user_lang)
+        )
 
-            last_msg = final_state.get_last_message()
-            response_text = (
-                last_msg.content_localized
-                if last_msg and last_msg.role == "assistant"
-                else get_error_message(ErrorCode.REQUEST_ERROR, final_state=state.user_lang)
-            )
+        return AgentResponse(
+            response=response_text,
+            session_id=key,
+            active_context=active_context
+        )
 
-            return AgentResponse(
-                response=response_text,
-                session_id=key,
-                active_context=state.get_active_context_string()
-            )
-
-        except Exception as e:
-            # This may now be unreachable, but keep as fallback
-            save_state(key, state)
-            return AgentResponse(
-                response=str(e),
-                session_id=key,
-                active_context=state.get_active_context_string()
-            )
     except HTTPException:
         raise
     except Exception as e:

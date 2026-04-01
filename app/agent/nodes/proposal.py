@@ -1,5 +1,4 @@
 import logging
-from langgraph.graph import END
 from langgraph.types import Command
 
 from app.agent.state import AgentState
@@ -129,7 +128,7 @@ def create_proposal_node(state: AgentState) -> AgentState:
     state.add_trace("node_execution", node="create_proposal_node")
 
     proposal = state.cognitive.extracted_proposal_info
-    logger.info(f"Creating instance for proposal: {state.cognitive.extracted_proposal_info}")
+    logger.info(f"Creating instance for proposal: {proposal}")
     
     problem_id = state.cognitive.active_context[0]
 

@@ -158,11 +158,6 @@ def parse_confirmation_node(state: AgentState):
 
     state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
 
-    
-    routes = {
-        "EDIT_SCENARIO": "extract_scenario",
-        "CANCEL_SCENARIO": END,
-    }
     if state.cognitive.next_action == "WAIT_CONFIRMATION_SCENARIO":
         state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
         state.waiting_for = AgentState.WaitingFor.SCENARIO_CONFIRMATION
@@ -223,3 +218,56 @@ def run_scenario_node(state: AgentState) -> AgentState:
         #TODO: decide if we want to activate this scenario or ask the user if he wants to activate it
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+    
+
+################################################################33
+from app.utils.llm_reasoning import assess_scenario_strategy
+
+
+def decide_scenario_strategy(state: AgentState) -> AgentState:
+    logger.info("Deciding scenario generation strategy based on reasoning context.")
+    answer = assess_scenario_strategy(state.get_reasoning_context()).strip()
+
+    VALID_ACTIONS = {
+        "GENERATE_SCENARIOS",
+        "GENERATE_AGENTIC_SCENARIOS",
+        "ASK_USER_PREFERENCE",
+        "NO_SCENARIOS",
+    }
+
+    if answer not in VALID_ACTIONS:
+        state.cognitive.next_action = "ASK_USER_PREFERENCE"
+    else:
+        state.cognitive.next_action = answer
+
+    logger.info(f"Decided scenario generation strategy: {state.cognitive.next_action}")
+    return state
+
+
+
+def decide_strategy_node(state: AgentState):
+    logger.info("Entering scenario strategy decision node")
+    state = decide_scenario_strategy(state)
+    state.add_trace("node_execution", node="decide_strategy_node", data={"intent": state.cognitive.next_action})
+
+    logger.info(f"Decided next action based on scenario strategy: {state.cognitive.next_action}")
+    if state.cognitive.next_action == "GENERATE_SCENARIOS":
+        state.waiting_for = None
+        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
+    if state.cognitive.next_action == "GENERATE_AGENTIC_SCENARIOS":
+        state.waiting_for = None
+        return Command(update=state, goto="generate_scenario_candidates", graph=Command.PARENT)
+    if state.cognitive.next_action == "ASK_USER_PREFERENCE":
+        state.active_workflow = AgentState.Workflow.PROBLEM
+        state.waiting_for = AgentState.WaitingFor.SCENARIO_PREFERENCE
+        state.user_input = None
+        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+    if state.cognitive.next_action == "NO_SCENARIOS":
+        state.waiting_for = None
+        state.add_assistant_message(
+            get_message(MessageCode.GENRAL_EXIT_MESSAGE, state.user_lang),
+            get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")
+        )
+        return Command(update=state, goto=END)
+
+    raise ValueError(f"Invalid scenario strategy action: {state.cognitive.next_action}")

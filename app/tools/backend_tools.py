@@ -129,6 +129,54 @@ def get_data_from_context(context_type, context, relations, extract_editable):
     }
 
 @tool
+def create_problem_instance(
+    payload: dict
+) -> dict:
+    """
+    Create a new problem instance.
+
+    Args:
+        payload: Dictionary of other user defined data
+
+    Returns:
+        A dict with a confirmation message
+    """
+
+    logger.info("Entered tool create_proposal_instance")
+    url = f"{BACKEND_URL}problems/"
+
+    headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+    # curl for direct reproduction
+    logger.info("Outgoing create_proposal_instance request:")
+    curl_command = f"""
+curl -X POST "{url}" \\
+-H "accept: application/json" \\
+-H "Content-Type: application/json" \\
+-d '{json.dumps(payload)}'
+"""
+    logger.info(curl_command)
+
+    # --- actual request ---
+    response = requests.post(url, headers=headers, json=payload)
+
+    # Log response for comparison
+    logger.info(f"Response status: {response.status_code}")
+    try:
+        logger.info(f"Response body: {response.json()}")
+    except Exception:
+        logger.info(f"Response text: {response.text}")
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+@tool
 def create_proposal_instance(
     problem_id: str,
     payload: dict
@@ -141,7 +189,7 @@ def create_proposal_instance(
         payload: Dictionary of other user defined data
 
     Returns:
-        A dict with a confirmation message, e.g. {"message": "Scenario saved!"}
+        A dict with a confirmation message
     """
 
     logger.info("Entered tool create_proposal_instance")
@@ -204,7 +252,7 @@ def create_scenario_instance(
         proposal_id: Optional proposal ID to link this scenario to a proposal.
 
     Returns:
-        A dict with a confirmation message, e.g. {"message": "Scenario saved!"}
+        A dict with a confirmation message
     """
     
     logger.info("Entered tool create_scenario_instance")
