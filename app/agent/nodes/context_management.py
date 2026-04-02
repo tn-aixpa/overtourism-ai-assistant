@@ -19,18 +19,21 @@ def assess_context_request(state: AgentState) -> AgentState:
         available_entries = get_problems.invoke({})
         state.cognitive.available_entries = available_entries
 
+    available = state.cognitive.available_entries.get("all_ids", [])
 
     activation_deactivation_list = get_context_activation_deactivation_list(
         state.get_last_message(),
         state.get_reasoning_context(),
         state.cognitive.active_context,
-        state.cognitive.available_entries.get("all_ids", [])
+        available
     )
 
     try:
         parsed = parse_llm_json(activation_deactivation_list)
-        activate = set(parsed.get("activate", []))
-        deactivate = set(parsed.get("deactivate", []))
+        activate = set(parsed.get("activate", [])) & available
+        deactivate = set(parsed.get("deactivate", [])) & available
+        assert not (activate & deactivate), "Same context cannot be activated and deactivated at the same time"
+        assert len(activate)+len(deactivate) > 0, "No valid context to activate or deactivate was provided"
     except Exception as e:
         raise GraphError(ErrorCode.INVALID_CONTEXT, f"Error determining context: {e}")
     
