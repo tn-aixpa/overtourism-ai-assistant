@@ -126,6 +126,7 @@ class CognitiveState:
 class AgentState:
     # Interface layer (Localized language only)
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
+    chart_data: Optional[dict[str, Any]] = None
 
     # Orchestration Layer (English only)
     session_id: str = ""

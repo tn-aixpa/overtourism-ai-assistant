@@ -10,7 +10,7 @@ from app.agent.graphs import (
     list_available_subgraph,
     context_subgraph
 )
-from app.agent.nodes.general import error_recovery_node, generate_output_message_node
+from app.agent.nodes.general import error_recovery_node, generate_output_message_node, temp_node
 from app.agent.nodes.waiting import wait_user_input_node, resume_router
 
 graph = StateGraph(AgentState)
@@ -26,6 +26,7 @@ graph.add_node("new_proposal", new_proposal_subgraph)
 graph.add_node("new_scenario", new_scenario_subgraph)
 graph.add_node("error", error_recovery_node )
 graph.add_node("generate_output_message", generate_output_message_node)
+graph.add_node("temp_node", temp_node)
 
 graph.add_conditional_edges(
     "resume_router",
@@ -35,5 +36,5 @@ graph.add_conditional_edges(
         "WAIT_USER_INPUT": "WAIT_USER_INPUT",
     }
 )
-graph.set_entry_point("resume_router")
+graph.set_entry_point("temp_node")
 app = graph.compile()

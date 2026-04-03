@@ -31,7 +31,8 @@ if USE_LOCAL_LLM:
         keep_alive=-1
     )
 else:
-    llm = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    llm = anthropic.Anthropic(api_key="abc123")
+    # llm = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def format_messages(messages):

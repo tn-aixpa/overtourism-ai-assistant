@@ -133,3 +133,46 @@ def parse_confirmation(state: AgentState, context: str) -> Command:
     if cfg.edit_graph:
         kwargs["graph"] = cfg.edit_graph
     return Command(update=state, **kwargs)
+
+
+
+
+
+def temp_node(state: AgentState) -> Command:
+    from app.utils.temp_chart import generate_chart
+    # LOAD DATA
+    # from app.tools.backend_tools import get_data_from_context, get_problems
+
+    # logger.info("Entering temp node")
+
+    # # Step1
+    # logger.info("Step 1: Loading context information")
+    # available_entries = get_problems.invoke({})
+    # state.cognitive.available_entries = available_entries
+
+    # logger.info("Step 2: activate context and get data")
+
+    # extracted_data = get_data_from_context.invoke({
+    #     "context_type": "scenario",
+    #     "context": ["model_0"],
+    #     "relations": state.cognitive.available_entries["connections_dict"],
+    #     "extract_editable": True
+    # })
+    # retrieved = extracted_data["retrieved"]
+    # editable_indexes = extracted_data["editable_indexes"]
+    # state.cognitive.editable_indexes = editable_indexes
+
+    # state.cognitive.context_data = retrieved
+
+    # logger.info("Step 3: build output message")
+
+    if "line" in state.get_last_message().content.lower():
+        state.chart_data = generate_chart("line")
+        state.add_assistant_message("Here is the requested graph")
+    elif "bar" in state.get_last_message().content.lower():
+        state.chart_data = generate_chart("bar")
+        state.add_assistant_message("Here is the requested graph")
+    else:
+        state.add_assistant_message("Success")
+
+    return Command(update=state, goto=END)
