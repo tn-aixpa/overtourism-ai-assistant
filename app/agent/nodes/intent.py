@@ -43,6 +43,15 @@ def route_from_intent(state: AgentState):
 
     if action == "CONTEXT_MANAGEMENT":
         return Command(update=state, goto="context_management", graph=Command.PARENT)
+    
+    if action == "ASSISTANT_CAPABILITIES":
+        state.cognitive.messages_to_include = []
+        state.cognitive.additional_output_information = [
+            f"Active contex: {state.get_active_context_string()}",
+            state.cognitive.allowed_operations
+        ]
+
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
     raise GraphError(ErrorCode.REQUEST_ERROR)
     

@@ -14,7 +14,8 @@ def classify_intent(message: str, history: List[ConversationMessage] = None) -> 
     Classify the user's intent given the current message and optional
     conversation history.  Returns one of:
         LIST_AVAILABLE | INTERACT_CONTEXT | CREATE_NEW_PROBLEM |
-        CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO | CONTEXT_MANAGEMENT | INVALID
+        CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO | CONTEXT_MANAGEMENT |
+        ASSISTANT_CAPABILITIES | INVALID
     """
     context = "City management and overtourism"
 
@@ -50,6 +51,13 @@ ACTIONS:
    Note: resolving WHICH item the user means is handled downstream — classify as CONTEXT_MANAGEMENT
          even when the reference is vague or relative.
 
+3. ASSISTANT_CAPABILITIES
+   → User is greeting the assistant, or asking what the assistant can do, what features are
+     available, how to use it, or what its current state/context is.
+   Signals: "hi", "hello", "hey", "good morning", "what can you do", "what are your capabilities",
+            "how does this work", "help", "what can I ask you", "what is your current context",
+            "what are you able to do", "how can you help me", "what commands do you support".
+
 4. CREATE_NEW_PROBLEM
    → User wants to register a NEW real-world problem, OR is in the middle of describing
      one, even if they also hint at solutions or scenarios.
@@ -77,6 +85,10 @@ ACTIONS:
    → Anything unrelated to {context}, or too vague to classify into 1-7.
 
 DECISION RULES:
+- ASSISTANT_CAPABILITIES vs INTERACT_CONTEXT: "What can you do?" or "How does this work?" → ASSISTANT_CAPABILITIES.
+  "What does scenario X show?" → INTERACT_CONTEXT.
+- ASSISTANT_CAPABILITIES vs INVALID: greetings ("hi", "hello") and capability questions always → ASSISTANT_CAPABILITIES,
+  never INVALID, even without prior context.
 - CONTEXT_MANAGEMENT vs INTERACT_CONTEXT: CONTEXT_MANAGEMENT is about selecting/focusing on an item as context.
   INTERACT_CONTEXT is about asking analytical questions about it. "Let's work on problem X" → CONTEXT_MANAGEMENT.
   "What does scenario X show?" → INTERACT_CONTEXT.
@@ -97,6 +109,11 @@ User: "That one" (after a list was shown) → CONTEXT_MANAGEMENT
 User: "I'm no longer interested in problem P1" → CONTEXT_MANAGEMENT
 User: "Remove scenario S2 from context" → CONTEXT_MANAGEMENT
 User: "Clear the active problem" → CONTEXT_MANAGEMENT
+User: "Hi" → ASSISTANT_CAPABILITIES
+User: "Hello! What can you do?" → ASSISTANT_CAPABILITIES
+User: "What are your capabilities?" → ASSISTANT_CAPABILITIES
+User: "How can you help me?" → ASSISTANT_CAPABILITIES
+User: "Help" → ASSISTANT_CAPABILITIES
 User: "We have an overtourism problem in the historic centre" → CREATE_NEW_PROBLEM
 User: "I want to create a problem about traffic congestion" → CREATE_NEW_PROBLEM
 User: "I want to create a new proposal to solve the problem" → CREATE_NEW_PROPOSAL
