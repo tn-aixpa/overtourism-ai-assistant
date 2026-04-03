@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def intent_node(state: AgentState) -> AgentState:
     logger.info("Entered INTENT_NODE")
-    answer = classify_intent(state.get_last_user_message().content_en, state.get_reasoning_context())
+    answer = classify_intent(state.get_last_user_message().content, state.get_reasoning_context())
 
     state.cognitive.next_action = answer
     logger.info(f"Detected intent: {answer}")

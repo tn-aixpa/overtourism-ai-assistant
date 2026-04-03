@@ -11,7 +11,6 @@ class ErrorCode(Enum):
     NOTHING_TO_LIST = "E005"
 
 
-
 class GraphError(Exception):
     def __init__(self, code: ErrorCode, details: Optional[str] = None):
         self.code = code
@@ -19,22 +18,16 @@ class GraphError(Exception):
         super().__init__(str(code))
 
 ERROR_TRANSLATIONS = {
-    "English": {
         ErrorCode.REQUEST_ERROR: "Errror: something went wrong while processing your request.",
         ErrorCode.INVALID_REQUEST: "Error: I can't answer this type of request.",
         ErrorCode.INVALID_CONTEXT: "Error: the current context does not support the requested operation.",
         ErrorCode.INVALID_REQUEST_STATE: "Error: Invalid request in current state.",
         ErrorCode.NOTHING_TO_LIST: "Error: I didn't underestand your request, I can list problems, proposals and scenarios.",
-    },
-    "Italian": {
-        ErrorCode.REQUEST_ERROR: "Errore durante l'elaborazione della richiesta.",
-        ErrorCode.INVALID_REQUEST: "Mi dispiace, non posso rispondere a questo tipo di richiesta.",
-        ErrorCode.INVALID_CONTEXT: "Errore: il contesto attualmente attivo non supporta l'operazione richiesta.",
-        ErrorCode.INVALID_REQUEST_STATE: "Richiesta non valida nello stato corrente.",
-        ErrorCode.NOTHING_TO_LIST: "Scusa, non ho capito la tua richiesta, Posso darti la lista di problemi, porposte o scenari.",
-    },
 }
 
-def get_error_message(code: ErrorCode, lang="English", **kwargs):
-    template = ERROR_TRANSLATIONS[lang][code]
+def get_error_message(code: ErrorCode, **kwargs):
+    """
+    Retrieve the message for a given code and optionally format it with kwargs.
+    """
+    template = ERROR_TRANSLATIONS[code]
     return template.format(**kwargs)

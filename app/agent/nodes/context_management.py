@@ -51,7 +51,7 @@ def assess_context_request(state: AgentState) -> AgentState:
     current_active = set(state.cognitive.active_context)
 
     # ---------------------------------------------------------------------------
-    # Rule 1: Activating a PROBLEM
+    # Rule 1: Activating a PROBLEM_CREATION
     # Only one problem allowed → reset everything else
     # ---------------------------------------------------------------------------
     problem_activations = activate & problems
@@ -152,7 +152,7 @@ def routing_after_context(state: AgentState) -> AgentState:
     if not state.resume_nome:
 
         context = ",".join(state.cognitive.active_context)
-        state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, "English", new_context=context)]
+        state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, new_context=context)]
         state.cognitive.additional_output_information = [
             f"Active contex: {state.get_active_context_string()}",
             state.cognitive.allowed_operations

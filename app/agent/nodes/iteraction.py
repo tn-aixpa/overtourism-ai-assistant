@@ -18,7 +18,7 @@ def assert_active_context(state: AgentState) -> Command:
     if state.cognitive.active_context_type:
         return Command(update=state, goto="select_role")
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT, "English")]
+    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -34,7 +34,7 @@ def assert_active_context(state: AgentState) -> Command:
 
 
 def select_role(state: AgentState) -> AgentState:
-    # question = state.get_last_user_message().content_en
+    # question = state.get_last_user_message().content
     # raw = select_role_llm(question, ALLOWED_ROLES)
 
     # if "Error" in raw:
@@ -59,14 +59,12 @@ def select_role(state: AgentState) -> AgentState:
 
 def interact_context(state: AgentState) -> AgentState:
 
-    state.cognitive.expert_answers = {}
-
     # answer user question
     state.cognitive.messages_to_include = []
     state.cognitive.additional_output_information = []
     for role in state.cognitive.selected_roles:
         answer = answer_question(
-            question=state.get_last_user_message().content_en,
+            question=state.get_last_user_message().content,
             data=state.cognitive.context_data,
             role=role,
             messages=state.get_reasoning_context(),
@@ -81,7 +79,6 @@ def interact_context(state: AgentState) -> AgentState:
 
     state.cognitive.messages_to_include = []
     state.add_assistant_message(
-        answer,
         answer
     )
     return Command(update=state, goto=END, graph=Command.PARENT)

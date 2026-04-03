@@ -27,7 +27,7 @@ def assert_active_proposal(state: AgentState) -> Command:
         "subgraph": Command.PARENT
     }
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT, "English")]
+    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -41,8 +41,10 @@ def assert_active_proposal(state: AgentState) -> Command:
 
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
-def extract_scenario(state: AgentState) -> AgentState:
-    logger.info("Extracting scenario from reasoning context")
+
+def extract_scenario_node(state: AgentState):
+    logger.info("Entering extract_scenario_node")
+
     answer = extract_scenario_data(state.get_reasoning_context(),
                                 state.cognitive.editable_indexes)
     logger.info(f"Chatbot answer: {answer}")   
@@ -54,7 +56,7 @@ def extract_scenario(state: AgentState) -> AgentState:
     schema = ScenarioInfoSchema.default()
 
     validated_scenarios: list[ScenarioInfo] = []
-    validation_errors = []
+    scenario_validation_errors = []
     for scenario in scenarios:
         # validate indexes
         if "indexes_to_change" in scenario:
@@ -68,7 +70,7 @@ def extract_scenario(state: AgentState) -> AgentState:
                         current_val_min = value["value"][0]
                         current_val_max = value["value"][1]
                         if not (min_val <= current_val_min and current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            validation_errors.append(
+                            scenario_validation_errors.append(
                                 f"The range [{current_val_min}-{current_val_max}] is not valid for index {key}. "
                                 f"Please define an interval within [{min_val}-{max_val}] with step {step} "
                             )
@@ -82,14 +84,14 @@ def extract_scenario(state: AgentState) -> AgentState:
                         else:
                             current_val_max = base_val_max - value["value"]
                         if not (current_val_max <= max_val and (current_val_max - min_val) % step == 0):
-                            validation_errors.append(
+                            scenario_validation_errors.append(
                                 f"The range [{base_val_min}-{current_val_max}] is not valid for index {key}. "
                                 f"Please define an interval within [{min_val}-{max_val}] with step {step} "
                             )
                         else:
                             validated_indexes[key] = [base_val_min, current_val_max]
                 except Exception as e:
-                    validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid - {e}.")
+                    scenario_validation_errors.append(f"Error parsing index {key}: {str(value)} is not valid - {e}.")
 
             try:
                 scenario_data = {
@@ -107,21 +109,21 @@ def extract_scenario(state: AgentState) -> AgentState:
     if not extracted_all_scenario:
         state.cognitive.extracted_all_scenario = False
         required_fields = [f for f, v in vars(state.cognitive.scenario_info_to_extract).items() if v.required]
-        state.cognitive.validation_errors = (
+        state.cognitive.scenario_validation_errors = (
             f"Not all scenarios include the required elements ({', '.join(required_fields)}).\nExtracted info"
         )
         state.cognitive.scenarios_to_generate = []
         state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
         return state
 
-    if not validation_errors:
+    if not scenario_validation_errors:
         state.cognitive.extracted_all_scenario = True
-        state.cognitive.validation_errors = ""
+        state.cognitive.scenario_validation_errors = ""
         state.cognitive.scenarios_to_generate = validated_scenarios
     else:
         state.cognitive.extracted_all_scenario = False
-        state.cognitive.validation_errors = (
-            "The following errors were detected for the scenarios you defined:\n- " + "\n- ".join(validation_errors)
+        state.cognitive.scenario_validation_errors = (
+            "The following errors were detected for the scenarios you defined:\n- " + "\n- ".join(scenario_validation_errors)
         )
         state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
         state.cognitive.scenarios_to_generate = []
@@ -129,16 +131,11 @@ def extract_scenario(state: AgentState) -> AgentState:
     logger.info(
         f"Extracted scenarios: {state.cognitive.scenarios_to_generate}, "
         f"extracted_all_scenario: {state.cognitive.extracted_all_scenario}, "
-        f"validation_errors: {state.cognitive.validation_errors}"
+        f"scenario_validation_errors: {state.cognitive.scenario_validation_errors}"
     )
 
-    return state
-
-def extract_scenario_node(state: AgentState):
-    logger.info("Entering extract_scenario_node")
-    state = extract_scenario(state)
     state.add_trace("node_execution", node="extract_scenario_node", data={"extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
-    state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
+    state.active_workflow = AgentState.Workflow.SCENARIO_CREATION
     state.user_input = None
 
     if state.cognitive.scenarios_to_generate:
@@ -148,17 +145,17 @@ def extract_scenario_node(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation_node(state: AgentState):
-    logger.info("Entering parse_confirmation_node")
-    message = state.get_last_user_message().content_en
+def parse_confirmation(state: AgentState):
+    logger.info("Entering parse_confirmation")
+    message = state.get_last_user_message().content
     
     state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
     logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
 
-    state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
+    state.add_trace("node_execution", node="parse_confirmation", data={"next_action": state.cognitive.next_action})
 
     if state.cognitive.next_action == "WAIT_CONFIRMATION_SCENARIO":
-        state.active_workflow = AgentState.Workflow.SCENARIO_EXTRACTION
+        state.active_workflow = AgentState.Workflow.SCENARIO_CREATION
         state.waiting_for = AgentState.WaitingFor.SCENARIO_CONFIRMATION
         state.user_input = None
         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
@@ -172,7 +169,7 @@ def parse_confirmation_node(state: AgentState):
         state.waiting_for = None
         state.user_input = None
         state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
         state.cognitive.additional_output_information = []
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
     
@@ -182,9 +179,9 @@ def parse_confirmation_node(state: AgentState):
     return Command(update=state, goto="extract_scenario")
 
 
-def run_scenario_node(state: AgentState) -> AgentState:
+def create_scenario(state: AgentState) -> AgentState:
     if state.cognitive.scenarios_to_generate:
-        state.add_trace("node_execution", node="run_scenario_node", data={"to_generate": len(state.cognitive.scenarios_to_generate)})
+        state.add_trace("node_execution", node="create_scenario", data={"to_generate": len(state.cognitive.scenarios_to_generate)})
         current_scenario = state.cognitive.scenarios_to_generate.pop()
         logger.info(f"Running scenario: {current_scenario}")
         
@@ -211,7 +208,7 @@ def run_scenario_node(state: AgentState) -> AgentState:
     else:
         state.resume_nome = {}
         state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_SCENARIO, "English")]
+        state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_SCENARIO)]
         state.cognitive.additional_output_information = []
 
         #TODO: decide if we want to activate this scenario or ask the user if he wants to activate it
@@ -257,13 +254,13 @@ def run_scenario_node(state: AgentState) -> AgentState:
 #         state.waiting_for = None
 #         return Command(update=state, goto="generate_scenario_candidates", graph=Command.PARENT)
 #     if state.cognitive.next_action == "ASK_USER_PREFERENCE":
-#         state.active_workflow = AgentState.Workflow.PROBLEM
+#         state.active_workflow = AgentState.Workflow.PROBLEM_CREATION
 #         state.waiting_for = AgentState.WaitingFor.SCENARIO_PREFERENCE
 #         state.user_input = None
 #         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 #     if state.cognitive.next_action == "NO_SCENARIOS":
 #         state.waiting_for = None
-#         state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+#         state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
 #         state.cognitive.additional_output_information = []
 
 #         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)

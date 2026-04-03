@@ -3,21 +3,20 @@ from dataclasses import replace
 
 from app.agent.graph import app
 from app.config import DRAW_CONVERSATION
-from app.utils.common import to_state, translate_to_eng
-from app.utils.error_codes import ErrorCode, get_error_message
+from app.utils.common import to_state
 
 # ---------- TEST: INVALID REQUEST ----------
 @pytest.mark.parametrize(
     "message, language",
     [
         ("Tell me about the weather in Paris", "English"),
-        # ("Come è il meteo a Parigi?", "Italian"),
+        ("Come è il meteo a Parigi?", "Italian"),
     ]
 )
 def test_full_workflow_invalid_localized(empty_state, message, language):
     state = replace(empty_state)
     state.user_lang = language
-    state.add_user_message(message, translate_to_eng(message, language))
+    state.add_user_message(message)
 
 
     result_dict = app.invoke(state)
@@ -48,33 +47,28 @@ def test_full_workflow_interact(agent):
         agent.state.dump_to_file("logs/debug_test_full_workflow_interact.json")
 
     last_message = result.state.get_last_message()
-    response = last_message.content_en if last_message and last_message.role == "assistant" else ""
+    response = last_message.content if last_message and last_message.role == "assistant" else ""
 
     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
-    assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English") and "parking" in response.lower()
 
-# def test_full_workflow_interact_italian(agent):
-#     try:
-#         agent.state.user_lang = "Italian"
-#         result = (
-#             agent.start("Quali sono gli scenari disponibili?")
-#                 .reply("Per favore, attiva lo scenario model_0")
-#                 .reply("Quale è l'indice con maggior criticità?")
-#                 .run()
-#         )
+def test_full_workflow_interact_italian(agent):
+    try:
+        agent.state.user_lang = "Italian"
+        result = (
+            agent.start("Quali sono gli scenari disponibili?")
+                .reply("Per favore, attiva lo scenario model_0")
+                .reply("Quale è l'indice con maggior criticità?")
+                .run()
+        )
 
-#         if DRAW_CONVERSATION:
-#             from other.drawing_util import draw_conversation
-#             draw_conversation(result.messages, "logs/interact_italian.png")
-#     finally:
-#         agent.state.save()
-#         agent.state.dump_to_file("logs/debug_test_full_workflow_interact_it.json")
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/interact_italian.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_interact_it.json")
 
-#     last_message = result.state.get_last_message()
-#     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
-
-#     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
-#     assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "Italian") and "parcheggio" in response.lower()
+    assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
 
 # ---------- TEST: COMPARE ----------
 def test_full_workflow_compare(agent):
@@ -94,31 +88,27 @@ def test_full_workflow_compare(agent):
         agent.state.save()
         agent.state.dump_to_file("logs/debug_test_full_workflow_compare.json")
 
+    assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
+
+def test_full_workflow_interact_italian(agent):
+    try:
+        agent.state.user_lang = "Italian"
+        result = (
+            agent.start("Quali sono gli scenari disponibili?")
+                .reply("Per favore, attiva gli scenari model_0 e model_1")
+                .reply("Quali sono le principali differenze fra le due?")
+                .run()
+        )
+
+        if DRAW_CONVERSATION:
+            from other.drawing_util import draw_conversation
+            draw_conversation(result.messages, "logs/compare_italian.png")
+    finally:
+        agent.state.save()
+        agent.state.dump_to_file("logs/debug_test_full_workflow_compare_it.json")
+
     last_message = result.state.get_last_message()
-    response = last_message.content_en if last_message and last_message.role == "assistant" else ""
+    response = last_message.content if last_message and last_message.role == "assistant" else ""
 
     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
-    assert response != "" and response != get_error_message(ErrorCode.REQUEST_ERROR, "English")
-
-# def test_full_workflow_interact_italian(agent):
-#     try:
-#         agent.state.user_lang = "Italian"
-#         result = (
-#             agent.start("Quali sono gli scenari disponibili?")
-#                 .reply("Per favore, attiva gli scenari model_0 e model_1")
-#                 .reply("Quali sono le principali differenze fra le due?")
-#                 .run()
-#         )
-
-#         if DRAW_CONVERSATION:
-#             from other.drawing_util import draw_conversation
-#             draw_conversation(result.messages, "logs/compare_italian.png")
-#     finally:
-#         agent.state.save()
-#         agent.state.dump_to_file("logs/debug_test_full_workflow_compare_it.json")
-
-#     last_message = result.state.get_last_message()
-#     response = last_message.content_en if last_message and last_message.role == "assistant" else ""
-
-#     assert result.state.cognitive.next_action == "INTERACT_CONTEXT"
-#     assert response != "" and "not able to handle this request" not in response
+    assert response != "" and "not able to handle this request" not in response

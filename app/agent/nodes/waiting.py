@@ -2,7 +2,6 @@ from langgraph.types import Command, interrupt
 import logging
 
 from app.agent.state import AgentState
-from app.utils.common import translate_from_eng
 from app.utils.common import build_output_message
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ def _wait_instructions(state: AgentState):
         return instructions, []
 
     if waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION:
-        formatted_proposal = state.cognitive.extracted_problem_info.format_fields()
+        formatted_proposal = state.cognitive.problem_info_extracted.format_fields()
         return f"Do you want to proceed with the following problem?\n- {formatted_proposal}", []
         
     if waiting_for == AgentState.WaitingFor.PROPOSAL_INPUT:
@@ -24,11 +23,11 @@ def _wait_instructions(state: AgentState):
         return instructions, []
 
     if waiting_for == AgentState.WaitingFor.PROPOSAL_CONFIRMATION:
-        formatted_proposal = state.cognitive.extracted_proposal_info.format_fields()
+        formatted_proposal = state.cognitive.proposal_info_extracted.format_fields()
         return f"Do you want to proceed with the following proposal?\n- {formatted_proposal}", []
 
     if waiting_for == AgentState.WaitingFor.SCENARIO_INPUT:
-        prefix = (state.cognitive.validation_errors + "\n") if state.cognitive.validation_errors else ""
+        prefix = (state.cognitive.scenario_validation_errors + "\n") if state.cognitive.scenario_validation_errors else ""
         instructions = prefix + "Please, provide all required details to create a scenario."
 
         additional_info = [f"Editable indexes: {state.cognitive.editable_indexes}"]

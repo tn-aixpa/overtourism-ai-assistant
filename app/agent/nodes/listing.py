@@ -15,7 +15,7 @@ def assess_list(state: AgentState) -> AgentState:
     logger.info("Entered ASSESS_LIST")
     active_context = state.cognitive.active_context[0] if state.cognitive.active_context_type in ["problem", "proposal"] else None
     raw_output = assess_what_to_list(
-        state.get_last_user_message().content_en,
+        state.get_last_user_message().content,
         state.get_reasoning_context(),
         active_context
     ).strip()

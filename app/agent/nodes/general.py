@@ -19,11 +19,11 @@ def error_recovery_node(state: AgentState) -> Command:
 
     state.reset_state(reset_errors=False)
 
-    state.cognitive.messages_to_include = [get_error_message(code, "English")]
+    state.cognitive.messages_to_include = [get_error_message(code)]
 
     return Command(update=state, goto="generate_output_message")
 
-def generate_output_message(state: AgentState) -> Command:
+def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
     state = build_output_message(state)
     

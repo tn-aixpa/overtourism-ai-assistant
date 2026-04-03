@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph
 
-from app.agent.nodes.problem import deactivate_current_context, extract_problem_node, parse_confirmation_node, create_new_problem_instance_node
+from app.agent.nodes.problem import deactivate_current_context, extract_problem, parse_confirmation, create_problem
 from app.agent.state import AgentState
 from app.agent.graphs.utils import add_safe_node
 
@@ -19,9 +19,9 @@ graph = StateGraph(AgentState)
 
 graph.add_node("problem_entry_router", lambda s: s)
 add_safe_node(graph, "deactivate_current_context", deactivate_current_context)
-add_safe_node(graph, "extract_problem", extract_problem_node)
-add_safe_node(graph, "parse_problem_confirmation", parse_confirmation_node)
-add_safe_node(graph, "create_new_problem_instance", create_new_problem_instance_node)
+add_safe_node(graph, "extract_problem", extract_problem)
+add_safe_node(graph, "parse_problem_confirmation", parse_confirmation)
+add_safe_node(graph, "create_problem", create_problem)
 
 graph.set_entry_point("problem_entry_router")
 graph.add_conditional_edges(
@@ -35,4 +35,4 @@ graph.add_conditional_edges(
 
 graph.add_edge("deactivate_current_context", "extract_problem")
 
-problem_subgraph = graph.compile()
+new_problem_subgraph = graph.compile()

@@ -72,7 +72,7 @@ class AgentTestResult:
 
     def print_conversation(self):
         for m in self.messages:
-            print(f"{m.role}: {m.content_en}")
+            print(f"{m.role}: {m.content}")
 
     def trace(self):
         return self.state.cognitive.trace.steps
@@ -85,7 +85,7 @@ class AgentTestRunner:
         self.pending_user_inputs = []
 
     def start(self, message: str):
-        self.state.add_user_message(message, message)
+        self.state.add_user_message(message)
         return self
 
     def reply(self, message: str):
@@ -101,7 +101,7 @@ class AgentTestRunner:
                     f"Agent waiting for {self.state.waiting_for} but no test reply provided"
                 )
             user_reply = self.pending_user_inputs.pop(0)
-            self.state.add_user_message(user_reply, user_reply)
+            self.state.add_user_message(user_reply)
             self.state.user_input = user_reply
 
         return self.state
@@ -121,7 +121,7 @@ class AgentTestRunner:
                 # Normal conversational turn — just pop next message
                 user_reply = self.pending_user_inputs.pop(0)
 
-            self.state.add_user_message(user_reply, user_reply)
+            self.state.add_user_message(user_reply)
             self.state.user_input = user_reply if self.state.waiting_for else None
             self.state = invoke_state(self.app, self.state)
 

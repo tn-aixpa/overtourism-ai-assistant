@@ -1,6 +1,5 @@
 from typing import Any, List
 import json
-from langchain_core.prompts import ChatPromptTemplate
 
 from app.utils.llm import llm_interaction, format_messages
 from app.agent. state import ConversationMessage
@@ -83,22 +82,4 @@ The following messages represent the core findings of the answering process. **E
 """
 
     return llm_interaction(prompt, lightweight_llm=False)
-
-# ---------------------------------------------------------------------------
-# TRANSLATION
-# ---------------------------------------------------------------------------
-
-translate_prompt = ChatPromptTemplate.from_template(
-    "Translate the following text from {input_language} to {target_language}. "
-    "Return ONLY the translated text. Do not explain.\n\n{text}"
-)
-
-def translate(text, input_language, target_language):
-    # chain = translate_prompt | llm
-    # return chain.invoke({
-    #     "text": text,
-    #     "input_language": input_language,
-    #     "target_language": target_language
-    # }).content
-    return text
 

@@ -22,8 +22,10 @@ def deactivate_current_context(state: AgentState) -> Command:
     
     return state
 
-def extract_problem(state: AgentState) -> AgentState:
-    logger.info("Extracting problem information from conversation context.")
+
+def extract_problem(state: AgentState):
+    logger.info("Entering problem extraction node")
+    
     atttachments_list = []
 
     answer = extract_problem_data(
@@ -40,23 +42,17 @@ def extract_problem(state: AgentState) -> AgentState:
     schema = ProblemInfoSchema.default()
 
     try:
-        state.cognitive.extracted_problem_info = build_schema_data(schema, problem, ProblemInfo)
+        state.cognitive.problem_info_extracted = build_schema_data(schema, problem, ProblemInfo)
         state.cognitive.extracted_all_problem = True
     except Exception as e:
         state.cognitive.messages_to_include = [str(e)]
-        state.cognitive.extracted_problem_info = None
-        state.cognitive.extracted_all_problem = False
-
-    return state
+        state.cognitive.problem_info_extracted = None
+        state.cognitive.extracted_all_problem = False    
 
 
-def extract_problem_node(state: AgentState):
-    logger.info("Entering problem extraction node")
-    state = extract_problem(state)
+    state.add_trace("node_execution", node="extract_problem", data={"extracted": state.cognitive.problem_info_extracted, "extracted_all": state.cognitive.extracted_all_problem})
 
-    state.add_trace("node_execution", node="extract_problem_node", data={"extracted": state.cognitive.extracted_problem_info, "extracted_all": state.cognitive.extracted_all_problem})
-
-    state.active_workflow = AgentState.Workflow.PROBLEM
+    state.active_workflow = AgentState.Workflow.PROBLEM_CREATION
     state.user_input = None
 
     if state.cognitive.extracted_all_problem:
@@ -66,17 +62,17 @@ def extract_problem_node(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation_node(state: AgentState):
+def parse_confirmation(state: AgentState):
     logger.info("Entering confirmation parsing node")
-    message = state.get_last_user_message().content_en
+    message = state.get_last_user_message().content
 
     state.cognitive.next_action = parse_confirmation(message)+'_PROBLEM'
     logger.info(f"Parsed user confirmation intent: {state.cognitive.next_action}")
 
-    state.add_trace("node_execution", node="parse_confirmation_node", data={"intent": state.cognitive.next_action})
+    state.add_trace("node_execution", node="parse_confirmation", data={"intent": state.cognitive.next_action})
 
     if state.cognitive.next_action == "WAIT_CONFIRMATION_PROBLEM":
-        state.active_workflow = AgentState.Workflow.PROBLEM
+        state.active_workflow = AgentState.Workflow.PROBLEM_CREATION
         state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
         state.user_input = None
         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
@@ -84,13 +80,13 @@ def parse_confirmation_node(state: AgentState):
     if state.cognitive.next_action == "CONFIRM_PROBLEM":
         state.waiting_for = None
         state.user_input = None
-        return Command(update=state, goto="create_new_problem_instance")
+        return Command(update=state, goto="create_problem")
     
     if state.cognitive.next_action == "CANCEL_PROPOSAL":
         state.waiting_for = None
         state.user_input = None
         state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
         state.cognitive.additional_output_information = []
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
@@ -102,10 +98,10 @@ def parse_confirmation_node(state: AgentState):
     state.user_input = None
     return Command(update=state, goto="deactivate_current_context", graph=Command.PARENT)
 
-def create_new_problem_instance_node(state: AgentState) -> AgentState:
-    state.add_trace("node_execution", node="create_new_problem_instance_node")
+def create_problem(state: AgentState) -> AgentState:
+    state.add_trace("node_execution", node="create_problem_instance")
     
-    problem = state.cognitive.extracted_problem_info
+    problem = state.cognitive.problem_info_extracted
     logger.info(f"Creating instance for problem: {problem}")
     
     payload = {
@@ -131,7 +127,7 @@ def create_new_problem_instance_node(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
-    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROBLEM, "English")]
+    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROBLEM)]
     state.cognitive.additional_output_information = []
 
     #TODO: decide if we want to activate this problem or ask the user if he wants to activate it

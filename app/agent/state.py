@@ -1,6 +1,6 @@
 
 import dataclasses
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import StrEnum, Enum
@@ -19,8 +19,7 @@ from app.utils.backend_integration_classes import (
 @dataclass
 class ConversationMessage:
     role: str  # "user" | "assistant"
-    content_localized: str  # localized user-facing content(e.g. Italian)
-    content_en: str
+    content: str
     timestamp: datetime = field(default_factory=datetime.now)
 
 @dataclass
@@ -35,19 +34,12 @@ class ConversationBuffer:
         n = n or self.max_window_size
         return self.messages[-n:]
 
-    def get_context_window_en(self, n: Optional[int] = None) -> List[Dict[str, str]]:
+    def get_context_window(self, n: Optional[int] = None) -> List[Dict[str, str]]:
         """
         Returns last N messages formatted for LLM reasoning (English only).
         """
         msgs = self.get_last_n(n)
-        return [{"role": m.role, "content": m.content_en} for m in msgs]
-
-    def get_context_window_localized(self, n: Optional[int] = None) -> List[Dict[str, str]]:
-        """
-        Returns last N messages in user language (UI use only).
-        """
-        msgs = self.get_last_n(n)
-        return [{"role": m.role, "content": m.content_localized} for m in msgs]
+        return [{"role": m.role, "content": m.content} for m in msgs]
 
 @dataclass
 class TraceStep:
@@ -93,26 +85,25 @@ class CognitiveState:
 
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
-    extracted_problem_info: ProblemInfo = None
+    problem_info_extracted: ProblemInfo = None
     extracted_all_problem: bool = False
 
     #Proposal context
     proposal_info_to_extract = ProposalInfoSchema.default()
+    proposal_info_extracted: ProposalInfo = None
     extracted_all_proposal: bool = False
-    extracted_proposal_info: ProposalInfo = None
 
     # Scenario context
     scenario_info_to_extract = ScenarioInfoSchema.default()
-    extracted_all_scenario: bool = False
     scenarios_to_generate: List[ScenarioInfo] = field(default_factory=list)
-    validation_errors: str = ""
+    extracted_all_scenario: bool = False
+    scenario_validation_errors: str = ""
 
     # Expert reasoning
     selected_roles: List[str] = field(default_factory=list)
-    expert_answers: Dict[str, str] = field(default_factory=dict)
 
     # Data layer
-    available_entries: Dict[str, Any] = field(default_factory=dict)
+    available_entries: Dict[str, Any] = field(default_factory=dict) #{"all_ids": ..., "ids_dict": ..., "connections_dict": ..., "names_dict": ...}
     context_data: Dict[str, Any] = field(default_factory=dict)
     editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
@@ -143,9 +134,9 @@ class AgentState:
     # Workflow orchestration
     class Workflow(StrEnum):
         INTENT = "intent"
-        PROBLEM = "problem"
-        PROPOSAL_EXTRACTION = "new_proposal"
-        SCENARIO_EXTRACTION = "scenario_extraction"
+        PROBLEM_CREATION = "new_problem"
+        PROPOSAL_CREATION = "new_proposal"
+        SCENARIO_CREATION = "new_scenario"
         INTERACTION = "interaction"
 
     resume_nome: Dict[str, str] = field(default_factory=dict)
@@ -156,7 +147,6 @@ class AgentState:
         PROBLEM_CONFIRMATION = "PROBLEM_CONFIRMATION"
         PROPOSAL_INPUT = "PROPOSAL_INPUT"
         PROPOSAL_CONFIRMATION = "PROPOSAL_CONFIRMATION"
-        SCENARIO_PREFERENCE = "SCENARIO_PREFERENCE"
         SCENARIO_INPUT = "SCENARIO_INPUT"
         SCENARIO_CONFIRMATION = "SCENARIO_CONFIRMATION"
         CONTEXT_INPUT = "CONTEXT_INPUT"
@@ -180,21 +170,19 @@ class AgentState:
     def add_trace(self, step_type: str, node: str | None = None, data: Optional[Dict[str, Any]] = None):
         self.cognitive._add_trace(step_type=step_type, node=node, data=data)
 
-    def add_user_message(self, localized: str, translated_en: str):
+    def add_user_message(self, content: str):
         self.conversation.add_message(
             ConversationMessage(
                 role="user",
-                content_localized=localized,
-                content_en=translated_en,
+                content=content,
             )
         )
 
-    def add_assistant_message(self, localized: str, translated_en: str):
+    def add_assistant_message(self, content: str):
         self.conversation.add_message(
             ConversationMessage(
                 role="assistant",
-                content_localized=localized,
-                content_en=translated_en,
+                content=content,
             )
         )
 
@@ -210,10 +198,7 @@ class AgentState:
         return None
 
     def get_reasoning_context(self, n: Optional[int] = DEFAULT_REASONING_CONTEXT_SIZE):
-        return self.conversation.get_context_window_en(n)
-
-    def get_ui_context(self, n: Optional[int] = DEFAULT_REASONING_CONTEXT_SIZE):
-        return self.conversation.get_context_window_localized(n)
+        return self.conversation.get_context_window(n)
     
     def get_active_context_string(self):
         context_type = self.cognitive.active_context_type
@@ -289,13 +274,12 @@ class AgentState:
         self.cognitive.elements_to_list = []
         self.cognitive.filter_list_by = ""
         self.cognitive.partial_list = {}
-        self.cognitive.extracted_problem_info = {}
+        self.cognitive.problem_info_extracted = {}
         self.cognitive.extracted_all_problem = False
         self.cognitive.extracted_all_scenario = False
         self.cognitive.scenarios_to_generate = []
-        self.cognitive.validation_errors = ""
+        self.cognitive.scenario_validation_errors = ""
         self.cognitive.selected_roles = []
-        self.cognitive.expert_answers = {}
 
         if reset_errors:
             self.cognitive.error_code = ""

@@ -13,7 +13,6 @@ class CognitivePayload(BaseModel):
     active_context: List[str] = Field(default_factory=list)
 
     selected_roles: List[str] = Field(default_factory=list)
-    expert_answers: Dict[str, Any] = Field(default_factory=dict)
 
     data: Dict[str, Any] = Field(default_factory=dict)
 

@@ -64,7 +64,7 @@ def draw_conversation(messages, im_name):
 
         lines = wrap_text_pixels(
             temp_draw,
-            msg.content_localized,
+            msg.content,
             MAX_BUBBLE_WIDTH - (BUBBLE_PADDING * 2)
         )
 

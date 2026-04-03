@@ -3,10 +3,10 @@ from langgraph.graph import StateGraph
 from app.agent.state import AgentState
 from app.agent.graphs.utils import add_safe_node
 from app.agent.nodes.proposal import (
-    extract_proposal_node,
-    parse_confirmation_node,
+    extract_proposal,
+    parse_confirmation,
     assert_active_problem,
-    create_proposal_node
+    create_proposal
 )
 
 
@@ -25,9 +25,9 @@ graph = StateGraph(AgentState)
 
 graph.add_node("proposal_entry_router", lambda s: s)
 add_safe_node(graph, "assert_active_problem", assert_active_problem)
-add_safe_node(graph, "extract_proposal", extract_proposal_node)
-add_safe_node(graph, "parse_proposal_confirmation", parse_confirmation_node)
-add_safe_node(graph, "create_proposal", create_proposal_node)
+add_safe_node(graph, "extract_proposal", extract_proposal)
+add_safe_node(graph, "parse_proposal_confirmation", parse_confirmation)
+add_safe_node(graph, "create_proposal", create_proposal)
 
 graph.set_entry_point("proposal_entry_router")
 

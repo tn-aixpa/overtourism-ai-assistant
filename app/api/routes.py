@@ -7,7 +7,6 @@ from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph import app as agent_app
 from app.agent.memory import generate_key, load_state, save_state
-from app.utils.common import translate_from_eng
 from app.utils.error_codes import get_error_message, ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -47,8 +46,7 @@ async def run_agent_endpoint(
         assert message, "No message provided in the request"
 
         logger.info(f"Received message for session {key}: {message} ({len(files)} attachments)")        
-        translated = translate_from_eng(message, state.user_lang)
-        state.add_user_message(localized=message, translated_en=translated)
+        state.add_user_message(message)
 
         # TODO: handle attachments
         # for file in files:
@@ -75,9 +73,9 @@ async def run_agent_endpoint(
         active_context = final_state.get_active_context_string()
         last_msg = final_state.get_last_message()
         response_text = (
-            last_msg.content_localized
+            last_msg.content
             if last_msg and last_msg.role == "assistant"
-            else get_error_message(ErrorCode.REQUEST_ERROR, final_state=state.user_lang)
+            else get_error_message(ErrorCode.REQUEST_ERROR)
         )
 
         return AgentResponse(

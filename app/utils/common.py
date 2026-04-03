@@ -28,27 +28,14 @@ def parse_confirmation(message):
 def to_state(result_dict) -> AgentState:
     return AgentState(**result_dict)
 
-def translate_from_eng(msg, user_lang):
-    # if user_lang == "English":
-    #     return msg
-    # msg = translate(msg, "English", user_lang)
-    return msg
-
-def translate_to_eng(msg, user_lang):
-    # if user_lang == "English":
-    #     return msg
-    # msg = translate(msg, user_lang, "English")
-    return msg
-
 def build_output_message(state: AgentState) -> AgentState:
     output_message = generate_answer(
-        state.get_last_user_message().content_en,
+        state.get_last_user_message().content,
         state.user_lang,
         state.cognitive.messages_to_include,
         state.cognitive.additional_output_information
     )
     state.add_assistant_message(
-        output_message,
         output_message
     )
 

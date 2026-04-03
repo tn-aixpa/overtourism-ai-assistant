@@ -28,7 +28,7 @@ def assert_active_problem(state: AgentState) -> Command:
         "subgraph": Command.PARENT
     }
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT, "English")]
+    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -42,8 +42,10 @@ def assert_active_problem(state: AgentState) -> Command:
 
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
-def extract_proposal(state: AgentState) -> AgentState:
-    logger.info("Extracting proposal from reasoning context")
+
+def extract_proposal(state: AgentState):
+    logger.info("Entering extract_proposal")
+
     ids_dict = state.cognitive.available_entries.get("ids_dict", {})
     available_scenarios = ids_dict.get("scenarios", set())
     atttachments_list = []
@@ -66,20 +68,15 @@ def extract_proposal(state: AgentState) -> AgentState:
     schema = ProposalInfoSchema.default()
 
     try:
-        state.cognitive.extracted_proposal_info = build_schema_data(schema, proposal, ProposalInfo)
+        state.cognitive.proposal_info_extracted = build_schema_data(schema, proposal, ProposalInfo)
         state.cognitive.extracted_all_proposal = True
     except Exception as e:
         state.cognitive.messages_to_include = [str(e)]
-        state.cognitive.extracted_proposal_info = None
+        state.cognitive.proposal_info_extracted = None
         state.cognitive.extracted_all_proposal = False
 
-    return state
-
-def extract_proposal_node(state: AgentState):
-    logger.info("Entering extract_proposal_node")
-    state.add_trace("node_execution", node="extract_proposal_node", data={"extracted": state.cognitive.extracted_proposal_info ,"extracted_all_proposal": state.cognitive.extracted_all_proposal})
-    state = extract_proposal(state)
-    state.active_workflow = AgentState.Workflow.PROPOSAL_EXTRACTION
+    state.add_trace("node_execution", node="extract_proposal", data={"extracted": state.cognitive.proposal_info_extracted ,"extracted_all_proposal": state.cognitive.extracted_all_proposal})
+    state.active_workflow = AgentState.Workflow.PROPOSAL_CREATION
     state.user_input = None
 
     if state.cognitive.extracted_all_proposal:
@@ -89,17 +86,17 @@ def extract_proposal_node(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation_node(state: AgentState):
-    logger.info("Entering parse_confirmation_node")
-    message = state.get_last_user_message().content_en
+def parse_confirmation(state: AgentState):
+    logger.info("Entering parse_confirmation")
+    message = state.get_last_user_message().content
     
     state.cognitive.next_action = parse_confirmation(message)+'_PROPOSAL'
     logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
 
-    state.add_trace("node_execution", node="parse_confirmation_node", data={"next_action": state.cognitive.next_action})
+    state.add_trace("node_execution", node="parse_confirmation", data={"next_action": state.cognitive.next_action})
 
     if state.cognitive.next_action == "WAIT_CONFIRMATION_PROPOSAL":
-        state.active_workflow = AgentState.Workflow.PROPOSAL_EXTRACTION
+        state.active_workflow = AgentState.Workflow.PROPOSAL_CREATION
         state.waiting_for = AgentState.WaitingFor.PROPOSAL_CONFIRMATION
         state.user_input = None
         return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
@@ -113,7 +110,7 @@ def parse_confirmation_node(state: AgentState):
         state.waiting_for = None
         state.user_input = None
         state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENRAL_EXIT_MESSAGE, "English")]
+        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
         state.cognitive.additional_output_information = []
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
     
@@ -123,11 +120,11 @@ def parse_confirmation_node(state: AgentState):
     return Command(update=state, goto="new_proposal")
     
 
-def create_proposal_node(state: AgentState) -> AgentState:
+def create_proposal(state: AgentState) -> AgentState:
     
-    state.add_trace("node_execution", node="create_proposal_node")
+    state.add_trace("node_execution", node="create_proposal")
 
-    proposal = state.cognitive.extracted_proposal_info
+    proposal = state.cognitive.proposal_info_extracted
     logger.info(f"Creating instance for proposal: {proposal}")
     
     problem_id = state.cognitive.active_context[0]
@@ -169,7 +166,7 @@ def create_proposal_node(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
-    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROPOSAL, "English")]
+    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROPOSAL)]
     state.cognitive.additional_output_information = []
 
     #TODO: decide if we want to activate this proposal or ask the user if he wants to activate it
