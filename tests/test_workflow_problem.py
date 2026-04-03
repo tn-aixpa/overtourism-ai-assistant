@@ -8,7 +8,7 @@ def test_problem_creation(agent):
     try:
         result = (
             agent.start(message)
-                .reply("The problem is that there are not enough parking spaces in Molveno, and the objective is to reduce the number of complaints.")
+                .reply("These are the required informations:\n- Title: overtoruism in Molveno\n- Objectives: reduce traffic and congestion\n- Problem description: too many access with cars are registered in the city center")
                 .reply("Yes, please.")
                 .run()
         )

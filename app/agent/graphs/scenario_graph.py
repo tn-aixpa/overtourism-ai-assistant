@@ -3,8 +3,8 @@ from langgraph.graph import StateGraph
 from app.agent.state import AgentState
 from app.agent.graphs.utils import add_safe_node
 from app.agent.nodes.scenario import (
-    extract_scenario_node,
-    parse_confirmation,
+    extract_scenario,
+    parse_scenario_confirmation,
     assert_active_proposal,
     create_scenario
 )
@@ -25,9 +25,9 @@ graph = StateGraph(AgentState)
 
 graph.add_node("scenario_entry_router", lambda s: s)
 add_safe_node(graph, "assert_active_proposal", assert_active_proposal)
-add_safe_node(graph, "extract_scenario", extract_scenario_node)
-add_safe_node(graph, "parse_scenario_confirmation", parse_confirmation)
-add_safe_node(graph, "run_scenario", create_scenario)
+add_safe_node(graph, "extract_scenario", extract_scenario)
+add_safe_node(graph, "parse_scenario_confirmation", parse_scenario_confirmation)
+add_safe_node(graph, "create_scenario", create_scenario)
 
 graph.set_entry_point("scenario_entry_router")
 

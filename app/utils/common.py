@@ -3,7 +3,7 @@ from app.agent.state import AgentState
 from app.utils.llm_reasoning import llm_classify_confirmation
 from app.utils.llm_text_generation import generate_answer
 
-def parse_confirmation(message):
+def parse_confirmation_message(message):
     CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"}
     EDIT = {"edit", "change", "modify", "adjust"}
     CANCEL = {"cancel", "interrupt", "quit", "stop", "no"}

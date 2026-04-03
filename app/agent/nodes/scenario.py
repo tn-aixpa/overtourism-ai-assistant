@@ -4,7 +4,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_scenario_data
 from app.utils.llm import parse_llm_json
-from app.utils.common import parse_confirmation
+from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import create_scenario_instance
@@ -23,7 +23,7 @@ def assert_active_proposal(state: AgentState) -> Command:
     # TODO: when multi-action is implemented remove this resume, keep only output message
     logger.info("No active prposal, asking user to activate it")
     state.resume_nome = {
-        "node": "scenario_extraction",
+        "node": "new_scenario",
         "subgraph": Command.PARENT
     }
 
@@ -42,8 +42,8 @@ def assert_active_proposal(state: AgentState) -> Command:
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
 
-def extract_scenario_node(state: AgentState):
-    logger.info("Entering extract_scenario_node")
+def extract_scenario(state: AgentState):
+    logger.info("Entering extract_scenario")
 
     answer = extract_scenario_data(state.get_reasoning_context(),
                                 state.cognitive.editable_indexes)
@@ -134,7 +134,7 @@ def extract_scenario_node(state: AgentState):
         f"scenario_validation_errors: {state.cognitive.scenario_validation_errors}"
     )
 
-    state.add_trace("node_execution", node="extract_scenario_node", data={"extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
+    state.add_trace("node_execution", node="extract_scenario", data={"extracted": state.cognitive.scenarios_to_generate,"extracted_all_scenario": state.cognitive.extracted_all_scenario,})
     state.active_workflow = AgentState.Workflow.SCENARIO_CREATION
     state.user_input = None
 
@@ -145,38 +145,8 @@ def extract_scenario_node(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation(state: AgentState):
-    logger.info("Entering parse_confirmation")
-    message = state.get_last_user_message().content
-    
-    state.cognitive.next_action = parse_confirmation(message)+'_SCENARIO'
-    logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
-
-    state.add_trace("node_execution", node="parse_confirmation", data={"next_action": state.cognitive.next_action})
-
-    if state.cognitive.next_action == "WAIT_CONFIRMATION_SCENARIO":
-        state.active_workflow = AgentState.Workflow.SCENARIO_CREATION
-        state.waiting_for = AgentState.WaitingFor.SCENARIO_CONFIRMATION
-        state.user_input = None
-        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
-
-    if state.cognitive.next_action == "CONFIRM_SCENARIO":
-        state.waiting_for = None
-        state.user_input = None
-        return Command(update=state, goto="run_scenario", graph="scenario_extraction")
-    
-    if state.cognitive.next_action == "CANCEL_SCENARIO":
-        state.waiting_for = None
-        state.user_input = None
-        state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
-        state.cognitive.additional_output_information = []
-        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
-    
-    # assume EDIT_SCENARIO
-    state.waiting_for = None
-    state.user_input = None
-    return Command(update=state, goto="extract_scenario")
+def parse_scenario_confirmation(state):
+    return parse_confirmation(state, "SCENARIO")
 
 
 def create_scenario(state: AgentState) -> AgentState:
@@ -204,7 +174,7 @@ def create_scenario(state: AgentState) -> AgentState:
 
         logger.info(result)
 
-        return Command(update=state, goto="run_scenario")
+        return Command(update=state, goto="create_scenario")
     else:
         state.resume_nome = {}
         state.active_workflow = None
@@ -249,7 +219,7 @@ def create_scenario(state: AgentState) -> AgentState:
 #     logger.info(f"Decided next action based on scenario strategy: {state.cognitive.next_action}")
 #     if state.cognitive.next_action == "GENERATE_SCENARIOS":
 #         state.waiting_for = None
-#         return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
+#         return Command(update=state, goto="new_scenario", graph=Command.PARENT)
 #     if state.cognitive.next_action == "GENERATE_AGENTIC_SCENARIOS":
 #         state.waiting_for = None
 #         return Command(update=state, goto="generate_scenario_candidates", graph=Command.PARENT)

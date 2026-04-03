@@ -30,13 +30,13 @@ def route_from_intent(state: AgentState):
         return Command(update=state, goto="interaction", graph=Command.PARENT)
 
     if action == "CREATE_NEW_PROBLEM":
-        return Command(update=state, goto="problem", graph=Command.PARENT)
+        return Command(update=state, goto="new_problem", graph=Command.PARENT)
     
     if action == "CREATE_NEW_PROPOSAL":
         return Command(update=state, goto="new_proposal", graph=Command.PARENT)
     
     if action == "CREATE_NEW_SCENARIO":
-        return Command(update=state, goto="scenario_extraction", graph=Command.PARENT)
+        return Command(update=state, goto="new_scenario", graph=Command.PARENT)
 
     if action == "LIST_AVAILABLE":
         return Command(update=state, goto="list_available", graph=Command.PARENT)

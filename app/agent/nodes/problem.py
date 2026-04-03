@@ -4,7 +4,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_problem_data
 from app.utils.llm import parse_llm_json
-from app.utils.common import parse_confirmation
+from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.utils.backend_integration_classes import ProblemInfoSchema, ProblemInfo, build_schema_data
 from app.tools.backend_tools import create_problem_instance
@@ -62,41 +62,8 @@ def extract_problem(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation(state: AgentState):
-    logger.info("Entering confirmation parsing node")
-    message = state.get_last_user_message().content
-
-    state.cognitive.next_action = parse_confirmation(message)+'_PROBLEM'
-    logger.info(f"Parsed user confirmation intent: {state.cognitive.next_action}")
-
-    state.add_trace("node_execution", node="parse_confirmation", data={"intent": state.cognitive.next_action})
-
-    if state.cognitive.next_action == "WAIT_CONFIRMATION_PROBLEM":
-        state.active_workflow = AgentState.Workflow.PROBLEM_CREATION
-        state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
-        state.user_input = None
-        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
-    
-    if state.cognitive.next_action == "CONFIRM_PROBLEM":
-        state.waiting_for = None
-        state.user_input = None
-        return Command(update=state, goto="create_problem")
-    
-    if state.cognitive.next_action == "CANCEL_PROPOSAL":
-        state.waiting_for = None
-        state.user_input = None
-        state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
-        state.cognitive.additional_output_information = []
-        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
-
-
-    if state.cognitive.next_action == "EDIT_PROBLEM":
-        state.waiting_for = None
-
-    state.waiting_for = None
-    state.user_input = None
-    return Command(update=state, goto="deactivate_current_context", graph=Command.PARENT)
+def parse_problem_confirmation(state):
+    return parse_confirmation(state, "PROBLEM")
 
 def create_problem(state: AgentState) -> AgentState:
     state.add_trace("node_execution", node="create_problem_instance")

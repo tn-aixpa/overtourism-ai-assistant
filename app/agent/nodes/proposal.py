@@ -4,7 +4,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_proposal_data
 from app.utils.llm import parse_llm_json
-from app.utils.common import parse_confirmation
+from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import create_proposal_instance, get_RelatedScenario
@@ -86,39 +86,8 @@ def extract_proposal(state: AgentState):
 
     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
 
-def parse_confirmation(state: AgentState):
-    logger.info("Entering parse_confirmation")
-    message = state.get_last_user_message().content
-    
-    state.cognitive.next_action = parse_confirmation(message)+'_PROPOSAL'
-    logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
-
-    state.add_trace("node_execution", node="parse_confirmation", data={"next_action": state.cognitive.next_action})
-
-    if state.cognitive.next_action == "WAIT_CONFIRMATION_PROPOSAL":
-        state.active_workflow = AgentState.Workflow.PROPOSAL_CREATION
-        state.waiting_for = AgentState.WaitingFor.PROPOSAL_CONFIRMATION
-        state.user_input = None
-        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
-    
-    if state.cognitive.next_action == "CONFIRM_PROPOSAL":
-        state.waiting_for = None
-        state.user_input = None
-        return Command(update=state, goto="create_proposal")
-    
-    if state.cognitive.next_action == "CANCEL_PROPOSAL":
-        state.waiting_for = None
-        state.user_input = None
-        state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
-        state.cognitive.additional_output_information = []
-        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
-    
-    # assume EDIT_SCENARIO
-    state.waiting_for = None
-    state.user_input = None
-    return Command(update=state, goto="new_proposal")
-    
+def parse_proposal_confirmation(state):
+    return parse_confirmation(state, "PROPOSAL")   
 
 def create_proposal(state: AgentState) -> AgentState:
     
