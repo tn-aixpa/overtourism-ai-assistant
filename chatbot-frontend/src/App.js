@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
+import ReactMarkdown from 'react-markdown';
 
 const API_URL = "http://localhost:9000/agent";
 
@@ -8,6 +9,7 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const textareaRef = useRef(null);
+  const chatRef = useRef(null);
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const [activeContext, setActiveContext] = useState("");
@@ -29,6 +31,13 @@ function App() {
     setSessionId(id);
   }, []);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   // Handle file attachments
   const handleFileChange = (e) => {
     const newFiles = Array.from(e.target.files);
@@ -45,9 +54,10 @@ function App() {
 
   // Auto-expand textarea
   const handleInputChange = (e) => {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = e.target.scrollHeight + "px";
+    const textarea = e.target;
+    setInput(textarea.value);
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.max(textarea.scrollHeight, 24)}px`;
   };
 
   //Send message
@@ -155,11 +165,15 @@ function App() {
 
 
       {/* CHAT AREA */}
-      <div className="chat-wrapper">
+      <div className="chat-wrapper" ref={chatRef}>
         <div className="chat-container">
           {messages.map((msg, i) => (
             <div key={i} className={`message ${msg.role}`}>
-              {msg.content}
+              {msg.role === 'assistant' ? (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              ) : (
+                msg.content
+              )}
             </div>
           ))}
           {loading && (

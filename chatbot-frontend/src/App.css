@@ -65,15 +65,33 @@ body {
   display: flex;
   justify-content: center;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .chat-container {
   width: 80%;
   padding: 20px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Custom scrollbar */
+.chat-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.chat-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.chat-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 /* MESSAGE BASE */
@@ -96,8 +114,68 @@ body {
 /* ASSISTANT MESSAGE (LEFT) */
 .message.assistant {
   align-self: flex-start;
-  background: #a0c4f2;
+  background: none;
   color: #000;
+}
+
+/* Markdown styles within assistant messages */
+.message.assistant h1,
+.message.assistant h2,
+.message.assistant h3,
+.message.assistant h4,
+.message.assistant h5,
+.message.assistant h6 {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.message.assistant h1 { font-size: 1.5em; }
+.message.assistant h2 { font-size: 1.3em; }
+.message.assistant h3 { font-size: 1.1em; }
+
+.message.assistant p {
+  margin: 0.5em 0;
+}
+
+.message.assistant ul,
+.message.assistant ol {
+  margin:  0;
+  padding-left: 1.5em;
+}
+
+.message.assistant li {
+  margin: 0.25em 0;
+}
+
+.message.assistant strong,
+.message.assistant b {
+  font-weight: bold;
+}
+
+.message.assistant em,
+.message.assistant i {
+  font-style: italic;
+}
+
+.message.assistant code {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.message.assistant pre {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 0.5em;
+  border-radius: 5px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.message.assistant pre code {
+  background: none;
+  padding: 0;
 }
 
 /* INPUT AREA */
@@ -125,9 +203,12 @@ textarea {
   border-radius: 6px;
   border: 1px solid #ccc;
   resize: none;
+  overflow-y: hidden;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.4;
+  min-height: 24px;
+  height: auto;
 }
 
 button {
