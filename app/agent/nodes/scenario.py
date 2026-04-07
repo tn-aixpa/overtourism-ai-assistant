@@ -42,7 +42,7 @@ def assert_active_proposal(state: AgentState) -> Command:
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
 
-def extract_scenario(state: AgentState):
+def extract_scenario(state: AgentState) -> Command:
     logger.info("Entering extract_scenario")
 
     answer = extract_scenario_data(state.get_reasoning_context(),
@@ -52,7 +52,6 @@ def extract_scenario(state: AgentState):
     assert "Error connecting to chatbot" not in answer
     
     scenarios = parse_llm_json(answer)       
-    extracted_all_scenario = True
     schema = ScenarioInfoSchema.default()
 
     validated_scenarios: list[ScenarioInfo] = []
@@ -100,21 +99,11 @@ def extract_scenario(state: AgentState):
                     "indexes_to_change": validated_indexes,
                 }
 
-                validated_scenarios.append(
-                    build_schema_data(schema, scenario_data, ScenarioInfo)
-                )
-            except:
-                extracted_all_scenario = False
+                scenario_instance = build_schema_data(schema, scenario_data, ScenarioInfo)
+                validated_scenarios.append(scenario_instance)
+            except Exception as e:
+                scenario_validation_errors.append(str(e))
 
-    if not extracted_all_scenario:
-        state.cognitive.extracted_all_scenario = False
-        required_fields = [f for f, v in vars(state.cognitive.scenario_info_to_extract).items() if v.required]
-        state.cognitive.scenario_validation_errors = (
-            f"Not all scenarios include the required elements ({', '.join(required_fields)}).\nExtracted info"
-        )
-        state.cognitive.scenarios_to_generate = []
-        state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
-        return state
 
     if not scenario_validation_errors:
         state.cognitive.extracted_all_scenario = True

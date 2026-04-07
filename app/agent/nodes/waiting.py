@@ -12,7 +12,8 @@ def _wait_instructions(state: AgentState):
 
     if waiting_for == AgentState.WaitingFor.PROBLEM_INPUT:
         instructions = state.cognitive.messages_to_include[0]
-        return instructions, []
+        additional_info = [state.cognitive.problem_info_to_extract.format_structure()]
+        return instructions, additional_info
 
     if waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION:
         formatted_proposal = state.cognitive.problem_info_extracted.format_fields()
@@ -20,7 +21,8 @@ def _wait_instructions(state: AgentState):
         
     if waiting_for == AgentState.WaitingFor.PROPOSAL_INPUT:
         instructions = state.cognitive.messages_to_include[0]
-        return instructions, []
+        additional_info = [state.cognitive.proposal_info_to_extract.format_structure()]
+        return instructions, additional_info
 
     if waiting_for == AgentState.WaitingFor.PROPOSAL_CONFIRMATION:
         formatted_proposal = state.cognitive.proposal_info_extracted.format_fields()
@@ -30,7 +32,10 @@ def _wait_instructions(state: AgentState):
         prefix = (state.cognitive.scenario_validation_errors + "\n") if state.cognitive.scenario_validation_errors else ""
         instructions = prefix + "Please, provide all required details to create a scenario."
 
-        additional_info = [f"Editable indexes: {state.cognitive.editable_indexes}"]
+        additional_info = [
+            state.cognitive.scenario_info_to_extract.format_structure(),
+            f"Editable indexes: {state.cognitive.editable_indexes}"
+        ]
     
         return instructions, additional_info
 
