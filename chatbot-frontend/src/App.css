@@ -178,6 +178,25 @@ body {
   padding: 0;
 }
 
+/* TABLE STYLES */
+.message.assistant table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.message.assistant th,
+.message.assistant td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.message.assistant th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
 /* INPUT AREA */
 .input-container {
   display: flex;
