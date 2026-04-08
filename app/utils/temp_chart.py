@@ -28,10 +28,10 @@ def fetch_scenario_data(scenario_id: str, problem_id: str, api_url: str = BACKEN
         print(f"Error fetching scenario data: {e}")
         return {}
 
-
 # ---------------------------------------------------------------------------
 # Chart builders
 # ---------------------------------------------------------------------------
+
 
 def build_tourists_excursionists_chart(
     curves: list,
@@ -78,7 +78,8 @@ def build_tourists_excursionists_chart(
                 color=marker.get("color", pt.get("color", "black")),
                 size=marker.get("size", 8),
                 line=dict(width=1, color="black"),
-                colorscale=marker.get("colorscale", "Viridis"),
+                colorscale=marker.get("colorscale", "RdYlGn_r"),
+                reversescale=marker.get("reversescale", True),
                 cmin=marker.get("cmin", 0),
                 cmax=marker.get("cmax", 1),
                 showscale=marker.get("showscale", False),
@@ -110,19 +111,10 @@ def build_tourists_excursionists_chart(
         hovermode="closest",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(
-            scaleanchor="y",
-            scaleratio=1,
-            layer="below traces"
-        ),
-        yaxis=dict(
-            scaleanchor="x",
-            scaleratio=1,
-            layer="below traces"
-        ),
+        # removed scaleanchor from here entirely
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", zeroline=False)
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", zeroline=False, range=[0, x_max] if x_max else None, rangemode="tozero")
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(128,128,128,0.15)", zeroline=False, range=[0, y_max] if y_max else None, rangemode="tozero")
 
     return fig
 
@@ -162,7 +154,7 @@ def build_tourist_load_chart(
 
     capacity_label = (
         "Soglia di sovraffollamento"
-        if subsystem == "default"
+        if subsystem == "default" or subsystem == "overtourism"
         else "Capacità di carico"
     )
     
@@ -200,7 +192,7 @@ def build_tourist_load_chart(
     y_max = max(y) * 1.2 if y else capacity_mean * 1.2
 
     # Build y-axis label
-    if subsystem == "default":
+    if subsystem == "default" or subsystem == "overtourism":
         yaxis_label = "Livello di utilizzo della destinazione"
     else:
         yaxis_label = f"Livello di utilizzo della risorsa {subsystem}"
@@ -401,15 +393,11 @@ def load_plot_input(
         return None
 
 
+
 def extract_plot_data_for_bidimensionale(plot_data: dict) -> tuple:
-    """Extract data needed for bidimensionale (Turisti/Escursionisti) chart.
-    
-    Returns:
-        (curves, points, x_max, y_max)
-    """
     if not plot_data:
         return [], [], 0, 0
-    
+
     curves = []
     if "constraint_curves" in plot_data:
         for group_name, curve_data in plot_data["constraint_curves"].items():
@@ -420,54 +408,73 @@ def extract_plot_data_for_bidimensionale(plot_data: dict) -> tuple:
                 "color": "black",
                 "dash": get_dash_for_group(group_name),
             })
-    
+
+    # Resolve uncertainty data from any known location
+    uncertainty_data = (
+        plot_data.get("points", {}).get("uncertainty")
+        or plot_data.get("kpis", {}).get("uncertainty")
+        or plot_data.get("uncertainty")
+        or []
+    )
+
     points = []
-    if "kpis" in plot_data and isinstance(plot_data["kpis"], dict):
-        kpis = plot_data["kpis"]
-        uncertainty_data = kpis.get("uncertainty", [])
-        if isinstance(uncertainty_data, list) and uncertainty_data:
-            tourists = [u.get("tourists", 0) for u in uncertainty_data]
-            excursionists = [u.get("excursionists", 0) for u in uncertainty_data]
-            index = [u.get("index", 0) for u in uncertainty_data]
-            
-            points.append({
-                "name": "Presenze",
-                "x": tourists,
-                "y": excursionists,
-                "marker": {
-                    "color": index,
-                    "colorscale": "Viridis",
-                    "cmin": 0,
-                    "cmax": 1,
-                    "size": 6,
-                    "showscale": False,
-                }
-            })
-    
+    if uncertainty_data:
+        tourists     = [u["tourists"]     for u in uncertainty_data]
+        excursionists= [u["excursionists"] for u in uncertainty_data]
+        index        = [u.get("index", 0) for u in uncertainty_data]
+
+        points.append({
+            "name": "Presenze",
+            "x": tourists,
+            "y": excursionists,
+            "marker": {
+                "color": index,
+                "colorscale": "RdYlGn_r",  # already reversed – do NOT set reversescale=True
+                "reversescale": False,
+                "cmin": 0,
+                "cmax": 1,
+                "size": 6,
+                "showscale": True,          # show the colorbar so users can read risk
+            },
+            "hovertemplate": (
+                "<b>Presenze</b><br>"
+                "<b>Turisti:</b> %{x}<br>"
+                "<b>Escursionisti:</b> %{y}<br>"
+                "<b>Indice:</b> %{marker.color:.2f}"
+                "<extra></extra>"
+            ),
+        })
+
     x_max = plot_data.get("x_max", 0)
     y_max = plot_data.get("y_max", 0)
-    
+
+    if not x_max and tourists:
+        x_max = max(tourists) * 1.2
+    if not y_max and excursionists:
+        y_max = max(excursionists) * 1.2
+
     return curves, points, x_max, y_max
 
 
 def extract_plot_data_for_monodimensionale(plot_data: dict) -> tuple:
-    """Extract data needed for monodimensionale (Tourist Load) chart.
-    
-    Returns:
-        (uncertainty_data, capacity_mean, capacity_mean_by_constraint)
-    """
     if not plot_data:
         return [], 0, {}
-    
-    uncertainty_data = []
-    if "kpis" in plot_data and isinstance(plot_data["kpis"], dict):
-        kpis = plot_data["kpis"]
-        if "uncertainty" in kpis and isinstance(kpis["uncertainty"], list):
-            uncertainty_data = kpis["uncertainty"]
-    
+
+    # Same unified resolver
+    uncertainty_data = (
+        plot_data.get("points", {}).get("uncertainty")
+        or plot_data.get("kpis", {}).get("uncertainty")
+        or plot_data.get("uncertainty")
+        or []
+    )
+
+    # capacity_mean: prefer explicit key, else derive from data (100th pct of usage)
     capacity_mean = plot_data.get("capacity_mean", 0)
+    if capacity_mean == 0 and uncertainty_data:
+        usages = [u.get("usage", 0) for u in uncertainty_data]
+        capacity_mean = max(usages) if usages else 0
+
     capacity_mean_by_constraint = plot_data.get("capacity_mean_by_constraint", {})
-    
     return uncertainty_data, capacity_mean, capacity_mean_by_constraint
 
 
@@ -485,17 +492,6 @@ def extract_kpis_for_comparison(plot_data: dict) -> dict:
     
     # List of subsystems to extract
     subsystems = ["parcheggi", "spiaggia", "alberghi", "ristoranti"]
-
-    # Add overtourism_level if available
-    if "overtourism_level" in kpis:
-        val = kpis["overtourism_level"]
-        if isinstance(val, dict):
-            result["overtourism_level"] = {
-                "level": val.get("level", 0),
-                "confidence": val.get("confidence", 0)
-            }
-        elif isinstance(val, (int, float)):
-            result["overtourism_level"] = {"level": val, "confidence": 0}
     
     # Try both key formats: underscore and space-separated
     for subsystem in subsystems:
@@ -518,6 +514,17 @@ def extract_kpis_for_comparison(plot_data: dict) -> dict:
                 }
             elif isinstance(val, (int, float)):
                 result[subsystem] = {"level": val, "confidence": 0}
+    
+    # Also add overtourism_level if available
+    if "overtourism_level" in kpis:
+        val = kpis["overtourism_level"]
+        if isinstance(val, dict):
+            result["overtourism_level"] = {
+                "level": val.get("level", 0),
+                "confidence": val.get("confidence", 0)
+            }
+        elif isinstance(val, (int, float)):
+            result["overtourism_level"] = {"level": val, "confidence": 0}
     
     return result
 
@@ -673,3 +680,8 @@ def generate_chart(chart_type: str, **kwargs) -> dict:
         )
     else:
         raise ValueError(f"Unsupported chart_type: {chart_type}")
+
+
+if __name__ == "__main__":
+    sample = generate_chart("tourists_excursionists")
+    #print(json.dumps(sample, indent=2)[:1000])
