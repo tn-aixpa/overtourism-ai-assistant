@@ -166,11 +166,13 @@ def temp_node(state: AgentState) -> Command:
 
     # logger.info("Step 3: build output message")
 
-    if "line" in state.get_last_message().content.lower():
-        state.chart_data = generate_chart("line")
+    if "plot" in state.get_last_message().content.lower():
+        state.chart_data = generate_chart("tourists_excursionists")
         state.add_assistant_message("Here is the requested graph")
+    elif "load" in state.get_last_message().content.lower():
+        state.chart_data = generate_chart("tourist_load")
     elif "bar" in state.get_last_message().content.lower():
-        state.chart_data = generate_chart("bar")
+        state.chart_data = generate_chart("comparison_bar")
         state.add_assistant_message("Here is the requested graph")
     else:
         state.add_assistant_message("Success")
