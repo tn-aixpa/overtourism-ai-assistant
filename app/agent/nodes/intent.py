@@ -44,5 +44,6 @@ def route_from_intent(state: AgentState):
     if action == "CONTEXT_MANAGEMENT":
         return Command(update=state, goto="context_management", graph=Command.PARENT)
 
+    logger.error(f"Unrecognized intent: {action} → raising error")
     raise GraphError(ErrorCode.REQUEST_ERROR)
     

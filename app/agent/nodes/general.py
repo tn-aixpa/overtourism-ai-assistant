@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def error_recovery_node(state: AgentState) -> Command:
+    logger.info("Entering error recovery node")
     code = getattr(state, "error_code", ErrorCode.REQUEST_ERROR)
 
     if state.cognitive.error_details:
@@ -171,6 +172,7 @@ def temp_node(state: AgentState) -> Command:
         state.add_assistant_message("Here is the requested graph")
     elif "load" in state.get_last_message().content.lower():
         state.chart_data = generate_chart("tourist_load")
+        state.add_assistant_message("Here is the requested graph")
     elif "bar" in state.get_last_message().content.lower():
         state.chart_data = generate_chart("comparison_bar")
         state.add_assistant_message("Here is the requested graph")

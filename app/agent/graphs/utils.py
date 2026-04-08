@@ -1,7 +1,9 @@
+import logging
 from langgraph.types import Command
 
 from app.utils.error_codes import ErrorCode, GraphError
 
+logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────
 # Safe wrappers
 # ─────────────────────────────────────────────
@@ -26,6 +28,7 @@ def safe(node_fn, node_name):
             raise gi  
 
         except Exception as e:
+            logger.error(f"Unexpected error in node {node_name}: {str(e)}")
             state.cognitive.error_code = ErrorCode.REQUEST_ERROR
             state.cognitive.error_details = str(e)
             state.cognitive.error_node = node_name
