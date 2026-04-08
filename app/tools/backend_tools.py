@@ -4,10 +4,10 @@ import logging
 import json
 
 from app.utils.data import parse_data, parse_editable_indexes
-from app.config import BASE_SCENARIO_ID
+from app.config import BASE_SCENARIO_ID, BACKEND_URL
 
 logger = logging.getLogger(__name__)
-BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
+
 
 @tool
 def get_problems():
@@ -302,43 +302,3 @@ curl -X POST "{url}?{query_string}" \\
     response.raise_for_status()
 
     return response.json()
-
-
-@tool
-def get_RelatedScenario(scenario_ids):
-    """Fetch scenario details from the API."""
-    url = f"{BACKEND_URL}problems"
-    headers = {
-        "accept": "application/json"
-    }
-
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    api_response = response.json()
-
-    # Build a lookup dict of scenario_id -> scenario data (first occurrence wins)
-    scenario_lookup = {}
-    for problem in api_response.get("data", []):
-        for proposal in problem.get("proposals", []):
-            for scenario in proposal.get("related_scenarios", []):
-                s_id = scenario["scenario_id"]
-                if s_id not in scenario_lookup:
-                    scenario_lookup[s_id] = {
-                        "scenario_name": scenario["scenario_name"],
-                        "scenario_description": scenario["scenario_description"],
-                        "index_diffs": scenario["index_diffs"]
-                    }
-
-    related_scenarios = []
-    seen_ids = set()
-    for s_id in scenario_ids:
-        if s_id in seen_ids:
-            continue
-        seen_ids.add(s_id)
-        if s_id in scenario_lookup:
-            related_scenarios.append({
-                "scenario_id": s_id,
-                **scenario_lookup[s_id]
-            })
-
-    return related_scenarios

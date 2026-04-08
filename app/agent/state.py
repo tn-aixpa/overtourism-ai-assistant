@@ -126,6 +126,7 @@ class CognitiveState:
 class AgentState:
     # Interface layer (Localized language only)
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
+    chart_data: Optional[dict[str, Any]] = None
 
     # Orchestration Layer (English only)
     session_id: str = ""
@@ -268,7 +269,7 @@ class AgentState:
     def reset_state(self, reset_errors=True, reset_context=True, reset_data=True):
         self.waiting_for = None
         self.user_input = None
-
+        self.chart_data = None
 
         # Reset cognitive
         self.cognitive.elements_to_list = []

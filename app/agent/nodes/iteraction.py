@@ -6,6 +6,7 @@ from app.agent.state import AgentState
 from app.config import ALLOWED_ROLES
 from app.utils.llm_reasoning import select_role_llm
 from app.utils.llm_text_generation import answer_question
+from app.tools.backend_tools_temp import generate_chart
 
 from app.utils.error_codes import ErrorCode, get_error_message
 
@@ -73,6 +74,19 @@ def interact_context(state: AgentState) -> AgentState:
         logger.info(f"Answer for role {role}: {answer}")
         state.cognitive.messages_to_include.append(f"{role} answered: {answer}")
     
+    # TODO: consider moving somewhere else or improving
+    last_user_message = state.get_last_user_message().content.lower()
+    DRAWING_KEYWORD = ["draw", "plot", "chart", "graph", "visualize", "visualise", "show", "visualizza", "mostra", "disegna", "graficamente", "mostrami"]
+
+    if any(keyword in last_user_message for keyword in DRAWING_KEYWORD):
+        if len(state.cognitive.active_context) > 1:
+            state.chart_data = generate_chart("comparison_bar")
+        else:
+            if any(keyword in last_user_message for keyword in ["carico", "load"]):
+                state.chart_data = generate_chart("tourist_load")
+            else:
+                state.chart_data = generate_chart("tourists_excursionists")
+
     if len(state.cognitive.selected_roles) > 1:
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
         

@@ -7,7 +7,8 @@ from app.utils.llm import parse_llm_json
 from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.utils.error_codes import get_error_message, ErrorCode
-from app.tools.backend_tools import create_proposal_instance, get_RelatedScenario
+from app.tools.backend_tools import create_proposal_instance
+from app.tools.backend_tools_temp import get_RelatedScenario
 from app.utils.backend_integration_classes import ProposalInfoSchema, ProposalInfo, build_schema_data
 from app.config import BASE_SCENARIO_ID
 

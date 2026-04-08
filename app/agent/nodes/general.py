@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def error_recovery_node(state: AgentState) -> Command:
+    logger.info("Entering error recovery node")
     code = getattr(state, "error_code", ErrorCode.REQUEST_ERROR)
 
     if state.cognitive.error_details:

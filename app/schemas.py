@@ -28,5 +28,6 @@ class AgentResponse(BaseModel):
     response: Optional[str] = None
     session_id: str
     active_context: str
+    chart_data: Optional[dict[str, Any]] = None  # Plotly figure JSON or None
 
     model_config = ConfigDict(extra="allow")

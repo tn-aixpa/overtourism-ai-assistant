@@ -18,11 +18,11 @@ class GraphError(Exception):
         super().__init__(str(code))
 
 ERROR_TRANSLATIONS = {
-        ErrorCode.REQUEST_ERROR: "Errror: something went wrong while processing your request.",
+        ErrorCode.REQUEST_ERROR: "Error: something went wrong while processing your request.",
         ErrorCode.INVALID_REQUEST: "Error: I can't answer this type of request.",
         ErrorCode.INVALID_CONTEXT: "Error: the current context does not support the requested operation.",
         ErrorCode.INVALID_REQUEST_STATE: "Error: Invalid request in current state.",
-        ErrorCode.NOTHING_TO_LIST: "Error: I didn't underestand your request, I can list problems, proposals and scenarios.",
+        ErrorCode.NOTHING_TO_LIST: "Error: I didn't understand your request, I can list problems, proposals and scenarios.",
 }
 
 def get_error_message(code: ErrorCode, **kwargs):

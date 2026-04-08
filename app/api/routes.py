@@ -78,10 +78,14 @@ async def run_agent_endpoint(
             else get_error_message(ErrorCode.REQUEST_ERROR)
         )
 
+        # NEW: pull chart_data from state (None if no chart was generated this turn)
+        chart_data = getattr(final_state, "chart_data", None)
+
         return AgentResponse(
             response=response_text,
             session_id=key,
-            active_context=active_context
+            active_context=active_context,
+            chart_data=chart_data,   # <-- new field
         )
 
     except HTTPException:

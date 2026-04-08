@@ -2,8 +2,48 @@ import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Plot from "react-plotly.js";
 
 const API_URL = "http://localhost:9000/agent";
+
+function ChartPanel({ figure }) {
+  const [revision, setRevision] = useState(0);
+
+  const layout = {
+    ...figure.layout,
+    autosize: true,
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: {
+      ...figure.layout?.font,
+      color: getComputedStyle(document.documentElement)
+        .getPropertyValue("--color-text-primary")
+        .trim() || "#111",
+    },
+    margin: { l: 48, r: 24, t: figure.layout?.title ? 40 : 12, b: 40 },
+  };
+
+  const config = {
+    responsive: true,
+    displaylogo: false,
+    modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"],
+    toImageButtonOptions: { format: "svg", filename: "chart" },
+  };
+
+  return (
+    <div className="chart-panel">
+      <Plot
+        data={figure.data}
+        layout={layout}
+        config={config}
+        revision={revision}
+        useResizeHandler
+        style={{ width: "100%", minHeight: 320 }}
+        onInitialized={() => setRevision((r) => r + 1)}
+      />
+    </div>
+  );
+}
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -98,7 +138,7 @@ function App() {
 
       setMessages([
         ...newMessages,
-        { role: "assistant", content: data.response },
+        { role: "assistant", content: data.response, chartData: data.chart_data ?? null },
       ]);
     } catch (err) {
       console.error(err);
@@ -171,7 +211,10 @@ function App() {
           {messages.map((msg, i) => (
             <div key={i} className={`message ${msg.role}`}>
               {msg.role === 'assistant' ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                <>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  {msg.chartData && <ChartPanel figure={msg.chartData} />}
+                </>
               ) : (
                 msg.content
               )}

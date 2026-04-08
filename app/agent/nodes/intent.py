@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 def intent_node(state: AgentState) -> AgentState:
+    state.reset_state(reset_errors=True, reset_context=False, reset_data=False)
+    
     logger.info("Entered INTENT_NODE")
     answer = classify_intent(state.get_last_user_message().content, state.get_reasoning_context())
 
@@ -53,5 +55,6 @@ def route_from_intent(state: AgentState):
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
+    logger.error(f"Unrecognized intent: {action} → raising error")
     raise GraphError(ErrorCode.REQUEST_ERROR)
     
