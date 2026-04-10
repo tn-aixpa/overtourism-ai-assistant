@@ -1,7 +1,7 @@
-from typing import List
-from app.agent. state import ConversationMessage
+from app.agent.state import AgentState
 import re
 
+from app.config import ALLOWED_ROLES
 from app.utils.state_variables import VALID_INTENTS
 from app.utils.llm import llm_interaction, format_messages
 
@@ -9,7 +9,7 @@ from app.utils.llm import llm_interaction, format_messages
 # INTENT CLASSIFICATION
 # ---------------------------------------------------------------------------
 
-def classify_intent(message: str, history: List[ConversationMessage] = None) -> str:
+def classify_intent(state: AgentState) -> str:
     """
     Classify the user's intent given the current message and optional
     conversation history.  Returns one of:
@@ -17,6 +17,9 @@ def classify_intent(message: str, history: List[ConversationMessage] = None) -> 
         CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO | CONTEXT_MANAGEMENT |
         ASSISTANT_CAPABILITIES | INVALID
     """
+    message = state.get_last_user_message().content
+    history =state.get_reasoning_context()
+    
     context = "City management and overtourism"
 
     history_block = ""
@@ -128,7 +131,7 @@ User: "Yes" (no history) → INVALID
 Return ONLY the action name. No explanation, no punctuation.
 """
 
-    raw = llm_interaction(prompt).strip().upper()
+    raw = llm_interaction(state, prompt).strip().upper()
 
     # Normalise: strip punctuation, take first token
     first_token = re.split(r'[\s\.,;]', raw)[0]
@@ -147,11 +150,13 @@ Return ONLY the action name. No explanation, no punctuation.
 # SELECT ROLE
 # ---------------------------------------------------------------------------
 
-def select_role_llm(question: str, allowed_roles: dict) -> str:
+def select_role_llm(state: AgentState) -> str:
+    
+    question = state.get_last_user_message().content
 
     available_roles = "Available roles:"
-    for role in allowed_roles:
-        available_roles += f"\n- {role}: {allowed_roles[role]}"
+    for role in ALLOWED_ROLES:
+        available_roles += f"\n- {role}: {ALLOWED_ROLES[role]}"
 
     prompt = f"""
 You are selecting expert roles for answering a question about a digital twin scenario.
@@ -170,7 +175,7 @@ Question:
 {question}
 """
 
-    answer = llm_interaction(prompt)
+    answer = llm_interaction(state, prompt)
 
     return answer
 
@@ -178,7 +183,9 @@ Question:
 # ASSESS SCENARIO STRATEGY
 # ---------------------------------------------------------------------------
 
-def assess_scenario_strategy(messages: List[ConversationMessage]) -> str:
+def assess_scenario_strategy(state: AgentState) -> str:
+    messages = state.get_reasoning_context()
+
     prompt = f"""You are an intent classifier that determines whether the user wants to create scenarios based on the conversation history.
 The conversation may include steps to define a problem, so do not confuse confirations about proceeding with problem creation with the user wanting to create scenarios yet.
 A scenario is a modification of currect indexes that could possibly solve a problem; consequently problems are typically created before scenarios.
@@ -207,18 +214,21 @@ Message history:
 Return only the action name.
 """
     
-    return llm_interaction(prompt)
+    return llm_interaction(state, prompt)
 
 # ---------------------------------------------------------------------------
 # CONFIRMATION PARSING
 # ---------------------------------------------------------------------------
 
-def llm_classify_confirmation(message: str):
+def llm_classify_confirmation(state: AgentState):
+    
+    messages = state.get_reasoning_context()
+    
     prompt = f"""
 You are an intent classifier inside an AI workflow.
 
 Your task:
-Classify the user's message into ONE of the following labels:
+Classify the last user's message into ONE of the following labels:
 
 - CONFIRM
 User clearly agrees, confirms, or wants to proceed.
@@ -240,11 +250,11 @@ IMPORTANT RULES:
 4. If uncertain, choose WAIT_CONFIRMATION.
 5. Support multiple languages.
 
-User message:
-\"\"\"{message}\"\"\"
+Conversation history:
+\"\"\"{format_messages(messages)}\"\"\"
 """
 
-    result = llm_interaction(prompt)
+    result = llm_interaction(state, prompt)
 
     allowed = {
         "CONFIRM",

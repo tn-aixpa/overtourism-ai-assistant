@@ -2,11 +2,11 @@ import logging
 from langgraph.types import Command
 
 from app.agent.state import AgentState
-from app.utils.error_codes import ErrorCode, GraphError
 from app.utils.llm_structured_extractions import get_context_activation_deactivation_list
 from app.utils.llm import parse_llm_json
 from app.tools.backend_tools import get_data_from_context, get_problems
 from app.utils.messages import get_message, MessageCode
+from app.utils.common import RequestHandlingException
 
 
 logger = logging.getLogger(__name__)
@@ -21,22 +21,17 @@ def assess_context_request(state: AgentState) -> AgentState:
 
     available = state.cognitive.available_entries.get("all_ids", [])
 
-    activation_deactivation_list = get_context_activation_deactivation_list(
-        state.get_last_message(),
-        state.get_reasoning_context(),
-        state.cognitive.active_context,
-        available
-    )
+    activation_deactivation_list = get_context_activation_deactivation_list(state)
 
-    try:
-        parsed = parse_llm_json(activation_deactivation_list)
-        activate = set(parsed.get("activate", [])) & available
-        deactivate = set(parsed.get("deactivate", [])) & available
-        assert not (activate & deactivate), "Same context cannot be activated and deactivated at the same time"
-        assert len(activate)+len(deactivate) > 0, "No valid context to activate or deactivate was provided"
-    except Exception as e:
-        raise GraphError(ErrorCode.INVALID_CONTEXT, f"Error determining context: {e}")
+    parsed = parse_llm_json(activation_deactivation_list)
+    activate = set(parsed.get("activate", [])) & available
+    deactivate = set(parsed.get("deactivate", [])) & available
+    if (activate & deactivate):
+        raise RequestHandlingException("Same context cannot be activated and deactivated at the same time")
     
+    if not len(activate)+len(deactivate) > 0:
+        raise RequestHandlingException("No valid context to activate or deactivate was provided")
+
     state.add_trace("node_execution", node="assess_context_request", data={"extracted": str(parsed)})
     state.cognitive.previous_context = state.cognitive.active_context
     if not activate and not deactivate:
@@ -57,10 +52,10 @@ def assess_context_request(state: AgentState) -> AgentState:
     problem_activations = activate & problems
     if problem_activations:
         if len(problem_activations) > 1:
-            raise GraphError(ErrorCode.INVALID_CONTEXT, "I tried to activete a problem but more than one was provided")
+            raise RequestHandlingException("I can only activate one problem at a time, but I found multiple in your request")
         if len(activate) > len(problem_activations):
-            raise GraphError(ErrorCode.INVALID_CONTEXT, "I am not sure about what context you want to use, can you please specify what context you want to explore?")
-   
+            raise RequestHandlingException("I am not sure about what context you want to use, can you please specify what context you want to explore?")
+
         selected_problem = next(iter(problem_activations))
         logger.info(f"Activating problem {selected_problem}, resetting context")
 
@@ -75,10 +70,10 @@ def assess_context_request(state: AgentState) -> AgentState:
     proposal_activations = activate & proposals
     if proposal_activations:
         if len(proposal_activations) > 1:
-            raise GraphError(ErrorCode.INVALID_CONTEXT, "I tried to activete a proposal but more than one was provided")
+            raise RequestHandlingException("I can only activate one proposal at a time, but I found multiple in your request")
         if len(activate) > len(proposal_activations):
-            raise GraphError(ErrorCode.INVALID_CONTEXT, "I am not sure about what context you want to use, can you please specify it?")
-   
+            raise RequestHandlingException("I am not sure about what context you want to use, can you please specify it?")
+
         selected_proposal = next(iter(proposal_activations))
 
         logger.info(f"Activating proposal {selected_proposal}, resetting context")

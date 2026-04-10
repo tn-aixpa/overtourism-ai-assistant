@@ -6,7 +6,6 @@ from app.utils.llm_structured_extractions import extract_proposal_data
 from app.utils.llm import parse_llm_json
 from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
-from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import create_proposal_instance
 from app.tools.backend_tools_temp import get_RelatedScenario
 from app.utils.backend_integration_classes import ProposalInfoSchema, ProposalInfo, build_schema_data
@@ -29,7 +28,7 @@ def assert_active_problem(state: AgentState) -> Command:
         "subgraph": Command.PARENT
     }
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
+    state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -47,20 +46,7 @@ def assert_active_problem(state: AgentState) -> Command:
 def extract_proposal(state: AgentState):
     logger.info("Entering extract_proposal")
 
-    ids_dict = state.cognitive.available_entries.get("ids_dict", {})
-    available_scenarios = ids_dict.get("scenarios", set())
-    atttachments_list = []
-
-    answer = extract_proposal_data(
-        state.get_reasoning_context(),
-        state.cognitive.proposal_info_to_extract,
-        available_scenarios,
-        atttachments_list
-    )
-
-
-    logger.info(f"Chatbot answer: {answer}")   
-    assert "Error connecting to chatbot" not in answer
+    answer = extract_proposal_data(state)
     
     proposal = parse_llm_json(answer)
 
@@ -136,7 +122,7 @@ def create_proposal(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
-    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROPOSAL)]
+    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="proposal")]
     state.cognitive.additional_output_information = []
 
     #TODO: decide if we want to activate this proposal or ask the user if he wants to activate it

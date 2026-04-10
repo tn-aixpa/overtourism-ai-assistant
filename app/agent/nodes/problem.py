@@ -26,15 +26,7 @@ def deactivate_current_context(state: AgentState) -> Command:
 def extract_problem(state: AgentState):
     logger.info("Entering problem extraction node")
     
-    atttachments_list = []
-
-    answer = extract_problem_data(
-        state.get_reasoning_context(),
-        state.cognitive.problem_info_to_extract,
-        atttachments_list
-    )
-
-    assert "Error connecting to chatbot" not in answer
+    answer = extract_problem_data(state)   
 
     problem = parse_llm_json(answer)
     logger.info(f"Parsed problem information: {problem}")
@@ -94,7 +86,7 @@ def create_problem(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
-    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_PROBLEM)]
+    state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="problem")]
     state.cognitive.additional_output_information = []
 
     #TODO: decide if we want to activate this problem or ask the user if he wants to activate it

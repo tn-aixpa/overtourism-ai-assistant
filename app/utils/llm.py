@@ -8,6 +8,9 @@ import anthropic
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 
+from app.agent.state import AgentState
+from app.utils.common import RequestHandlingException
+
 logger = logging.getLogger(__name__)
 
 # =========================
@@ -105,7 +108,7 @@ def call_anthropic_with_retry(model: str, prompt: str, max_tokens: int, max_retr
 # =========================
 # MAIN LLM INTERFACE
 # =========================
-def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True) -> str:
+def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True) -> str:
     try:
         start = time()
 
@@ -141,8 +144,9 @@ def llm_interaction(prompt: str, max_tokens: int = 1024, lightweight_llm: bool =
         return result
 
     except Exception as e:
-        logger.exception("LLM interaction failed")
-        return f"Error connecting to chatbot: {e}"
+        error = f"Error connecting to chatbot: {e}"
+        logger.error(error)
+        raise RequestHandlingException(error)
 
 
 # =========================

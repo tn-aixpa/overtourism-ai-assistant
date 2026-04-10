@@ -2,8 +2,10 @@ import logging
 from langgraph.types import Command
 
 from app.agent.state import AgentState
+from app.utils.common import RequestHandlingException
 from app.utils.llm_reasoning import classify_intent
-from app.utils.error_codes import ErrorCode, GraphError
+from app.utils.messages import MessageCode, get_message
+from app.utils.state_variables import VALID_INTENTS
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +14,7 @@ def intent_node(state: AgentState) -> AgentState:
     state.reset_state(reset_errors=True, reset_context=False, reset_data=False)
     
     logger.info("Entered INTENT_NODE")
-    answer = classify_intent(state.get_last_user_message().content, state.get_reasoning_context())
+    answer = classify_intent(state)
 
     state.cognitive.next_action = answer
     logger.info(f"Detected intent: {answer}")
@@ -24,9 +26,14 @@ def route_from_intent(state: AgentState):
     state.add_trace("node_execution", node="route_from_intent", data={"intent": state.cognitive.next_action})
     action = state.cognitive.next_action
 
+    if not action in VALID_INTENTS:
+        raise RequestHandlingException(f"Invalid intent detected: {action}")
+
     if action == "INVALID":
         logger.error("Intent classified as INVALID → raising error")
-        raise GraphError(ErrorCode.INVALID_REQUEST)
+        state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_REQUEST)]
+        state.cognitive.additional_output_information = []
+        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
     if action == "INTERACT_CONTEXT":
         return Command(update=state, goto="interaction", graph=Command.PARENT)
@@ -55,6 +62,4 @@ def route_from_intent(state: AgentState):
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
-    logger.error(f"Unrecognized intent: {action} → raising error")
-    raise GraphError(ErrorCode.REQUEST_ERROR)
     

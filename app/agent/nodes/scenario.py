@@ -2,11 +2,11 @@ import logging
 from langgraph.types import Command
 
 from app.agent.state import AgentState
+from app.utils.common import RequestHandlingException
 from app.utils.llm_structured_extractions import extract_scenario_data
 from app.utils.llm import parse_llm_json
 from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
-from app.utils.error_codes import get_error_message, ErrorCode
 from app.tools.backend_tools import create_scenario_instance
 from app.utils.backend_integration_classes import ScenarioInfoSchema, ScenarioInfo, build_schema_data
 
@@ -27,7 +27,7 @@ def assert_active_proposal(state: AgentState) -> Command:
         "subgraph": Command.PARENT
     }
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
+    state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -45,11 +45,8 @@ def assert_active_proposal(state: AgentState) -> Command:
 def extract_scenario(state: AgentState) -> Command:
     logger.info("Entering extract_scenario")
 
-    answer = extract_scenario_data(state.get_reasoning_context(),
-                                state.cognitive.editable_indexes)
+    answer = extract_scenario_data(state)
     logger.info(f"Chatbot answer: {answer}")   
-
-    assert "Error connecting to chatbot" not in answer
     
     scenarios = parse_llm_json(answer)       
     schema = ScenarioInfoSchema.default()
@@ -167,7 +164,7 @@ def create_scenario(state: AgentState) -> AgentState:
     else:
         state.resume_nome = {}
         state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESS_SCENARIO)]
+        state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="scenario")]
         state.cognitive.additional_output_information = []
 
         #TODO: decide if we want to activate this scenario or ask the user if he wants to activate it
@@ -181,7 +178,7 @@ def create_scenario(state: AgentState) -> AgentState:
 
 # def decide_scenario_strategy(state: AgentState) -> AgentState:
 #     logger.info("Deciding scenario generation strategy based on reasoning context.")
-#     answer = assess_scenario_strategy(state.get_reasoning_context()).strip()
+#     answer = assess_scenario_strategy(state).strip()
 
 #     VALID_ACTIONS = {
 #         "GENERATE_SCENARIOS",

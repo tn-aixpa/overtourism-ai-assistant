@@ -18,17 +18,22 @@ logger = logging.getLogger(__name__)
 
 def error_recovery_node(state: AgentState) -> Command:
     logger.info("Entering error recovery node")
-    code = getattr(state, "error_code", ErrorCode.REQUEST_ERROR)
+    to_log = True
 
     if state.cognitive.error_details:
-        with open("logs/errors.txt", "a+") as f:
-            logger.error(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}")
-            f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
-        state.cognitive.additional_output_information = [f"Error details {state.cognitive.error_details}"]
+        logger.error(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}")
+        
+        # Only write to file for unexpected/system errors, not request-level ones
+        if to_log:
+            with open("logs/errors.txt", "a+") as f:
+                f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
+
+        state.cognitive.additional_output_information = [
+            f"Error details: {state.cognitive.error_details}"
+        ]
 
     state.reset_state(reset_errors=False)
-
-    state.cognitive.messages_to_include = [get_error_message(code)]
+    state.cognitive.messages_to_include = [state.cognitive.error_details] if state.cognitive.error_details else ["Something went wrong, please try again later."]
 
     return Command(update=state, goto="generate_output_message")
 
@@ -96,8 +101,7 @@ def parse_confirmation(state: AgentState, context: str) -> Command:
     cfg = CONFIRMATION_CONFIGS[context]
     logger.info(f"Entering parse_confirmation [{context}]")
 
-    message = state.get_last_user_message().content
-    state.cognitive.next_action = parse_confirmation_message(message) + cfg.suffix
+    state.cognitive.next_action = parse_confirmation_message(state) + cfg.suffix
     logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
     state.add_trace("node_execution", node="parse_confirmation",
                     data={"next_action": state.cognitive.next_action, "context": context})

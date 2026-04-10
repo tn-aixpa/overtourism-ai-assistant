@@ -1,16 +1,16 @@
-from typing import List
-from app.agent. state import ConversationMessage
-
+from app.agent. state import AgentState
 from app.utils.llm import llm_interaction, format_messages
-from app.utils.backend_integration_classes import ProposalInfoSchema, ProblemInfoSchema
 
 # ---------------------------------------------------------------------------
 # PROBLEM DATA EXTRACTION
 # ---------------------------------------------------------------------------
 
-def extract_problem_data(messages: List[ConversationMessage], schema: ProblemInfoSchema, attachment_list) -> str:
+def extract_problem_data(state: AgentState) -> str:
     #TODO: might need to revise to add the possiblity to change/integrate/remove a field
 
+    messages = state.get_reasoning_context()
+    schema = state.cognitive.problem_info_to_extract
+    attachment_list =  [] #TODO: add attachments when needed
 
     field_specs = schema.format_structure()
     attachments = "\n".join(f"- {p}" for p in attachment_list) if attachment_list else "No attachments provided."
@@ -80,12 +80,18 @@ MESSAGE HISTORY:
 """
 
     
-    return llm_interaction(prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # PROPOSAL DATA EXTRACTION
 # ---------------------------------------------------------------------------
-def extract_proposal_data(messages: List[ConversationMessage], schema: ProposalInfoSchema, available_scenarios, attachment_list) -> str:
+def extract_proposal_data(state: AgentState) -> str:
+
+    messages = state.get_reasoning_context()
+    schema = state.cognitive.proposal_info_to_extract
+    ids_dict = state.cognitive.available_entries.get("ids_dict", {})
+    available_scenarios = ids_dict.get("scenarios", set())
+    attachment_list = []
 
     field_specs = schema.format_structure()
     attachments = "\n".join(f"- {p}" for p in attachment_list) if attachment_list else "No attachments provided."
@@ -157,14 +163,17 @@ MESSAGE HISTORY:
 {format_messages(messages)}
 """
 
-    return llm_interaction(prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=False)
 
 
 # ---------------------------------------------------------------------------
 # SCENARIO DATA EXTRACTION
 # ---------------------------------------------------------------------------
 
-def extract_scenario_data(messages: List[ConversationMessage], editable_indexes: dict) -> str:
+def extract_scenario_data(state) -> str:
+    messages = state.get_reasoning_context()
+    editable_indexes = state.cognitive.editable_indexes
+
     prompt = f"""
 SYSTEM ROLE:
 
@@ -255,13 +264,19 @@ MESSAGE HISTORY:
 {format_messages(messages)}
 """
     
-    return llm_interaction(prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # UNDERSTAND IF THERE IS THE NEED TO ACTIVATE/DAECTIVATE THINGS FROM CONTEXT
 # ---------------------------------------------------------------------------
 
-def get_context_activation_deactivation_list(last_message, message_history, current_context, available_ids):
+def get_context_activation_deactivation_list(state: AgentState) -> str:
+    
+    last_message = state.get_last_message()
+    message_history = state.get_reasoning_context()
+    current_context = state.cognitive.active_context
+    available_ids = state.cognitive.available_entries.get("all_ids", [])
+
     prompt = f"""
 You are a context management assistant. Your sole task is to analyze a user's message and return a JSON dictionary indicating which items should be activated or deactivated in the current context.
 
@@ -303,19 +318,18 @@ Follow these rules strictly:
 Return ONLY the JSON dictionary. No explanation, no preamble, no markdown formatting.
 """
 
-    return llm_interaction(prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=False)
 
 # ---------------------------------------------------------------------------
 # DECIDE WHAT NEEDS TO BE LISTED
 # ---------------------------------------------------------------------------
 
-def assess_what_to_list(message, conversation_history=None, active_context=None):
-    """
-    conversation_history: optional list of dicts with 'role' and 'content' keys,
-                          e.g. [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
-    active_context: optional string describing the currently active item in the agent state,
-                    e.g. "problem: Flooding in sector 4"
-    """
+def assess_what_to_list(state: AgentState) -> str:
+
+    message = state.get_last_user_message().content
+    conversation_history=state.get_reasoning_context()
+    active_context = state.cognitive.active_context[0] if state.cognitive.active_context_type in ["problem", "proposal"] else None
+
 
     context_block = ""
     if active_context:
@@ -411,4 +425,4 @@ Output: {{"to_list": [], "subject": None}}
 USER MESSAGE:
 {message}
 """
-    return llm_interaction(prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=False)

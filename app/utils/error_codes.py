@@ -5,29 +5,20 @@ from typing import Optional
 
 class ErrorCode(Enum):
     REQUEST_ERROR = "E001"
-    INVALID_REQUEST = "E002"
-    INVALID_CONTEXT = "E003"
-    INVALID_REQUEST_STATE = "E004"
-    NOTHING_TO_LIST = "E005"
 
 
 class GraphError(Exception):
-    def __init__(self, code: ErrorCode, details: Optional[str] = None):
-        self.code = code
+    def __init__(self, details: Optional[str] = None):
         self.details = details
-        super().__init__(str(code))
+        super().__init__(self.details)
 
-ERROR_TRANSLATIONS = {
+ERRORS_TEMPLATES = {
         ErrorCode.REQUEST_ERROR: "Error: something went wrong while processing your request.",
-        ErrorCode.INVALID_REQUEST: "Error: I can't answer this type of request.",
-        ErrorCode.INVALID_CONTEXT: "Error: the current context does not support the requested operation.",
-        ErrorCode.INVALID_REQUEST_STATE: "Error: Invalid request in current state.",
-        ErrorCode.NOTHING_TO_LIST: "Error: I didn't understand your request, I can list problems, proposals and scenarios.",
 }
 
 def get_error_message(code: ErrorCode, **kwargs):
     """
     Retrieve the message for a given code and optionally format it with kwargs.
     """
-    template = ERROR_TRANSLATIONS[code]
+    template = ERRORS_TEMPLATES[code]
     return template.format(**kwargs)

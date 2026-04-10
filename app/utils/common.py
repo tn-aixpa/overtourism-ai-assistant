@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import re
 from app.agent.state import AgentState
-from app.utils.llm_reasoning import llm_classify_confirmation
-from app.utils.llm_text_generation import generate_answer
+from app.utils.error_codes import GraphError
 
-def parse_confirmation_message(message):
+
+def parse_confirmation_message(state: AgentState) -> str:
+    from app.utils.llm_reasoning import llm_classify_confirmation
+
+    message = state.get_last_user_message().content
     CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"}
     EDIT = {"edit", "change", "modify", "adjust"}
     CANCEL = {"cancel", "interrupt", "quit", "stop", "no"}
@@ -23,20 +28,27 @@ def parse_confirmation_message(message):
         return best
 
     # fallback to LLM classification
-    return llm_classify_confirmation(message)
+    return llm_classify_confirmation(state)
 
 def to_state(result_dict) -> AgentState:
     return AgentState(**result_dict)
 
 def build_output_message(state: AgentState) -> AgentState:
-    output_message = generate_answer(
-        state.get_last_user_message().content,
-        state.user_lang,
-        state.cognitive.messages_to_include,
-        state.cognitive.additional_output_information
-    )
+    from app.utils.llm_text_generation import generate_answer
+
+    try:
+        output_message = generate_answer(state)
+    except:
+        output_message = "System error"
     state.add_assistant_message(
         output_message
     )
 
     return state
+
+class RequestHandlingException(GraphError):
+    """Exception raised when request handling fails."""
+    def __init__(self, message: str):
+        super().__init__(
+            details=str(message)
+        )

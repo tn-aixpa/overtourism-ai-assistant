@@ -8,7 +8,7 @@ from app.utils.llm_reasoning import select_role_llm
 from app.utils.llm_text_generation import answer_question
 from app.tools.backend_tools_temp import generate_chart
 
-from app.utils.error_codes import ErrorCode, get_error_message
+from app.utils.messages import get_message, MessageCode
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def assert_active_context(state: AgentState) -> Command:
     if state.cognitive.active_context_type:
         return Command(update=state, goto="select_role")
 
-    state.cognitive.messages_to_include = [get_error_message(ErrorCode.INVALID_CONTEXT)]
+    state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
         state.cognitive.allowed_operations
@@ -35,8 +35,7 @@ def assert_active_context(state: AgentState) -> Command:
 
 
 def select_role(state: AgentState) -> AgentState:
-    # question = state.get_last_user_message().content
-    # raw = select_role_llm(question, ALLOWED_ROLES)
+    # raw = select_role_llm(state)
 
     # if "Error" in raw:
     #     roles = ["Data Analyst"]
@@ -64,13 +63,7 @@ def interact_context(state: AgentState) -> AgentState:
     state.cognitive.messages_to_include = []
     state.cognitive.additional_output_information = []
     for role in state.cognitive.selected_roles:
-        answer = answer_question(
-            question=state.get_last_user_message().content,
-            data=state.cognitive.context_data,
-            role=role,
-            messages=state.get_reasoning_context(),
-            language=state.user_lang
-        ).strip()
+        answer = answer_question(state, role).strip()
         logger.info(f"Answer for role {role}: {answer}")
         state.cognitive.messages_to_include.append(f"{role} answered: {answer}")
     

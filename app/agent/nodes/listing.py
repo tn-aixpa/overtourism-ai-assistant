@@ -4,8 +4,7 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import assess_what_to_list
-
-from app.utils.error_codes import get_error_message, ErrorCode
+from app.utils.messages import get_message, MessageCode
 from app.tools.backend_tools import get_problems
 
 logger = logging.getLogger(__name__)
@@ -14,11 +13,7 @@ logger = logging.getLogger(__name__)
 def assess_list(state: AgentState) -> AgentState:
     logger.info("Entered ASSESS_LIST")
     active_context = state.cognitive.active_context[0] if state.cognitive.active_context_type in ["problem", "proposal"] else None
-    raw_output = assess_what_to_list(
-        state.get_last_user_message().content,
-        state.get_reasoning_context(),
-        active_context
-    ).strip()
+    raw_output = assess_what_to_list(state).strip()
     logger.info(f"Raw output: {raw_output}")
 
     ALLOWED = ["problems", "proposals", "scenarios"]
@@ -45,9 +40,8 @@ def assess_list(state: AgentState) -> AgentState:
         subject = None
 
     if not len(to_list):
-        state.cognitive.messages_to_include = [get_error_message(ErrorCode.NOTHING_TO_LIST)]
+        state.cognitive.messages_to_include = [get_message(MessageCode.NOTHING_TO_LIST)]
         state.cognitive.additional_output_information = []
-
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 
     state.cognitive.elements_to_list = to_list

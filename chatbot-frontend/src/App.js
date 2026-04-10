@@ -54,7 +54,7 @@ function App() {
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const [activeContext, setActiveContext] = useState("");
-  const [language, setLanguage] = useState("English");
+  const [language, setLanguage] = useState("Italiano");
 
   // TEMPORARY: session id generation
   const generateSessionId = () => {
@@ -184,8 +184,8 @@ function App() {
             onChange={(e) => setLanguage(e.target.value)}
             className="language-select"
           >
+            <option value="Italian">Italiano</option>
             <option value="English">English</option>
-            <option value="Italian">Italian</option>
           </select>
 
           <span className="session">Session: {sessionId}</span>
