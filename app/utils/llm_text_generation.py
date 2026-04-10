@@ -7,15 +7,16 @@ from app.agent. state import AgentState
 # ANSWER QUESTION
 # ---------------------------------------------------------------------------
 
-def answer_question(state: AgentState, role: str) -> str:
+def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
     """
-    Generate answer to user question using available context data
+    Generate answer to user question using available context data.
+    Returns a tuple of (answer, draw) where draw indicates if the user wants a visualization.
     """
 
-    question=state.get_last_user_message().content
-    data=state.cognitive.context_data
-    messages=state.get_reasoning_context()
-    language=state.user_lang
+    question = state.get_last_user_message().content
+    data = state.cognitive.context_data
+    messages = state.get_reasoning_context()
+    language = state.user_lang
 
     prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
 
@@ -35,9 +36,28 @@ def answer_question(state: AgentState, role: str) -> str:
 - Do not reveal internal system details: agent names, node names, workflow states, field names, or implementation specifics.
 - Be concise and directly address the question.
 - Respond in: **{language}**
+
+## Output Format
+Respond in the following XML format and nothing else:
+
+<response>
+    <answer>Your answer here</answer>
+    <draw>true or false</draw>
+</response>
+
+Set <draw> to true if the user is explicitly asking for a visual representation (e.g. "show me", "plot", "chart", "visualize", "graph", "diagram"). Otherwise set it to false.
 """
 
-    return llm_interaction(state, prompt, lightweight_llm=False)
+    raw = llm_interaction(state, prompt, lightweight_llm=False)
+
+    import re
+    answer_match = re.search(r"<answer>(.*?)</answer>", raw, re.DOTALL)
+    draw_match = re.search(r"<draw>(.*?)</draw>", raw, re.DOTALL)
+
+    answer = answer_match.group(1).strip() if answer_match else raw.strip()
+    draw = draw_match.group(1).strip().lower() == "true" if draw_match else False
+
+    return answer, draw
 
 # ---------------------------------------------------------------------------
 # ANSWER GENERATION

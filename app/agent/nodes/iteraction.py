@@ -64,15 +64,14 @@ def interact_context(state: AgentState) -> AgentState:
     state.cognitive.additional_output_information = []
     logger.info(f"Selected roles: {state.cognitive.selected_roles}")
     for role in state.cognitive.selected_roles:
-        answer = answer_question(state, role).strip()
+        answer, draw = answer_question(state, role)
         logger.info(f"Answer for role {role}: {answer}")
         state.cognitive.messages_to_include.append(f"{role} answered: {answer}")
     
     # TODO: consider moving somewhere else or improving
     last_user_message = state.get_last_user_message().content.lower()
-    DRAWING_KEYWORD = ["draw", "plot", "chart", "graph", "visualize", "visualise", "show", "visualizza", "mostra", "disegna", "graficamente", "mostrami"]
 
-    if any(keyword in last_user_message for keyword in DRAWING_KEYWORD):
+    if draw and state.cognitive.active_context_type == "scenario":
         if len(state.cognitive.active_context) > 1:
             state.chart_data = generate_chart("comparison_bar")
         else:
