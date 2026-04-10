@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum, Enum
 import json
 
-from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, ALLOWED_OPERATIONS
+from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, SYSTEM_DESCRIPTION
 from app.utils.backend_integration_classes import (
     ProblemInfoSchema,
     ProblemInfo,
@@ -71,7 +71,7 @@ class CognitiveState:
     next_action: Optional[str] = None
 
     # Operations
-    allowed_operations = ALLOWED_OPERATIONS
+    allowed_operations = SYSTEM_DESCRIPTION
 
     # Listing
     elements_to_list: List[str] = field(default_factory=list)

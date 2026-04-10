@@ -12,9 +12,9 @@ def answer_question(state: AgentState, role: str) -> str:
     Generate answer to user question using available context data
     """
 
-    question=state.get_last_user_message().content,
-    data=state.cognitive.context_data,
-    messages=state.get_reasoning_context(),
+    question=state.get_last_user_message().content
+    data=state.cognitive.context_data
+    messages=state.get_reasoning_context()
     language=state.user_lang
 
     prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
@@ -81,11 +81,10 @@ The following messages represent the core findings of the answering process. **E
 ## Instructions
 - **Your answer must incorporate all Agent Messages.** Rephrase them naturally, but do not omit any — even partial or uncertain findings must be represented.
 - If a message contains an error or failure that is relevant to the user's question, surface it clearly. If it is purely internal/technical and irrelevant to the user, you may rephrase it in user-friendly terms rather than silently dropping it.
-- Use **Additional Context** only to enrich, clarify, or provide background for the Agent Messages — never as a replacement for them.
-- If the available information is incomplete, provide the best possible answer from what is available and clearly state what could not be determined.
-- Do not expose internal agent names, node names, workflow states, field names, or any system implementation details in your response.
+- **Agent Messages are your primary and preferred source.** Use Additional Context only as a last resort — specifically when Agent Messages alone leave a gap that would make the answer incomplete or misleading, AND the Additional Context directly fills that gap. Do not use Additional Context to rephrase, expand, or decorate information already covered by Agent Messages.
 - Write your response in the following language: **{language}**
 - Be concise, accurate, and directly address the user's question.
+- **Start your response immediately with the answer content.** Do not begin with any heading, label, title, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar — just the answer itself.
 
 ## Final Answer
 """

@@ -9,10 +9,13 @@ DRAW_CONVERSATION = True
 MAX_CONTEXT_WINDOW = 20
 DEFAULT_REASONING_CONTEXT_SIZE = 5
 
-ALLOWED_OPERATIONS = """
-- With active problems you can interact, manage or create new proposals.
-- With active proposals you can interact, manage or create new scenarios.
-- With active scenarios you can explore results, decide to compare it another scenario, run new simulation modifying parameters.
+SYSTEM_DESCRIPTION = """
+The system is able to access problems, proposals and scenarios connected to overtourism and mobility problems.
+Different operations are allowed depending on the active context:
+- No active context: you can 1) ask questions to explore the available data, but you cannot interact with it; 2) create new problems.
+- With active problems you can interact with the problem or create new proposals.
+- With active proposals you can interact with the proposal or create new scenarios.
+- With active scenarios you can explore results, decide to compare it another scenario.
 """
 
 BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else

@@ -62,6 +62,7 @@ def interact_context(state: AgentState) -> AgentState:
     # answer user question
     state.cognitive.messages_to_include = []
     state.cognitive.additional_output_information = []
+    logger.info(f"Selected roles: {state.cognitive.selected_roles}")
     for role in state.cognitive.selected_roles:
         answer = answer_question(state, role).strip()
         logger.info(f"Answer for role {role}: {answer}")
