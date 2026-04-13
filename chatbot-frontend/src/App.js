@@ -55,6 +55,7 @@ function App() {
   const fileInputRef = useRef(null);
   const [activeContext, setActiveContext] = useState("");
   const [language, setLanguage] = useState("Italiano");
+  const [statusMessage, setStatusMessage] = useState(null);
 
   // TEMPORARY: session id generation
   const generateSessionId = () => {
@@ -101,62 +102,77 @@ function App() {
     textarea.style.height = `${Math.max(textarea.scrollHeight, 24)}px`;
   };
 
-  //Send message
-  const sendMessage = async () => {
-    if (!input.trim() && attachments.length === 0) return;
+//Send message
+const sendMessage = async () => {
+  if (!input.trim() && attachments.length === 0) return;
 
-    const newMessages = [...messages, { role: "user", content: input || "[Attachment]" }];
-    setMessages(newMessages);
+  const currentInput = input;
+  const newMessages = [...messages, { role: "user", content: currentInput || "[Attachment]" }];
+  setMessages(newMessages);
+  setInput("");
+  if (textareaRef.current) textareaRef.current.style.height = "auto";
+  setLoading(true);
+  setStatusMessage("Thinking...");
 
-    // Reset input and shrink textarea
-    setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+  // Open SSE BEFORE posting so no events are missed
+  const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
 
-    const formData = new FormData();
-    formData.append("message", input);
-    formData.append("session_id", sessionId);
-    formData.append("user_lang", language);
+  eventSource.addEventListener("status", (e) => {
+    setStatusMessage(e.data);
+  });
 
-    attachments.forEach((file) => formData.append("files", file));
-
-    setLoading(true);
-    // Clear attachments after sending
-    setAttachments([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
+  eventSource.addEventListener("done", async () => {
+    eventSource.close();
+    // Fetch the stored result
     try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(`${API_URL}/result/${sessionId}`);
       const data = await res.json();
-
       if (data.session_id) setSessionId(data.session_id);
       setActiveContext(data.active_context || "-");
-
       setMessages([
         ...newMessages,
         { role: "assistant", content: data.response, chartData: data.chart_data ?? null },
       ]);
     } catch (err) {
       console.error(err);
-      setMessages([
-        ...newMessages,
-        { role: "assistant", content: "Error contacting server." },
-      ]);
+      setMessages([...newMessages, { role: "assistant", content: "Error fetching result." }]);
     }
-
     setLoading(false);
+    setStatusMessage(null);
+  });
+
+  eventSource.onerror = () => {
+    eventSource.close();
+    setLoading(false);
+    setStatusMessage(null);
   };
+
+  // POST — returns 202 immediately, agent runs in background
+  const formData = new FormData();
+  formData.append("message", currentInput);
+  formData.append("session_id", sessionId);
+  formData.append("user_lang", language);
+  attachments.forEach((file) => formData.append("files", file));
+  setAttachments([]);
+  if (fileInputRef.current) fileInputRef.current.value = "";
+
+  try {
+    await fetch(API_URL, { method: "POST", body: formData });
+  } catch (err) {
+    console.error(err);
+    eventSource.close();
+    setMessages([...newMessages, { role: "assistant", content: "Error contacting server." }]);
+    setLoading(false);
+    setStatusMessage(null);
+  }
+};
 
   // Save conversation
   const saveConversation = async () => {
     if (!sessionId) return;
 
     try {
-      const res = await fetch(`http://localhost:9000/agent/save`, {
+      const res = await fetch(`${API_URL}/save`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -227,6 +243,7 @@ function App() {
                 <span></span>
                 <span></span>
               </div>
+              <span className="status">{statusMessage || ""}</span>
             </div>
           )}
         </div>

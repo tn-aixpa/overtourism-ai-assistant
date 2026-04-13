@@ -6,6 +6,8 @@ from app.utils.common import RequestHandlingException
 from app.utils.llm_reasoning import classify_intent
 from app.utils.messages import MessageCode, get_message
 from app.utils.state_variables import VALID_INTENTS
+from app.agent.events import publish
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 def intent_node(state: AgentState) -> AgentState:
     state.reset_state(reset_errors=True, reset_context=False, reset_data=False)
     
+    publish(state.session_id, "Assessing user intent")
     logger.info("Entered INTENT_NODE")
     answer = classify_intent(state)
 

@@ -2,6 +2,7 @@ import logging
 import ast
 from langgraph.types import Command
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import assess_what_to_list
 from app.utils.messages import get_message, MessageCode
@@ -51,6 +52,7 @@ def assess_list(state: AgentState) -> AgentState:
     return state
 
 def get_list(state: AgentState) -> AgentState:
+    publish(state.session_id, "Retrieving list of relevant items based on your request and active context")
 
     if not state.cognitive.available_entries:
         available_entries = get_problems.invoke({})

@@ -2,6 +2,7 @@ import logging
 from langgraph.types import Command
 from langgraph.graph import  END
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.config import ALLOWED_ROLES
 from app.utils.llm_reasoning import select_role_llm
@@ -58,6 +59,7 @@ def select_role(state: AgentState) -> AgentState:
     return state
 
 def interact_context(state: AgentState) -> AgentState:
+    publish(state.session_id, "Collecting relevant information and generating answer")
 
     # answer user question
     state.cognitive.messages_to_include = []

@@ -120,6 +120,12 @@ body {
   box-sizing: border-box;
 }
 
+.status {
+  margin-left: 15px;
+  font-style: italic;
+  color: #555;
+}
+
 /* Markdown styles within assistant messages */
 .message.assistant h1,
 .message.assistant h2,

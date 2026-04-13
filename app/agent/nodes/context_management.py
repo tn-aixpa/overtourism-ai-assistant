@@ -1,6 +1,7 @@
 import logging
 from langgraph.types import Command
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import get_context_activation_deactivation_list
 from app.utils.llm import parse_llm_json
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 def assess_context_request(state: AgentState) -> AgentState:
     logger.info("Entered assess_context_request node")
+    publish(state.session_id, "Attemtpting to understand and apply context change request")
 
     if not state.cognitive.available_entries:
         logger.info("Loading context information")

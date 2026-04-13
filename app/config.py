@@ -20,3 +20,5 @@ Different operations are allowed depending on the active context:
 
 BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else
 BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
+
+VERBOSE = False

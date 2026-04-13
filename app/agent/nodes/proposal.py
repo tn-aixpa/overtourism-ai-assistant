@@ -1,6 +1,7 @@
 import logging
 from langgraph.types import Command
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_proposal_data
 from app.utils.llm import parse_llm_json
@@ -45,6 +46,7 @@ def assert_active_problem(state: AgentState) -> Command:
 
 def extract_proposal(state: AgentState):
     logger.info("Entering extract_proposal")
+    publish(state.session_id, "Extracting information from your input...")
 
     answer = extract_proposal_data(state)
     
@@ -79,6 +81,7 @@ def parse_proposal_confirmation(state):
 def create_proposal(state: AgentState) -> AgentState:
     
     state.add_trace("node_execution", node="create_proposal")
+    publish(state.session_id, "Creating proposal instance based on the extracted information")
 
     proposal = state.cognitive.proposal_info_extracted
     logger.info(f"Creating instance for proposal: {proposal}")

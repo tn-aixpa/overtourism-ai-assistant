@@ -1,6 +1,7 @@
 import logging
 from langgraph.types import Command
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.llm_structured_extractions import extract_scenario_data
@@ -44,6 +45,7 @@ def assert_active_proposal(state: AgentState) -> Command:
 
 def extract_scenario(state: AgentState) -> Command:
     logger.info("Entering extract_scenario")
+    publish(state.session_id, "Extracting information from your input...")
 
     answer = extract_scenario_data(state)
     logger.info(f"Chatbot answer: {answer}")   
@@ -138,6 +140,7 @@ def parse_scenario_confirmation(state):
 def create_scenario(state: AgentState) -> AgentState:
     if state.cognitive.scenarios_to_generate:
         state.add_trace("node_execution", node="create_scenario", data={"to_generate": len(state.cognitive.scenarios_to_generate)})
+        publish(state.session_id, "Creating scenario instance based on the extracted information")
         current_scenario = state.cognitive.scenarios_to_generate.pop()
         logger.info(f"Running scenario: {current_scenario}")
         

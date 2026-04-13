@@ -1,6 +1,7 @@
 import logging
 from langgraph.types import Command
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import extract_problem_data
 from app.utils.llm import parse_llm_json
@@ -25,6 +26,7 @@ def deactivate_current_context(state: AgentState) -> Command:
 
 def extract_problem(state: AgentState):
     logger.info("Entering problem extraction node")
+    publish(state.session_id, "Extracting information from your input...")
     
     answer = extract_problem_data(state)   
 
@@ -59,6 +61,7 @@ def parse_problem_confirmation(state):
 
 def create_problem(state: AgentState) -> AgentState:
     state.add_trace("node_execution", node="create_problem_instance")
+    publish(state.session_id, "Creating problem instance based on the extracted information")
     
     problem = state.cognitive.problem_info_extracted
     logger.info(f"Creating instance for problem: {problem}")

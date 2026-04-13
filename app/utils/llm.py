@@ -8,6 +8,7 @@ import anthropic
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 
+from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-USE_LOCAL_LLM = False
+USE_LOCAL_LLM = True
 
 LOCAL_MODEL = "qwen2.5:14b" #"gpt-oss:20b"
 
@@ -156,6 +157,7 @@ def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, ligh
                     response.usage.output_tokens
                 )
             except Exception as e:
+                publish(state.session_id, "Unable to connect to Anthropic's API, switching to local LLM (answer might be less accurate and take longer to generate)", force_print=True)
                 logger.error(f"Error during Anthropic interaction: {e}, falling back to local LLM")
                 result, model_name = ll_local_interaction(prompt)
 
