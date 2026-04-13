@@ -91,16 +91,21 @@ The following supplementary data was collected from the agent state (may include
 
     prompt = f"""You are a helpful assistant tasked with synthesizing information gathered by multiple agents into a clear, accurate final answer.
 
-## User Question
+## User Input
 {question}
 
 ## Agent Messages
-The following messages represent the core findings of the answering process. **Every message below must be reflected in your final answer**, rephrased in natural language as needed:
+The following messages represent the core findings of the answering process. They must **all** appear in your final answer, each preserving its original intent:
 {formatted_messages}
+
+**Important:** Some messages may be statements (facts, results, confirmations) and others may be questions or prompts for user input. Preserve the intent of each:
+- Statements → rephrase as declarative sentences.
+- Questions or requests for user input → rephrase as direct questions, never collapse them into a statement.
+- Do not merge a question into a preceding statement. Keep them as separate, sequential sentences.
 {additional_context_section}
 ## Instructions
-- **Your answer must incorporate all Agent Messages.** Rephrase them naturally, but do not omit any — even partial or uncertain findings must be represented.
-- If a message contains an error or failure that is relevant to the user's question, surface it clearly. If it is purely internal/technical and irrelevant to the user, you may rephrase it in user-friendly terms rather than silently dropping it.
+- **Your answer must incorporate all Agent Messages**, each preserving its original intent (statement vs. question).
+- If a message contains an error or failure that is relevant to the user's question, surface it clearly. If it is purely internal/technical and irrelevant to the user, rephrase it in user-friendly terms rather than silently dropping it.
 - **Agent Messages are your primary and preferred source.** Use Additional Context only as a last resort — specifically when Agent Messages alone leave a gap that would make the answer incomplete or misleading, AND the Additional Context directly fills that gap. Do not use Additional Context to rephrase, expand, or decorate information already covered by Agent Messages.
 - Write your response in the following language: **{language}**
 - Be concise, accurate, and directly address the user's question.

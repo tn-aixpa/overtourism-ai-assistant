@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # =========================
 USE_LOCAL_LLM = False
 
-LOCAL_MODEL = "gpt-oss:20b"
+LOCAL_MODEL = "qwen2.5:14b" #"gpt-oss:20b"
 
 ANTHROPIC_MODELS = {
     "light": "claude-haiku-4-5",
