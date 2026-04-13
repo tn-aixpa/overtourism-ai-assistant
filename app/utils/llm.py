@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 
+_llm_client = None
 logger = logging.getLogger(__name__)
 
 # =========================
@@ -34,20 +35,29 @@ ANTHROPIC_PRICING = {
 # =========================
 # CLIENT INITIALIZATION
 # =========================
-def init_clients():
-    if USE_LOCAL_LLM:
-        return ChatOllama(
-            model=LOCAL_MODEL,
-            base_url="http://localhost:11434",
-            temperature=0,
-            keep_alive=-1,
-        )
-    else:
-        return anthropic.Anthropic(
-            api_key=os.environ.get("ANTHROPIC_API_KEY")
-        )
+def init_local_llm():
+    return ChatOllama(
+        model=LOCAL_MODEL,
+        base_url="http://localhost:11434",
+        temperature=0,
+        keep_alive=-1,
+    )
 
-llm_client = init_clients()
+def init_anthropic():
+    return anthropic.Anthropic(
+        api_key=os.environ.get("ANTHROPIC_API_KEY")
+    )
+
+def get_llm_client():
+    global _llm_client
+
+    if _llm_client is None:
+        if USE_LOCAL_LLM:
+            _llm_client = init_local_llm()
+        else:
+            _llm_client = init_anthropic()
+
+    return _llm_client
 
 # =========================
 # HELPERS
@@ -82,7 +92,7 @@ def log_cost(model_name: str, input_tokens: int, output_tokens: int):
 # =========================
 # ANTHROPIC CALL WITH RETRY
 # =========================
-def call_anthropic_with_retry(model: str, prompt: str, max_tokens: int, max_retries: int = 5):
+def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: int, max_retries: int = 5):
     for attempt in range(max_retries):
         try:
             return llm_client.messages.create(
@@ -108,35 +118,46 @@ def call_anthropic_with_retry(model: str, prompt: str, max_tokens: int, max_retr
 # =========================
 # MAIN LLM INTERFACE
 # =========================
+def ll_local_interaction( prompt: str) -> str:
+    model_name = LOCAL_MODEL
+    llm_client = init_local_llm()
+
+    response = llm_client.invoke([
+        HumanMessage(content=prompt)
+    ])
+    return response.content.strip(), model_name
+
 def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True) -> str:
     try:
         start = time()
 
         if USE_LOCAL_LLM:
-            model_name = LOCAL_MODEL
-
-            response = llm_client.invoke([
-                HumanMessage(content=prompt)
-            ])
-            result = response.content.strip()
+            llm_client = init_local_llm()
+            result, model_name = ll_local_interaction(prompt)
 
         else:
-            model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
+            try:
+                llm_client = init_anthropic()
+                model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
 
-            response = call_anthropic_with_retry(
-                model=model_name,
-                prompt=prompt,
-                max_tokens=max_tokens,
-            )
+                response = call_anthropic_with_retry(
+                    llm_client=llm_client,
+                    model=model_name,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                )
 
-            result = response.content[0].text.strip()
+                result = response.content[0].text.strip()
 
-            # Logging usage
-            log_cost(
-                model_name,
-                response.usage.input_tokens,
-                response.usage.output_tokens
-            )
+                # Logging usage
+                log_cost(
+                    model_name,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens
+                )
+            except Exception as e:
+                logger.error(f"Error during Anthropic interaction: {e}, falling back to local LLM")
+                result, model_name = ll_local_interaction(prompt)
 
         elapsed = time() - start
         log_time(model_name, elapsed)
