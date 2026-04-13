@@ -125,6 +125,4 @@ def create_proposal(state: AgentState) -> AgentState:
     state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="proposal")]
     state.cognitive.additional_output_information = []
 
-    #TODO: decide if we want to activate this proposal or ask the user if he wants to activate it
-
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
