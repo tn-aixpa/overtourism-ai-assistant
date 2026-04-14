@@ -21,6 +21,7 @@ class ConversationMessage:
     role: str  # "user" | "assistant"
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
+    generated_by: Optional[str] = None  # e.g., which LLM or tool generated this message
 
 @dataclass
 class ConversationBuffer:
@@ -72,6 +73,7 @@ class CognitiveState:
 
     # Operations
     allowed_operations = SYSTEM_DESCRIPTION
+    generation_pipeline: List[str] = field(default_factory=list) # which LLMs where used
 
     # Listing
     elements_to_list: List[str] = field(default_factory=list)
@@ -180,10 +182,22 @@ class AgentState:
         )
 
     def add_assistant_message(self, content: str):
+
+        starts_with = sum(s.startswith("claude") for s in self.cognitive.generation_pipeline)
+        not_starts_with = len(self.cognitive.generation_pipeline) - starts_with
+        if starts_with > 0 and not_starts_with == 0:
+            generated_by = "anthropic"
+        elif not_starts_with > 0 and starts_with == 0:
+            generated_by = "local"
+        else:
+            generated_by = "mixed"
+
+
         self.conversation.add_message(
             ConversationMessage(
                 role="assistant",
                 content=content,
+                generated_by=generated_by
             )
         )
 

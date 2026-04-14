@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-USE_LOCAL_LLM = True
+USE_LOCAL_LLM = False
 
 LOCAL_MODEL = "qwen2.5:14b" #"gpt-oss:20b"
 
@@ -52,11 +52,10 @@ def init_anthropic():
 def get_llm_client():
     global _llm_client
 
-    if _llm_client is None:
-        if USE_LOCAL_LLM:
-            _llm_client = init_local_llm()
-        else:
-            _llm_client = init_anthropic()
+    desired_type = ChatOllama if USE_LOCAL_LLM else anthropic.Anthropic
+
+    if _llm_client is None or not isinstance(_llm_client, desired_type):
+        _llm_client = init_local_llm() if USE_LOCAL_LLM else init_anthropic()
 
     return _llm_client
 
@@ -119,10 +118,8 @@ def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: i
 # =========================
 # MAIN LLM INTERFACE
 # =========================
-def ll_local_interaction( prompt: str) -> str:
+def ll_local_interaction(prompt: str, llm_client: ChatOllama) -> str:
     model_name = LOCAL_MODEL
-    llm_client = init_local_llm()
-
     response = llm_client.invoke([
         HumanMessage(content=prompt)
     ])
@@ -132,13 +129,11 @@ def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, ligh
     try:
         start = time()
 
+        llm_client = get_llm_client()
         if USE_LOCAL_LLM:
-            llm_client = init_local_llm()
-            result, model_name = ll_local_interaction(prompt)
-
+            result, model_name = ll_local_interaction(prompt, llm_client)
         else:
             try:
-                llm_client = init_anthropic()
                 model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
 
                 response = call_anthropic_with_retry(
@@ -157,12 +152,14 @@ def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, ligh
                     response.usage.output_tokens
                 )
             except Exception as e:
-                publish(state.session_id, "Unable to connect to Anthropic's API, switching to local LLM (answer might be less accurate and take longer to generate)", force_print=True)
+                publish(state.session_id, "Unable to connect to Anthropic's API, switching to local LLM (answer might take longer to generate and be less accurate)", force_print=True)
                 logger.error(f"Error during Anthropic interaction: {e}, falling back to local LLM")
-                result, model_name = ll_local_interaction(prompt)
+                llm_client = init_local_llm()  # Re-initialize local client
+                result, model_name = ll_local_interaction(prompt, llm_client)
 
         elapsed = time() - start
         log_time(model_name, elapsed)
+        state.cognitive.generation_pipeline.append(model_name)
 
         return result
 

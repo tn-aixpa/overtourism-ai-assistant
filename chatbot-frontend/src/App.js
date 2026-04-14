@@ -112,7 +112,7 @@ const sendMessage = async () => {
   setInput("");
   if (textareaRef.current) textareaRef.current.style.height = "auto";
   setLoading(true);
-  setStatusMessage("Thinking...");
+  setStatusMessage("");
 
   // Open SSE BEFORE posting so no events are missed
   const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
