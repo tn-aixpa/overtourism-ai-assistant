@@ -110,13 +110,25 @@ def generate_answer(state: AgentState) -> Command:
 
     #TODO: handle this better for when using localized names for elements
     state.cognitive.messages_to_include = [
-        f"For the active context the available items are {state.cognitive.partial_list}",
+        f"The available items are {state.cognitive.partial_list}",
     ]
     state.cognitive.additional_output_information = [
         f"Strict output order (if present): problems → proposals → scenarios"
         f"Active context: {state.get_active_context_string()}",
         f"Items relationshipts: {state.cognitive.available_entries["connections_dict"]}"
     ]
+
+    logger.info(f"The available items are {state.cognitive.partial_list}")
+
+    state.reset_state(
+        reset_listing=True,
+        reset_new_problem=True,
+        reset_new_proposal=True,
+        reset_new_scenario=True,
+        reset_errors=True,
+        reset_context=False,
+        reset_data=False
+    )
 
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
 

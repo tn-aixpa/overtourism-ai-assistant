@@ -125,6 +125,16 @@ def create_proposal(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
+    state.reset_state(
+        reset_listing=True,
+        reset_new_problem=True,
+        reset_new_proposal=True,
+        reset_new_scenario=True,
+        reset_errors=True,
+        reset_context=False,
+        reset_data=False
+    )
+
     state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="proposal")]
     state.cognitive.additional_output_information = []
 

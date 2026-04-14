@@ -19,7 +19,15 @@ def deactivate_current_context(state: AgentState) -> Command:
     state.add_trace("node_execution", node="deactivate_current_context")
 
     if state.cognitive.active_context_type:
-        state.reset_state()
+        state.reset_state(
+            reset_listing=True,
+            reset_new_problem=True,
+            reset_new_proposal=True,
+            reset_new_scenario=True,
+            reset_errors=True,
+            reset_context=True,
+            reset_data=True
+        )
     
     return state
 
@@ -89,7 +97,18 @@ def create_problem(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
+    state.reset_state(
+            reset_listing=True,
+            reset_new_problem=True,
+            reset_new_proposal=True,
+            reset_new_scenario=True,
+            reset_errors=True,
+            reset_context=False,
+            reset_data=False
+        )
+    
     state.cognitive.messages_to_include = [get_message(MessageCode.SUCCESSFUL_INSTANCE_CREATION, instance="problem")]
     state.cognitive.additional_output_information = []
+
 
     return Command(update=state, goto="generate_output_message", graph=Command.PARENT)

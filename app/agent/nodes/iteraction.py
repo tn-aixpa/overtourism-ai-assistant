@@ -83,11 +83,29 @@ def interact_context(state: AgentState) -> AgentState:
             else:
                 state.chart_data = generate_chart("tourists_excursionists")
 
+
     if len(state.cognitive.selected_roles) > 1:
+        state.reset_state(
+            reset_listing=True,
+            reset_new_problem=True,
+            reset_new_proposal=True,
+            reset_new_scenario=True,
+            reset_errors=True,
+            reset_context=False,
+            reset_data=False
+        )
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
         
 
-    state.cognitive.messages_to_include = []
+    state.reset_state(
+        reset_listing=True,
+        reset_new_problem=True,
+        reset_new_proposal=True,
+        reset_new_scenario=True,
+        reset_errors=True,
+        reset_context=False,
+        reset_data=False
+    )
     state.add_assistant_message(
         answer
     )

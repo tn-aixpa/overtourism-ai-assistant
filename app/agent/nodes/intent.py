@@ -23,7 +23,15 @@ def _is_resume_request(state: AgentState) -> bool:
     return any(token in message for token in ("resume", "continue", "go back", "pick up"))
 
 def intent_node(state: AgentState) -> AgentState:
-    state.reset_state(reset_errors=True, reset_context=False, reset_data=False)
+    state.reset_state(
+        reset_listing=True,
+        reset_new_problem=True,
+        reset_new_proposal=True,
+        reset_new_scenario=True,
+        reset_errors=True,
+        reset_context=False,
+        reset_data=False
+    )
     publish(state.session_id, "Assessing user intent")
     logger.info("Entered INTENT_NODE")
 

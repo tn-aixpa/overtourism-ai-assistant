@@ -282,21 +282,45 @@ class AgentState:
             for trace in self.cognitive.trace.steps:
                 f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")
 
-    def reset_state(self, reset_errors=True, reset_context=True, reset_data=True):
+    def reset_state(self,
+            reset_listing=False,
+            reset_new_problem=False,
+            reset_new_proposal=False,
+            reset_new_scenario=False,
+            reset_errors=False,
+            reset_context=False,
+            reset_data=False
+        ):
         self.waiting_for = None
         self.user_input = None
         self.chart_data = None
 
-        # Reset cognitive
-        self.cognitive.elements_to_list = []
-        self.cognitive.filter_list_by = ""
-        self.cognitive.partial_list = {}
-        self.cognitive.problem_info_extracted = {}
-        self.cognitive.extracted_all_problem = False
-        self.cognitive.extracted_all_scenario = False
-        self.cognitive.scenarios_to_generate = []
-        self.cognitive.scenario_validation_errors = ""
+        # Reset general cognitive
+        self.cognitive.generation_pipeline = []
         self.cognitive.selected_roles = []
+
+        if reset_listing:
+            self.cognitive.elements_to_list = []
+            self.cognitive.filter_list_by = ""
+            self.cognitive.partial_list = {}        
+        
+        if reset_new_problem:
+            self.cognitive.problem_info_extracted = {}
+            self.cognitive.extracted_all_problem = False
+
+        if reset_new_proposal:
+            self.cognitive.proposal_info_extracted = {}
+            self.cognitive.extracted_all_proposal = False
+
+        if reset_new_scenario:
+            self.cognitive.extracted_all_scenario = False
+            self.cognitive.scenarios_to_generate = []
+            self.cognitive.scenario_validation_errors = ""
+
+        if reset_data:
+            self.cognitive.available_entries = {}
+            self.cognitive.context_data = {}
+            self.cognitive.editable_indexes = {}
 
         if reset_errors:
             self.cognitive.error_code = ""
@@ -308,10 +332,3 @@ class AgentState:
             self.cognitive.active_context_type = ""
             self.cognitive.active_context = []
             self.cognitive.previous_context = []
-
-        if reset_data:
-            self.cognitive.context_data = {}
-            self.cognitive.editable_indexes = {}
-            self.cognitive.available_entries = {}
-
-        return self

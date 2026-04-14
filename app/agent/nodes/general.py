@@ -32,8 +32,16 @@ def error_recovery_node(state: AgentState) -> Command:
             f"Error details: {state.cognitive.error_details}"
         ]
 
-    state.reset_state(reset_errors=False)
     state.cognitive.messages_to_include = [state.cognitive.error_details] if state.cognitive.error_details else ["Something went wrong, please try again later."]
+    state.reset_state(
+            reset_listing=True,
+            reset_new_problem=True,
+            reset_new_proposal=True,
+            reset_new_scenario=True,
+            reset_errors=True,
+            reset_context=False,
+            reset_data=False
+        )
 
     return Command(update=state, goto="generate_output_message")
 
@@ -47,7 +55,10 @@ def generate_output_message_node(state: AgentState) -> Command:
 
     if state.cognitive.pending_actions and not state.waiting_for:
         return Command(update=state, goto="intent")
-
+    
+    state.cognitive.messages_to_include = []
+    state.cognitive.additional_output_information = []
+    
     return Command(update=state, goto=END)
 
 # ---------------------------------------------------------------------------
