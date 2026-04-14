@@ -1,5 +1,6 @@
 from app.agent.state import AgentState
 import re
+import json
 
 from app.config import ALLOWED_ROLES
 from app.utils.state_variables import VALID_INTENTS
@@ -9,7 +10,7 @@ from app.utils.llm import llm_interaction, format_messages
 # INTENT CLASSIFICATION
 # ---------------------------------------------------------------------------
 
-def classify_intent(state: AgentState) -> str:
+def classify_intent(state: AgentState, message: str | None = None, history: list | None = None) -> str:
     """
     Classify the user's intent given the current message and optional
     conversation history.  Returns one of:
@@ -17,8 +18,8 @@ def classify_intent(state: AgentState) -> str:
         CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO | CONTEXT_MANAGEMENT |
         ASSISTANT_CAPABILITIES | INVALID
     """
-    message = state.get_last_user_message().content
-    history =state.get_reasoning_context()
+    message = message if message is not None else state.get_last_user_message().content
+    history = history if history is not None else state.get_reasoning_context()
     
     context = "City management and overtourism"
 
@@ -145,6 +146,121 @@ Return ONLY the action name. No explanation, no punctuation.
             return intent
 
     return "INVALID"
+
+def extract_action_plan(state: AgentState, message: str | None = None) -> list[str]:
+    """
+    Single LLM call that both classifies intent and extracts multi-step plans.
+    Always returns an ordered list of 1+ valid intents.
+    """
+    message = message or (state.get_last_user_message() or "").content
+    if not message:
+        return ["INVALID"]
+
+    history = state.get_reasoning_context()
+    history_block = format_messages(history) if history else "None"
+    active_context = state.get_active_context_string() or "None"
+
+    prompt = f"""You are an intent classifier for a digital-twin assistant about city management and overtourism.
+
+Active context: {active_context}
+
+Conversation so far:
+{history_block}
+
+New user message: "{message}"
+
+Your task: decompose the user message into an ORDERED list of atomic actions.
+Each action must be exactly one of:
+  CONTEXT_MANAGEMENT | LIST_AVAILABLE | ASSISTANT_CAPABILITIES |
+  CREATE_NEW_PROBLEM | CREATE_NEW_PROPOSAL | CREATE_NEW_SCENARIO |
+  INTERACT_CONTEXT | INVALID
+
+CLASSIFICATION RULES (single intent):
+
+1. LIST_AVAILABLE
+   → User asks to see/list existing problems, proposals or scenarios.
+   Signals: "show me", "list", "what problems are there", "available scenarios".
+
+2. CONTEXT_MANAGEMENT
+   → User wants to activate, switch, or remove an item from their active context.
+   Signals: "activate X", "focus on", "let's work on", "select", "open", "use problem X",
+            "remove X", "deselect", "clear context", relative refs like "the last one".
+
+3. ASSISTANT_CAPABILITIES
+   → User is greeting the assistant or asking what it can do.
+   Signals: "hi", "hello", "what can you do", "help", "how does this work".
+
+4. CREATE_NEW_PROBLEM
+   → User wants to register a new real-world problem.
+   Signals: "I have a problem", "new problem", "add a problem", "we need to address".
+   Priority: if the user mentions both a problem and scenarios, prefer CREATE_NEW_PROBLEM.
+
+5. CREATE_NEW_PROPOSAL
+   → User wants to create a new proposal.
+   Signals: "create a proposal", "new proposal", "let's define a proposal".
+
+6. CREATE_NEW_SCENARIO
+   → User wants to create, run, or modify a scenario.
+   Signals: "create a scenario", "run scenario", "new scenario", "what if we changed".
+
+7. INTERACT_CONTEXT
+   → User wants to analyse or get information about existing items on the platform.
+   Signals: "explain", "compare", "what does X show", "interpret results", "what is this about".
+
+8. INVALID
+   → Unrelated to city management / overtourism, or too vague to classify.
+
+MULTI-STEP RULES:
+
+9. Split on ANY sequential signal — "and", "then", "also", "after that", commas
+   implying sequence, or simply two distinct intents joined by "and" — regardless
+   of language ("e poi", "und dann", "ensuite", "y luego", "e depois", etc.).
+
+10. IMPLICIT CONTEXT ACTIVATION: if the user refers to a specific entity by name
+    or id that is NOT currently active, prepend CONTEXT_MANAGEMENT before any
+    action that operates on it.
+    Example: active context is None, user says "show me results for scenario_1"
+    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
+    Example: active context has problem_1, user says "what about scenario_1?"
+    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
+
+DECISION RULES:
+- "What can you do?" → ASSISTANT_CAPABILITIES. "What does scenario X show?" → INTERACT_CONTEXT.
+- Greetings always → ASSISTANT_CAPABILITIES, never INVALID.
+- CONTEXT_MANAGEMENT = selecting an item. INTERACT_CONTEXT = analysing an item.
+- Scenario not yet existing → CREATE_NEW_SCENARIO. Already exists → INTERACT_CONTEXT.
+- Generic one-word replies ("yes", "ok") with no prior context → INVALID.
+
+
+EXAMPLES:
+"List all the available problems" → ["LIST_AVAILABLE"]
+"activate problem_1 and tell me how to create a new proposal for it" → ["CONTEXT_MANAGEMENT", "ASSISTANT_CAPABILITIES"]
+"show me the scenarios, then let's work on the first one" → ["LIST_AVAILABLE", "CONTEXT_MANAGEMENT"]
+"what are the results for scenario_1" (not active) → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
+"what are the results for scenario_1" (already active) → ["INTERACT_CONTEXT"]
+"Hi" → ["ASSISTANT_CAPABILITIES"]
+"Tell me a joke" → ["INVALID"]
+"Show me the results of scenario_1 and then create a new scenario" → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT", "CREATE_NEW_SCENARIO"]
+
+Return ONLY a JSON array of strings. No explanation, no markdown fences.
+"""
+
+    raw = llm_interaction(state, prompt).strip()
+    raw = re.sub(r"^```[a-z]*\n?|```$", "", raw, flags=re.MULTILINE).strip()
+
+    try:
+        candidates = json.loads(raw)
+        if isinstance(candidates, list):
+            result = [c for c in candidates if c in VALID_INTENTS]
+            if result:
+                return result
+    except json.JSONDecodeError:
+        tokens = re.findall(r'\b([A-Z_]+)\b', raw)
+        result = [t for t in tokens if t in VALID_INTENTS]
+        if result:
+            return result
+
+    return ["INVALID"]
 
 # ---------------------------------------------------------------------------
 # SELECT ROLE

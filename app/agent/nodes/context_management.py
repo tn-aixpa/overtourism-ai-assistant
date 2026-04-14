@@ -8,6 +8,7 @@ from app.utils.llm import parse_llm_json
 from app.tools.backend_tools import get_data_from_context, get_problems
 from app.utils.messages import get_message, MessageCode
 from app.utils.common import RequestHandlingException
+from app.config import SYSTEM_DESCRIPTION
 
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ def routing_after_context(state: AgentState) -> AgentState:
         state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, new_context=context)]
         state.cognitive.additional_output_information = [
             f"Active contex: {state.get_active_context_string()}",
-            state.cognitive.allowed_operations
+            SYSTEM_DESCRIPTION
         ]
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)

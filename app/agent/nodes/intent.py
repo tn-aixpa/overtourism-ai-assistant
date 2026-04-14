@@ -3,21 +3,45 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
-from app.utils.llm_reasoning import classify_intent
+from app.utils.llm_reasoning import extract_action_plan
 from app.utils.messages import MessageCode, get_message
 from app.utils.state_variables import VALID_INTENTS
 from app.agent.events import publish
+from app.config import SYSTEM_DESCRIPTION
 
 
 logger = logging.getLogger(__name__)
 
 
+def _is_resume_request(state: AgentState) -> bool:
+    if not state.suspended_workflow:
+        return False
+    last_user_message = state.get_last_user_message()
+    if not last_user_message:
+        return False
+    message = last_user_message.content.lower()
+    return any(token in message for token in ("resume", "continue", "go back", "pick up"))
+
 def intent_node(state: AgentState) -> AgentState:
     state.reset_state(reset_errors=True, reset_context=False, reset_data=False)
-    
     publish(state.session_id, "Assessing user intent")
     logger.info("Entered INTENT_NODE")
-    answer = classify_intent(state)
+
+    if _is_resume_request(state):
+        state.active_workflow = state.suspended_workflow
+        state.waiting_for = state.suspended_waiting_for
+        state.suspended_workflow = None
+        state.suspended_waiting_for = None
+        answer = state.active_workflow.value
+
+    elif state.cognitive.pending_actions:
+        answer = state.cognitive.pending_actions.pop(0)
+
+    else:
+        plan = extract_action_plan(state)
+        answer = plan[0]
+        if len(plan) > 1:
+            state.cognitive.pending_actions = plan[1:]
 
     state.cognitive.next_action = answer
     logger.info(f"Detected intent: {answer}")
@@ -60,9 +84,20 @@ def route_from_intent(state: AgentState):
         state.cognitive.messages_to_include = []
         state.cognitive.additional_output_information = [
             f"Active contex: {state.get_active_context_string()}",
-            state.cognitive.allowed_operations
+            SYSTEM_DESCRIPTION,
+            state.cognitive.problem_info_to_extract.format_structure(),
+            state.cognitive.proposal_info_to_extract.format_structure(),
+            state.cognitive.scenario_info_to_extract.format_structure()
         ]
 
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+
+    if action in (
+        AgentState.Workflow.PROBLEM_CREATION.value,
+        AgentState.Workflow.PROPOSAL_CREATION.value,
+        AgentState.Workflow.SCENARIO_CREATION.value,
+        AgentState.Workflow.INTERACTION.value,
+    ):
+        return Command(update=state, goto=action, graph=Command.PARENT)
 
     

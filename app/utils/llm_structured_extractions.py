@@ -369,12 +369,16 @@ STRICT OUTPUT CONTRACT (MANDATORY):
 - "subject": one of:
     - A string with the name/identifier of the item, either:
         · Explicitly named by the user (e.g. "Alpha", "problem X"), OR
-        · Resolved from ACTIVE CONTEXT or CONVERSATION HISTORY when the user uses an
-          implicit reference (e.g. "this", "that", "it", "the current", "last", "latest",
-          "previous", "the one", "this one", "that one")
+        · Resolved from ACTIVE CONTEXT using these rules:
+            - If the user asks about proposals AND there is an active problem → use the active problem as subject.
+            - If the user asks about scenarios AND there is an active proposal → use the active proposal as subject.
+            - EXCEPTION: do NOT apply active context if the user signals a global/platform-wide query
+              (e.g. uses phrases like "in general", "in the platform", "all", "available in the system").
+        · Resolved from CONVERSATION HISTORY when the user uses an implicit reference
+          (e.g. "this", "that", "it", "the current", "last", "latest", "previous", "the one")
       Resolution priority: ACTIVE CONTEXT first, then CONVERSATION HISTORY.
-    - None if no subject is referenced, OR if an implicit reference exists but
-      cannot be resolved from either ACTIVE CONTEXT or CONVERSATION HISTORY.
+    - None if no subject is referenced and no active context rule applies, OR if an
+      implicit reference exists but cannot be resolved.
 
 DECISION RULES:
 - Include an item in "to_list" ONLY if the user EXPLICITLY asks to list or retrieve it.
@@ -408,6 +412,12 @@ Output: {{"to_list": ["proposals"], "subject": "problem_1"}}
 User: "Show me scenarios for it"
 Output: {{"to_list": ["scenarios"], "subject": "problem_1"}}
 
+User: "What proposals are available?"
+Output: {{"to_list": ["proposals"], "subject": "problem_1"}}
+
+User: "What proposals are there in general?"
+Output: {{"to_list": ["proposals"], "subject": None}}
+
 --- With no active_context, but history mentions "proposal Beta" ---
 
 User: "Give me scenarios for the last one"
@@ -426,3 +436,4 @@ USER MESSAGE:
 {message}
 """
     return llm_interaction(state, prompt, lightweight_llm=False)
+    

@@ -1,10 +1,10 @@
 import logging
-import ast
 from langgraph.types import Command
 
 from app.agent.events import publish
 from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import assess_what_to_list
+from app.utils.llm import parse_llm_json
 from app.utils.messages import get_message, MessageCode
 from app.tools.backend_tools import get_problems
 
@@ -13,13 +13,12 @@ logger = logging.getLogger(__name__)
 
 def assess_list(state: AgentState) -> AgentState:
     logger.info("Entered ASSESS_LIST")
-    active_context = state.cognitive.active_context[0] if state.cognitive.active_context_type in ["problem", "proposal"] else None
     raw_output = assess_what_to_list(state).strip()
     logger.info(f"Raw output: {raw_output}")
 
     ALLOWED = ["problems", "proposals", "scenarios"]
     try:
-        extracted = ast.literal_eval(raw_output)
+        extracted = parse_llm_json(raw_output)
 
         if not isinstance(extracted, dict):
             raise ValueError("Output is not a valid dict")

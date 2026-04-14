@@ -3,13 +3,13 @@ from langgraph.types import Command
 
 from app.agent.events import publish
 from app.agent.state import AgentState
-from app.utils.common import RequestHandlingException
 from app.utils.llm_structured_extractions import extract_scenario_data
 from app.utils.llm import parse_llm_json
 from app.agent.nodes.general import parse_confirmation
 from app.utils.messages import get_message, MessageCode
 from app.tools.backend_tools import create_scenario_instance
 from app.utils.backend_integration_classes import ScenarioInfoSchema, ScenarioInfo, build_schema_data
+from app.config import SYSTEM_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def assert_active_proposal(state: AgentState) -> Command:
     state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
-        state.cognitive.allowed_operations
+        SYSTEM_DESCRIPTION
     ]
     if state.cognitive.active_context_type == "problem":
         if state.cognitive.available_entries:

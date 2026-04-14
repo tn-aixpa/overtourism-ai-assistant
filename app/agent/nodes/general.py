@@ -44,7 +44,10 @@ def error_recovery_node(state: AgentState) -> Command:
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
     state = build_output_message(state)
-    
+
+    if state.cognitive.pending_actions and not state.waiting_for:
+        return Command(update=state, goto="intent")
+
     return Command(update=state, goto=END)
 
 # ---------------------------------------------------------------------------

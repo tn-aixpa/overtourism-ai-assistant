@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum, Enum
 import json
 
-from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE, SYSTEM_DESCRIPTION
+from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE
 from app.utils.backend_integration_classes import (
     ProblemInfoSchema,
     ProblemInfo,
@@ -70,9 +70,9 @@ class CognitiveState:
 
     # Routing
     next_action: Optional[str] = None
+    pending_actions: List[str] = field(default_factory=list)
 
     # Operations
-    allowed_operations = SYSTEM_DESCRIPTION
     generation_pipeline: List[str] = field(default_factory=list) # which LLMs where used
 
     # Listing
@@ -144,6 +144,8 @@ class AgentState:
 
     resume_nome: Dict[str, str] = field(default_factory=dict)
     active_workflow: Optional["AgentState.Workflow"] = None
+    suspended_workflow: Optional["AgentState.Workflow"] = None
+    suspended_waiting_for: Optional["AgentState.WaitingFor"] = None
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"

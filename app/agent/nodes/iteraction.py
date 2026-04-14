@@ -8,6 +8,7 @@ from app.config import ALLOWED_ROLES
 from app.utils.llm_reasoning import select_role_llm
 from app.utils.llm_text_generation import answer_question
 from app.tools.backend_tools_temp import generate_chart
+from app.config import SYSTEM_DESCRIPTION
 
 from app.utils.messages import get_message, MessageCode
 
@@ -23,7 +24,7 @@ def assert_active_context(state: AgentState) -> Command:
     state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
-        state.cognitive.allowed_operations
+        SYSTEM_DESCRIPTION
     ]
     if state.cognitive.active_context_type == "":
         if state.cognitive.available_entries:
