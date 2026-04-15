@@ -109,4 +109,7 @@ def interact_context(state: AgentState) -> AgentState:
     state.add_assistant_message(
         answer
     )
+    if state.integrated_mode:
+        return Command(update=state, goto=END)
+
     return Command(update=state, goto=END, graph=Command.PARENT)

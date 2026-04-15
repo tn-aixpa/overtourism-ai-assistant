@@ -7,6 +7,10 @@ from app.agent. state import AgentState
 # ANSWER QUESTION
 # ---------------------------------------------------------------------------
 
+INSTRUCTIONS_FOR_INTEGRATED_MODE = """
+- Keep the answer as short as possible, NEVER include tables and reduce markdown as much as possible.
+"""
+
 def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
     """
     Generate answer to user question using available context data.
@@ -17,6 +21,7 @@ def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
     data = state.cognitive.context_data
     messages = state.get_reasoning_context()
     language = state.user_lang
+    additional_instructions = INSTRUCTIONS_FOR_INTEGRATED_MODE if state.integrated_mode else ""
 
     prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
 
@@ -35,6 +40,7 @@ def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
 - If the context data does not contain enough information to answer, respond with a clear statement such as: "I don't have enough information to answer this question."
 - Do not reveal internal system details: agent names, node names, workflow states, field names, or implementation specifics.
 - Be concise and directly address the question.
+{additional_instructions}
 - Respond in: **{language}**
 
 ## Output Format
@@ -52,10 +58,13 @@ Set <draw> to true if the user is explicitly asking for a visual representation 
 
     import re
     answer_match = re.search(r"<answer>(.*?)</answer>", raw, re.DOTALL)
-    draw_match = re.search(r"<draw>(.*?)</draw>", raw, re.DOTALL)
-
     answer = answer_match.group(1).strip() if answer_match else raw.strip()
-    draw = draw_match.group(1).strip().lower() == "true" if draw_match else False
+    
+    if state.integrated_mode:
+        draw = False
+    else:
+        draw_match = re.search(r"<draw>(.*?)</draw>", raw, re.DOTALL)
+        draw = draw_match.group(1).strip().lower() == "true" if draw_match else False
 
     return answer, draw
 
@@ -72,6 +81,7 @@ def generate_answer(state: AgentState) -> str:
     language = state.user_lang,
     messages_to_include = state.cognitive.messages_to_include,
     additional_data = state.cognitive.additional_output_information
+    additional_instructions = INSTRUCTIONS_FOR_INTEGRATED_MODE if state.integrated_mode else ""
 
     formatted_messages = "\n".join(
         f"- {msg}" for msg in messages_to_include
@@ -110,6 +120,7 @@ The following messages represent the core findings of the answering process. The
 - Write your response in the following language: **{language}**
 - Be concise, accurate, and directly address the user's question.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, title, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar — just the answer itself.
+{additional_instructions}
 
 ## Final Answer
 """

@@ -11,10 +11,12 @@ import asyncio
 
 from app.schemas import AgentResponse
 from app.agent.state import AgentState
-from app.agent.graph import app as agent_app
+from app.agent.graph import app as agent_app, interaction_subgraph
+from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.agent.events import get_queue, publish_done, get_result
+from app.tools.backend_tools import get_problems
 
 
 logger = logging.getLogger(__name__)
@@ -22,9 +24,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _run_agent(key: str, state: AgentState):
+def _run_agent(key: str, state: AgentState, graph: str = "main"):
     """Runs synchronously inside a thread — never call from the event loop directly."""
-    updated = agent_app.invoke(state)
+    if graph == "main":
+        updated = agent_app.invoke(state)
+    elif graph == "interaction":
+        updated = interaction_subgraph.invoke(state)
+    else:
+        raise
+
     state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
     final_state = AgentState(**state_dict)
     save_state(key, final_state)
@@ -52,9 +60,11 @@ async def run_agent_endpoint(
     user_lang: str = Form(default="English"),
     session_id: str = Form(...),
     files: list[UploadFile] = File([]),
+    integrated_mode: bool = Form(default=False),
+    context: list[str] = Form(default=[])
 ):
     key = session_id or generate_key()
-    state = load_state(key) or AgentState(session_id=key, user_lang=user_lang)
+    state = load_state(key) or AgentState(session_id=key, user_lang=user_lang, integrated_mode=integrated_mode)
 
     assert message, "No message provided"
     state.add_user_message(message)
@@ -64,8 +74,26 @@ async def run_agent_endpoint(
     else:
         state.user_input = None
 
-    # ← runs in a thread pool; POST returns immediately
-    background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
+    if integrated_mode:
+        logger.info(f"Running in integrated mode with context: {context}")
+        assert len(context) > 0, "Context is required in integrated mode"
+
+        #TODO: set context if needed
+        state.cognitive.previous_context = state.cognitive.active_context
+        state.cognitive.active_context = context
+        state.cognitive.active_context_type = "scenario"
+        if not state.cognitive.available_entries:
+            logger.info("Loading context information")
+            available_entries = get_problems.invoke({})
+            state.cognitive.available_entries = available_entries
+        state = handle_context(state)
+
+        # ← runs in a thread pool; POST returns immediately
+        background_tasks.add_task(asyncio.to_thread, _run_agent, key, state, "interaction")
+    else:
+        # ← runs in a thread pool; POST returns immediately
+        background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
+
     return {"session_id": key}
 
 

@@ -130,9 +130,10 @@ class AgentState:
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
     chart_data: Optional[dict[str, Any]] = None
 
-    # Orchestration Layer (English only)
+    # Orchestration Layer
     session_id: str = ""
     user_lang: str = "English"
+    integrated_mode: bool = False
 
     # Workflow orchestration
     class Workflow(StrEnum):
