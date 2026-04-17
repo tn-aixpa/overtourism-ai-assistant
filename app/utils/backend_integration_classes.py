@@ -85,7 +85,7 @@ class ProposalInfo(PrettyFormatMixin):
 class ScenarioInfo(PrettyFormatMixin):
     title: str
     description: str
-    indexes_to_change: Dict[str, Any]
+    indexes_to_change: Dict[str, str]
 
 
 # -------------------------

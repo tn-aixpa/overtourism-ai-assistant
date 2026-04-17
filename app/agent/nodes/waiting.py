@@ -42,8 +42,10 @@ def _wait_instructions(state: AgentState):
 
         additional_info = [
             state.cognitive.scenario_info_to_extract.format_structure(),
-            f"Editable indexes: {state.cognitive.editable_indexes}"
+            #f"Editable indexes: {state.cognitive.editable_indexes}"
         ]
+        if not state.cognitive.scenario_validated_indexes:
+            additional_info.append("Please use the sliders to set indexes to change")
     
         return instructions, additional_info
 

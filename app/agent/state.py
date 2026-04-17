@@ -99,7 +99,10 @@ class CognitiveState:
     scenario_info_to_extract = ScenarioInfoSchema.default()
     scenarios_to_generate: List[ScenarioInfo] = field(default_factory=list)
     extracted_all_scenario: bool = False
-    scenario_validation_errors: str = ""
+    scenario_validation_errors: str = "" # OLD, remove
+    scenario_displayed_ranges: bool = False
+    scenario_validated_indexes: Dict[str, Any] = field(default_factory=dict)
+
 
     # Expert reasoning
     selected_roles: List[str] = field(default_factory=list)
@@ -129,6 +132,7 @@ class AgentState:
     # Interface layer (Localized language only)
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
     chart_data: Optional[dict[str, Any]] = None
+    sliders_data: Optional[dict[str, Any]] = None
 
     # Orchestration Layer
     session_id: str = ""
@@ -295,6 +299,7 @@ class AgentState:
         self.waiting_for = None
         self.user_input = None
         self.chart_data = None
+        self.sliders_data = None
 
         # Reset general cognitive
         self.cognitive.generation_pipeline = []

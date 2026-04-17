@@ -1,10 +1,45 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import "./App.css";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
 const API_URL = "http://localhost:9000/agent";
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function generateSessionId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from({ length: 8 }, () =>
+    chars.charAt(Math.floor(Math.random() * chars.length))
+  ).join("");
+}
+
+function fmtVal(v) {
+  return parseFloat(v.toFixed(4)).toString();
+}
+
+function getInitialValue(widget) {
+  if (widget.index_type === "uniform") return widget.loc ?? 0;
+  if (widget.v !== undefined) return widget.v;
+  return widget.loc ?? 0;
+}
+
+function initSlidersState(slidersData) {
+  const state = {};
+  for (const group of Object.keys(slidersData.widgets)) {
+    state[group] = slidersData.widgets[group].map((w) => {
+      const initial = getInitialValue(w);
+      return {
+        ...w,
+        _val: initial,
+        _initial: initial,
+      };
+    });
+  }
+  return state;
+}
+// ─── ChartPanel ─────────────────────────────────────────────────────────────
 
 function ChartPanel({ figure }) {
   const [revision, setRevision] = useState(0);
@@ -16,9 +51,10 @@ function ChartPanel({ figure }) {
     plot_bgcolor: "rgba(0,0,0,0)",
     font: {
       ...figure.layout?.font,
-      color: getComputedStyle(document.documentElement)
-        .getPropertyValue("--color-text-primary")
-        .trim() || "#111",
+      color:
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--color-text-primary")
+          .trim() || "#111",
     },
     margin: { l: 48, r: 24, t: figure.layout?.title ? 40 : 12, b: 40 },
   };
@@ -45,238 +81,393 @@ function ChartPanel({ figure }) {
   );
 }
 
-function App() {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const textareaRef = useRef(null);
-  const chatRef = useRef(null);
-  const [attachments, setAttachments] = useState([]);
-  const fileInputRef = useRef(null);
-  const [activeContext, setActiveContext] = useState("");
-  const [language, setLanguage] = useState("Italiano");
-  const [statusMessage, setStatusMessage] = useState(null);
+// ─── SliderWidget ────────────────────────────────────────────────────────────
 
-  // TEMPORARY: session id generation
-  const generateSessionId = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < 8; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-  const [sessionId, setSessionId] = useState(null);
+function SliderWidget({ widget, onChange }) {
+  const val = widget._val;
+  const suffix = widget.index_category === "%" ? "%" : "";
+  const isUniform =
+    widget.index_type === "uniform" && widget.index_category !== "%";
 
-  useEffect(() => {
-    const id = generateSessionId();
-    setSessionId(id);
-  }, []);
+  const step = useCallback(
+    (dir) => {
+      const s = widget.step || 1;
+      const next = Math.round((val + dir * s) * 1e6) / 1e6;
+      onChange(Math.min(Math.max(next, widget.min), widget.max));
+    },
+    [val, widget, onChange]
+  );
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
-  }, [messages]);
+  return (
+    <div className="slider-card">
+      <div className="slider-label">{widget.index_name}</div>
 
-  // Handle file attachments
-  const handleFileChange = (e) => {
-    const newFiles = Array.from(e.target.files);
+      <div className="slider-row">
+        <input
+          type="range"
+          min={widget.min}
+          max={widget.max}
+          step={widget.step || 1}
+          value={val}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+        />
+        <span className="slider-value">
+          {fmtVal(val)}
+          {suffix}
+        </span>
+      </div>
 
-    setAttachments((prev) => {
-      const existingNames = new Set(prev.map(f => f.name));
-      const filtered = newFiles.filter(f => !existingNames.has(f.name));
-      return [...prev, ...filtered];
+      <div className="stepper-row">
+        <button className="step-btn" onClick={() => step(-1)} aria-label="Decrease">
+          −
+        </button>
+        <button className="step-btn" onClick={() => step(1)} aria-label="Increase">
+          +
+        </button>
+        {isUniform && (
+          <span className="slider-badge">distribuzione uniforme</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SlidersPanel ────────────────────────────────────────────────────────────
+
+function SlidersPanel({ slidersData, sessionId  }) {
+  const groups = Object.keys(slidersData.widgets);
+  const [activeTab, setActiveTab] = useState(groups[0]);
+  const [state, setState] = useState(() => initSlidersState(slidersData));
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmitSliders = async () => {
+    if (submitting) return; // prevent double click
+
+    setSubmitting(true);
+
+    // Flatten all widgets across groups
+    const allWidgets = Object.values(state).flat();
+
+    const changed = allWidgets.filter(
+      (w) => w._val !== w._initial
+    );
+
+    const payload = {};
+
+    changed.forEach((w) => {
+      const hasScale = w.scale !== undefined && w.scale !== null;
+
+      payload[w.index_id] = hasScale
+        ? [w._val, w._val + w.scale]
+        : w._val;
     });
 
-    // Reset input so same file can be selected again
-    e.target.value = null;
-  };
-
-  // Auto-expand textarea
-  const handleInputChange = (e) => {
-    const textarea = e.target;
-    setInput(textarea.value);
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.max(textarea.scrollHeight, 24)}px`;
-  };
-
-//Send message
-const sendMessage = async () => {
-  if (!input.trim() && attachments.length === 0) return;
-
-  const currentInput = input;
-  const newMessages = [...messages, { role: "user", content: currentInput || "[Attachment]" }];
-  setMessages(newMessages);
-  setInput("");
-  if (textareaRef.current) textareaRef.current.style.height = "auto";
-  setLoading(true);
-  setStatusMessage("");
-
-  // Open SSE BEFORE posting so no events are missed
-  const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
-
-  eventSource.addEventListener("status", (e) => {
-    setStatusMessage(e.data);
-  });
-
-  eventSource.addEventListener("done", async () => {
-    eventSource.close();
-    // Fetch the stored result
-    try {
-      const res = await fetch(`${API_URL}/result/${sessionId}`);
-      const data = await res.json();
-      if (data.session_id) setSessionId(data.session_id);
-      setActiveContext(data.active_context || "-");
-      setMessages([
-        ...newMessages,
-        { role: "assistant", content: data.response, chartData: data.chart_data ?? null },
-      ]);
-    } catch (err) {
-      console.error(err);
-      setMessages([...newMessages, { role: "assistant", content: "Error fetching result." }]);
+    if (Object.keys(payload).length === 0) {
+      setSubmitting(false); // re-enable
+      return;
     }
-    setLoading(false);
-    setStatusMessage(null);
-  });
-
-  eventSource.onerror = () => {
-    eventSource.close();
-    setLoading(false);
-    setStatusMessage(null);
-  };
-
-  // POST — returns 202 immediately, agent runs in background
-  const formData = new FormData();
-  formData.append("message", currentInput);
-  formData.append("session_id", sessionId);
-  formData.append("user_lang", language);
-  attachments.forEach((file) => formData.append("files", file));
-  setAttachments([]);
-  if (fileInputRef.current) fileInputRef.current.value = "";
-
-  try {
-    await fetch(API_URL, { method: "POST", body: formData });
-  } catch (err) {
-    console.error(err);
-    eventSource.close();
-    setMessages([...newMessages, { role: "assistant", content: "Error contacting server." }]);
-    setLoading(false);
-    setStatusMessage(null);
-  }
-};
-
-  // Save conversation
-  const saveConversation = async () => {
-    if (!sessionId) return;
 
     try {
-      const res = await fetch(`${API_URL}/save`, {
+      const res = await fetch(`${API_URL}/inject_sliders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ session_id: sessionId }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          values: payload,
+        }),
       });
 
       const data = await res.json();
-      alert(data.message || "Conversation saved!");
+      console.log("Inject response:", data);
     } catch (err) {
-      console.error(err);
+      console.error("Error sending sliders:", err);
+    }
+  };
+
+  const handleChange = useCallback((group, index_id, newVal) => {
+    setState((prev) => ({
+      ...prev,
+      [group]: prev[group].map((w) =>
+        w.index_id === index_id ? { ...w, _val: newVal } : w
+      ),
+    }));
+  }, []);
+
+  return (
+    <div className="sliders-panel">
+      <div className="sliders-layout">
+        <div className="tab-list" role="tablist">
+          {groups.map((g) => (
+            <button
+              key={g}
+              role="tab"
+              aria-selected={activeTab === g}
+              className={`tab-btn${activeTab === g ? " active" : ""}`}
+              onClick={() => setActiveTab(g)}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+
+        <div className="sliders-grid" role="tabpanel">
+          {state[activeTab]
+            .filter((w) => w.editable)
+            .map((w) => (
+              <SliderWidget
+                key={w.index_id}
+                widget={w}
+                onChange={(val) => handleChange(activeTab, w.index_id, val)}
+              />
+            ))}
+        </div>
+
+      </div>
+        <div className="sliders-footer">
+          <button
+            className="submit-sliders-btn"
+            onClick={handleSubmitSliders}
+            disabled={submitting}
+          >
+            {submitting ? "Indici modificati" : "Conferma modifica"}
+          </button>
+        </div>
+    </div>
+  );
+}
+
+// ─── Message ─────────────────────────────────────────────────────────────────
+
+function Message({ msg, sessionId }) {
+  if (msg.role === "user") {
+    return <div className="message user">{msg.content}</div>;
+  }
+
+  return (
+    <div className="message assistant">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+      {msg.chartData && <ChartPanel figure={msg.chartData} />}
+      {msg.slidersData && <SlidersPanel slidersData={msg.slidersData} sessionId={sessionId} />}
+    </div>
+  );
+}
+
+// ─── LoadingBubble ────────────────────────────────────────────────────────────
+
+function LoadingBubble({ statusMessage }) {
+  return (
+    <div className="message assistant">
+      <div className="dots">
+        <span />
+        <span />
+        <span />
+      </div>
+      {statusMessage && <span className="status">{statusMessage}</span>}
+    </div>
+  );
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+
+function App() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [activeContext, setActiveContext] = useState("");
+  const [language, setLanguage] = useState("Italiano");
+  const [statusMessage, setStatusMessage] = useState(null);
+  const [sessionId] = useState(() => generateSessionId());
+
+  const textareaRef = useRef(null);
+  const chatRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages, loading]);
+
+  // Auto-expand textarea
+  const handleInputChange = (e) => {
+    const el = e.target;
+    setInput(el.value);
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+  };
+
+  // File handling
+  const handleFileChange = (e) => {
+    const newFiles = Array.from(e.target.files);
+    setAttachments((prev) => {
+      const existing = new Set(prev.map((f) => f.name));
+      return [...prev, ...newFiles.filter((f) => !existing.has(f.name))];
+    });
+    e.target.value = null;
+  };
+
+  const removeAttachment = (idx) =>
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+
+  // Send message
+  const sendMessage = async () => {
+    if (!input.trim() && attachments.length === 0) return;
+
+    const currentInput = input;
+    const newMessages = [
+      ...messages,
+      { role: "user", content: currentInput || "[Attachment]" },
+    ];
+    setMessages(newMessages);
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    setLoading(true);
+    setStatusMessage("");
+
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+
+    eventSource.addEventListener("status", (e) => {
+      setStatusMessage(e.data);
+    });
+
+    eventSource.addEventListener("done", async () => {
+      eventSource.close();
+      try {
+        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const data = await res.json();
+        setActiveContext(data.active_context || "-");
+        setMessages([
+          ...newMessages,
+          {
+            role: "assistant",
+            content: data.response,
+            chartData: data.chart_data ?? null,
+            slidersData: data.sliders_data ?? null,
+          },
+        ]);
+      } catch {
+        setMessages([
+          ...newMessages,
+          { role: "assistant", content: "Error fetching result." },
+        ]);
+      }
+      setLoading(false);
+      setStatusMessage(null);
+    });
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      setLoading(false);
+      setStatusMessage(null);
+    };
+
+    const formData = new FormData();
+    formData.append("message", currentInput);
+    formData.append("session_id", sessionId);
+    formData.append("user_lang", language);
+    attachments.forEach((file) => formData.append("files", file));
+    setAttachments([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    try {
+      await fetch(API_URL, { method: "POST", body: formData });
+    } catch {
+      eventSource.close();
+      setMessages([
+        ...newMessages,
+        { role: "assistant", content: "Error contacting server." },
+      ]);
+      setLoading(false);
+      setStatusMessage(null);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // Save conversation
+  const saveConversation = async () => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`${API_URL}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const data = await res.json();
+      alert(data.message || "Conversation saved!");
+    } catch {
       alert("Failed to save conversation.");
     }
   };
 
   return (
     <div className="app">
-      {/* HEADER */}
+      {/* Header */}
       <header className="header">
         <h2>Digital Twin Agent</h2>
-
         <div className="header-right">
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             className="language-select"
           >
-            <option value="Italian">Italiano</option>
+            <option value="Italiano">Italiano</option>
             <option value="English">English</option>
           </select>
-
           <span className="session">Session: {sessionId}</span>
         </div>
       </header>
 
-      {/* CONTEXT */}
-      <header className="context-header">
+      {/* Context bar */}
+      <div className="context-header">
         <span className="context">Active context: {activeContext || "-"}</span>
-        <button 
-          className="save-btn" 
-          onClick={saveConversation} 
+        <button
+          className="save-btn"
+          onClick={saveConversation}
           disabled={!sessionId}
         >
           💾 Save conversation
         </button>
-      </header>
+      </div>
 
-
-      {/* CHAT AREA */}
+      {/* Chat */}
       <div className="chat-wrapper" ref={chatRef}>
         <div className="chat-container">
           {messages.map((msg, i) => (
-            <div key={i} className={`message ${msg.role}`}>
-              {msg.role === 'assistant' ? (
-                <>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                  {msg.chartData && <ChartPanel figure={msg.chartData} />}
-                </>
-              ) : (
-                msg.content
-              )}
-            </div>
+            <Message key={i} msg={msg} sessionId={sessionId} />
           ))}
-          {loading && (
-            <div className="message assistant">
-              <div className="dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <span className="status">{statusMessage || ""}</span>
-            </div>
-          )}
+          {loading && <LoadingBubble statusMessage={statusMessage} />}
         </div>
       </div>
 
-      {/* INPUT AREA */}
+      {/* Input */}
       <div className="input-container">
         <div className="input-wrapper">
-          
-          {/* Row: input + controls */}
           <div className="input-inner">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
               placeholder="Ask something..."
               rows={1}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
               disabled={loading}
             />
-
             <span
               className="attachment-icon"
-              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              onClick={() => fileInputRef.current?.click()}
             >
               📎
             </span>
-
             <input
               type="file"
               multiple
@@ -284,25 +475,22 @@ const sendMessage = async () => {
               ref={fileInputRef}
               style={{ display: "none" }}
             />
-
-            <button onClick={sendMessage} disabled={loading}>Send</button>
+            <button onClick={sendMessage} disabled={loading}>
+              Send
+            </button>
           </div>
 
-          {/* Row: attachments */}
           {attachments.map((file, idx) => (
             <div key={idx} className="attachment-name">
               {file.name}
               <span
                 className="remove-attachment"
-                onClick={() =>
-                  setAttachments(prev => prev.filter((_, i) => i !== idx))
-                }
+                onClick={() => removeAttachment(idx)}
               >
                 🗙
               </span>
             </div>
           ))}
-
         </div>
       </div>
     </div>

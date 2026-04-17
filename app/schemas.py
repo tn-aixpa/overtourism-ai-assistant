@@ -29,5 +29,6 @@ class AgentResponse(BaseModel):
     session_id: str
     active_context: str
     chart_data: Optional[dict[str, Any]] = None  # Plotly figure JSON or None
+    sliders_data: Optional[dict[str, Any]] = None  # Slider controls parsed from HTML pages
 
     model_config = ConfigDict(extra="allow")

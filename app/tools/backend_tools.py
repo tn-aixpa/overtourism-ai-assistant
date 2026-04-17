@@ -129,6 +129,22 @@ def get_data_from_context(context_type, context, relations, extract_editable):
     }
 
 @tool
+def get_sliders():
+    """Fetch sliders data from the API."""
+
+
+    url = f"{BACKEND_URL}widgets"
+    headers = {
+        "accept": "application/json"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    assert response is not None
+
+    return response.json()
+
+@tool
 def create_problem_instance(
     payload: dict
 ) -> dict:

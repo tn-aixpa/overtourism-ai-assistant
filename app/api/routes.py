@@ -49,6 +49,7 @@ def _run_agent(key: str, state: AgentState, graph: str = "main"):
         "session_id": key,
         "active_context": active_context,
         "chart_data": getattr(final_state, "chart_data", None),
+        "sliders_data": getattr(final_state, "sliders_data", None),
     }
     publish_done(key, result)   # stores result then signals __done__
 
@@ -73,6 +74,16 @@ async def run_agent_endpoint(
         state.user_input = message
     else:
         state.user_input = None
+
+    # START TEMP
+    state.cognitive.active_context = ["proposal_0"]
+    state.cognitive.active_context_type = "proposal"
+    if not state.cognitive.available_entries:
+        logger.info("Loading context information")
+        available_entries = get_problems.invoke({})
+        state.cognitive.available_entries = available_entries
+    state = handle_context(state)
+    # END TEMP
 
     if integrated_mode:
         logger.info(f"Running in integrated mode with context: {context}")
@@ -145,4 +156,29 @@ async def save_conversation_endpoint(payload: dict = Body(...)):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to save conversation: {str(e)}",
+        )
+    
+@router.post("/agent/inject_sliders")
+async def inject_sliders_endpoint(payload: dict = Body(...)):
+    try:
+        logger.info(f"Recived indexes {payload}")
+        session_id = payload.get("session_id")
+        index_diffs = payload.get("values", {})
+
+        state = load_state(session_id)
+
+        if not state:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        state.cognitive.scenario_validated_indexes = index_diffs
+        state.sliders_data = None
+        logger.info(f"Injected sliders for session: {index_diffs}")
+
+        return {"message": "Sliders injected successfully"}
+
+    except Exception as e:
+        logger.exception("Failed to inject sliders")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to inject sliders: {str(e)}",
         )

@@ -170,7 +170,7 @@ MESSAGE HISTORY:
 # SCENARIO DATA EXTRACTION
 # ---------------------------------------------------------------------------
 
-def extract_scenario_data(state) -> str:
+def extract_scenario_data_old(state) -> str:
     messages = state.get_reasoning_context()
     editable_indexes = state.cognitive.editable_indexes
 
@@ -254,6 +254,85 @@ Before producing the final answer:
 5) Verify no empty fields, empty objects, or empty arrays exist.
 6) Verify every solution has at least one entry in "indexes_to_change".
 7) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
+
+Only after passing ALL checks, output the JSON and then STOP.
+
+--------------------------------------------------
+
+MESSAGE HISTORY:
+
+{format_messages(messages)}
+"""
+    
+    return llm_interaction(state, prompt, lightweight_llm=False)
+
+def extract_scenario_data(state) -> str:
+    messages = state.get_reasoning_context()
+
+    prompt = f"""
+SYSTEM ROLE:
+
+You are a deterministic structured data extractor.
+
+Your output is parsed automatically by a machine.
+If the output is not valid JSON, the system will fail.
+
+--------------------------------------------------
+
+TASK:
+
+Extract structured information about proposed solutions
+from the conversation.
+
+--------------------------------------------------
+
+STRICT OUTPUT CONTRACT:
+
+- Output MUST be valid JSON.
+- Output MUST be a JSON ARRAY.
+- Each item = ONE solution.
+- NEVER output multiple JSON objects concatenated.
+- NEVER output markdown (no ```).
+- NEVER output explanations or extra text — BEFORE or AFTER the JSON.
+- The response MUST start with "[" and end with "]".
+- The JSON must be directly parsable with json.loads().
+- OUTPUT NOTHING AFTER THE CLOSING "]". No comments, no questions, no follow-ups.
+
+--------------------------------------------------
+
+SCHEMA (STRICT):
+
+[
+  {{
+    "title": string (max 3 words),
+    "context_conditions": string (optional),
+    "potential_impact": string (optional),
+    "description": string (optional),
+    "additional_data": string (optional)
+  }}
+]
+
+--------------------------------------------------
+
+EXTRA RULES:
+
+- Extract ONLY explicit information.
+- NEVER infer missing details.
+- Remove empty fields entirely — including empty objects {{}} and empty arrays [].
+- If no valid solutions exist, return [].
+
+--------------------------------------------------
+
+SELF-CHECK (MANDATORY BEFORE OUTPUT):
+
+Before producing the final answer:
+
+1) Verify the output is valid JSON.
+2) Verify the output is a list.
+3) Verify it begins with "[" and ends with "]".
+4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
+5) Verify no empty fields, empty objects, or empty arrays exist.
+6) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
 
 Only after passing ALL checks, output the JSON and then STOP.
 
