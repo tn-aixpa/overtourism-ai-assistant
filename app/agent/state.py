@@ -22,6 +22,9 @@ class ConversationMessage:
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
     generated_by: Optional[str] = None  # e.g., which LLM or tool generated this message
+    vote: Optional[str] = None        # "up" | "down" | None
+    comment: Optional[str] = None
+    # TODO: this way of storing feedback might not be ideal, we might lose track of messages if the conversation gets too long and messages get truncated. Consider storing feedback separately with message IDs.
 
 @dataclass
 class ConversationBuffer:

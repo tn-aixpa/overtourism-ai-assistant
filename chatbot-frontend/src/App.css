@@ -430,3 +430,106 @@ button:disabled {
   padding: 10px;
   background: white;
 }
+/* FEEDBACK BAR */
+.feedback-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.fb-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  color: #888;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.fb-btn:hover { background: rgba(0, 0, 0, 0.05); }
+.fb-active-up { background: #e6f9ee !important; border-color: #5bc98a !important; color: #2a8a54 !important; }
+.fb-active-down { background: #fdecea !important; border-color: #e57373 !important; color: #c0392b !important; }
+.fb-has-comment { background: #e8f0fe !important; border-color: #7baaf7 !important; color: #1a56db !important; }
+
+.fb-comment-label {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.fb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.fb-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  width: 340px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.fb-modal h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.fb-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: inherit;
+}
+
+.fb-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fb-btn-cancel {
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+}
+
+.fb-btn-save {
+  background: #1a56db;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #fff;
+  font-weight: 500;
+}

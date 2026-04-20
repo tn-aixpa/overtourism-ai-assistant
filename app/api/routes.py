@@ -181,3 +181,31 @@ async def inject_sliders_endpoint(
             status_code=500,
             detail=f"Failed to inject sliders: {str(e)}",
         )
+    
+@router.post("/agent/feedback")
+async def submit_feedback(payload: dict = Body(...)):
+    session_id = payload.get("session_id")
+    message_index = payload.get("message_index")
+    vote = payload.get("vote")          # "up" | "down" | None
+    comment = payload.get("comment")    # str | None
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    state = load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = state.conversation.messages
+    if message_index is None or message_index >= len(messages):
+        raise HTTPException(status_code=400, detail="Invalid message index")
+
+    msg = messages[message_index]
+    if msg.role != "assistant":
+        raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
+
+    msg.vote = vote
+    msg.comment = comment
+
+    save_state(session_id, state)
+    return {"message": "Feedback saved."}
