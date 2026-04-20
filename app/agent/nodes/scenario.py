@@ -131,8 +131,7 @@ def assert_active_proposal(state: AgentState) -> Command:
 #     else:
 #         state.waiting_for = AgentState.WaitingFor.SCENARIO_INPUT
 
-#     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
-
+#     return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)   
 def extract_scenario(state: AgentState) -> Command:
     logger.info("Entering extract_scenario")
     publish(state.session_id, "Extracting information from your input...")
@@ -140,34 +139,37 @@ def extract_scenario(state: AgentState) -> Command:
     answer = extract_scenario_data(state)
     logger.info(f"Chatbot answer: {answer}")   
     
-    scenarios = parse_llm_json(answer)
-    logger.info(f"Extracted scenario: {scenarios} + indexes {state.cognitive.scenario_validated_indexes}")       
-    schema = ScenarioInfoSchema.default()
+    parsed_answer = parse_llm_json(answer)
+    scenarios = parsed_answer["scenarios"]
+    modify_indexes = parsed_answer["modify_indexes"]
+    # prevent keep showing sliders
+    if modify_indexes and not (state.get_last_message().role == "user"):
+        modify_indexes = False
 
+    logger.info(f"Extracted scenario: {scenarios} + indexes {state.cognitive.scenario_validated_indexes}")  
+   
+    # assume only one scenario is extracted for now, we can iterate later if needed
+    state.cognitive.scenario_extracted = {**(state.cognitive.scenario_extracted or {}), **(scenarios[0] if scenarios else {})}
+    
     validated_scenarios: list[ScenarioInfo] = []
     scenario_validation_errors = []
-    
-    # assume only one scenario is extracted for now, we can iterate later if needed
-    scenario = scenarios[0] if scenarios else None
-    if scenario is not None:
-        #validated_indexes = {"available_parking_spaces": [350, 750]}
+    schema = ScenarioInfoSchema.default()
 
+    if state.cognitive.scenario_extracted and state.cognitive.scenario_validated_indexes and not modify_indexes:
         try:
             scenario_data = {
-                "title": scenario.get("title"),
-                "description": scenario.get("description"),
+                "title": state.cognitive.scenario_extracted.get("title"),
+                "description": state.cognitive.scenario_extracted.get("description"),
                 "indexes_to_change": state.cognitive.scenario_validated_indexes,
             }
 
             scenario_instance = build_schema_data(schema, scenario_data, ScenarioInfo)
             validated_scenarios.append(scenario_instance)
         except Exception as e:
-            logger.error(f"AAAAAAA {e}")
             scenario_validation_errors.append(str(e))
             validated_scenarios: list[ScenarioInfo] = []
 
-
-    if len(validated_scenarios) and state.cognitive.scenario_validated_indexes:
+    if len(validated_scenarios) and not modify_indexes:
         logger.info("Extracted all")
         state.cognitive.extracted_all_scenario = True
         state.cognitive.scenario_validation_errors = ""
@@ -180,9 +182,10 @@ def extract_scenario(state: AgentState) -> Command:
             state.cognitive.scenario_validation_errors = (
                 "The following errors were detected for the scenarios you defined:\n- " + "\n- ".join(scenario_validation_errors)
             )
-        state.cognitive.additional_output_information = [f"Extracted so far: {validated_scenarios}"]
+        state.cognitive.additional_output_information = [f"Extracted so far: {state.cognitive.scenario_extracted}"]
         state.cognitive.scenarios_to_generate = []
-        if not state.cognitive.scenario_displayed_ranges:
+        if not state.cognitive.scenario_displayed_ranges or modify_indexes or not state.cognitive.scenario_validated_indexes:
+            state.cognitive.scenario_validated_indexes = {}
             state.cognitive.scenario_displayed_ranges = True
             state.sliders_data = get_sliders.invoke({})
         else:

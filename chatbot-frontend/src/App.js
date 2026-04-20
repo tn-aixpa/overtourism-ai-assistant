@@ -134,7 +134,7 @@ function SliderWidget({ widget, onChange }) {
 
 // ─── SlidersPanel ────────────────────────────────────────────────────────────
 
-function SlidersPanel({ slidersData, sessionId  }) {
+function SlidersPanel({ slidersData, sessionId, onSliderSubmit }) {
   const groups = Object.keys(slidersData.widgets);
   const [activeTab, setActiveTab] = useState(groups[0]);
   const [state, setState] = useState(() => initSlidersState(slidersData));
@@ -181,8 +181,14 @@ function SlidersPanel({ slidersData, sessionId  }) {
 
       const data = await res.json();
       console.log("Inject response:", data);
+      
+      // Notify parent to show loading and listen for results
+      if (onSliderSubmit) {
+        onSliderSubmit(sessionId);
+      }
     } catch (err) {
       console.error("Error sending sliders:", err);
+      setSubmitting(false);
     }
   };
 
@@ -240,7 +246,7 @@ function SlidersPanel({ slidersData, sessionId  }) {
 
 // ─── Message ─────────────────────────────────────────────────────────────────
 
-function Message({ msg, sessionId }) {
+function Message({ msg, sessionId, onSliderSubmit }) {
   if (msg.role === "user") {
     return <div className="message user">{msg.content}</div>;
   }
@@ -249,7 +255,7 @@ function Message({ msg, sessionId }) {
     <div className="message assistant">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
       {msg.chartData && <ChartPanel figure={msg.chartData} />}
-      {msg.slidersData && <SlidersPanel slidersData={msg.slidersData} sessionId={sessionId} />}
+      {msg.slidersData && <SlidersPanel slidersData={msg.slidersData} sessionId={sessionId} onSliderSubmit={onSliderSubmit} />}
     </div>
   );
 }
@@ -409,6 +415,49 @@ function App() {
     }
   };
 
+  // Handle slider submission (listen for result and add to messages)
+  const handleSliderSubmit = async (sessionId) => {
+    setLoading(true);
+    setStatusMessage("");
+
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+
+    eventSource.addEventListener("status", (e) => {
+      setStatusMessage(e.data);
+    });
+
+    eventSource.addEventListener("done", async () => {
+      eventSource.close();
+      try {
+        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const data = await res.json();
+        setActiveContext(data.active_context || "-");
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            role: "assistant",
+            content: data.response,
+            chartData: data.chart_data ?? null,
+            slidersData: data.sliders_data ?? null,
+          },
+        ]);
+      } catch {
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          { role: "assistant", content: "Error fetching result." },
+        ]);
+      }
+      setLoading(false);
+      setStatusMessage(null);
+    });
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      setLoading(false);
+      setStatusMessage(null);
+    };
+  };
+
   return (
     <div className="app">
       {/* Header */}
@@ -443,7 +492,7 @@ function App() {
       <div className="chat-wrapper" ref={chatRef}>
         <div className="chat-container">
           {messages.map((msg, i) => (
-            <Message key={i} msg={msg} sessionId={sessionId} />
+            <Message key={i} msg={msg} sessionId={sessionId} onSliderSubmit={handleSliderSubmit} />
           ))}
           {loading && <LoadingBubble statusMessage={statusMessage} />}
         </div>

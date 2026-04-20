@@ -9,9 +9,12 @@ def parse_confirmation_message(state: AgentState) -> str:
     from app.utils.llm_reasoning import llm_classify_confirmation
 
     message = state.get_last_user_message().content
-    CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"}
-    EDIT = {"edit", "change", "modify", "adjust"}
-    CANCEL = {"cancel", "interrupt", "quit", "stop", "no"}
+    CONFIRM = {"yes", "ok", "confirm", "sure", "go", "proceed"
+               "sì", "confermo", "certo", "vai", "procedi"}
+    EDIT = {"edit", "change", "modify", "adjust",
+            "modifica", "modificare", "cambia", "cambiare"}
+    CANCEL = {"cancel", "interrupt", "quit", "stop", "no",
+              "annulla", "cancella", "interrompi"}
     message = re.sub(r"[^\w\s]", "", message.lower())
     tokens = set(message.split())
 

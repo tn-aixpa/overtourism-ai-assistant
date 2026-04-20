@@ -186,7 +186,7 @@ If the output is not valid JSON, the system will fail.
 
 TASK:
 
-Extract structured information about proposed solutions
+Extract structured information about proposed scenarios
 from the conversation.
 
 --------------------------------------------------
@@ -237,7 +237,7 @@ EXTRA RULES:
 - NEVER infer missing details.
 - Remove empty fields entirely — including empty objects {{}} and empty arrays [].
 - A solution with no entries in "indexes_to_change" is NOT a valid solution. Omit it entirely.
-- If no valid solutions exist, return [].
+- If no valid scenarios exist, return [].
 - Inside "indexes_to_change" NEVER put a list as 'value' if type is "increase" or "decrease".
 - Inside "indexes_to_change" NEVER put a single number as 'value' if type is "range".
 
@@ -268,6 +268,7 @@ MESSAGE HISTORY:
 
 def extract_scenario_data(state) -> str:
     messages = state.get_reasoning_context()
+    last_message = state.get_last_message()
 
     prompt = f"""
 SYSTEM ROLE:
@@ -281,36 +282,57 @@ If the output is not valid JSON, the system will fail.
 
 TASK:
 
-Extract structured information about proposed solutions
+Extract structured information about proposed scenarios
 from the conversation.
+
+Also determine whether the user's last message is requesting
+modifications to simulation indexes or asking to change the
+scenario more broadly (beyond surface-level fields like the title).
 
 --------------------------------------------------
 
 STRICT OUTPUT CONTRACT:
 
 - Output MUST be valid JSON.
-- Output MUST be a JSON ARRAY.
-- Each item = ONE solution.
+- Output MUST be a JSON OBJECT with exactly two keys: "scenarios" and "modify_indexes".
 - NEVER output multiple JSON objects concatenated.
 - NEVER output markdown (no ```).
 - NEVER output explanations or extra text — BEFORE or AFTER the JSON.
-- The response MUST start with "[" and end with "]".
+- The response MUST start with "{{" and end with "}}".
 - The JSON must be directly parsable with json.loads().
-- OUTPUT NOTHING AFTER THE CLOSING "]". No comments, no questions, no follow-ups.
+- OUTPUT NOTHING AFTER THE CLOSING "}}". No comments, no questions, no follow-ups.
 
 --------------------------------------------------
 
 SCHEMA (STRICT):
 
-[
-  {{
+{{
+"scenarios": [
+    {{
     "title": string (max 3 words),
-    "context_conditions": string (optional),
-    "potential_impact": string (optional),
-    "description": string (optional),
-    "additional_data": string (optional)
-  }}
-]
+    "description": string,
+    }}
+],
+"modify_indexes": boolean
+}}
+
+--------------------------------------------------
+
+FIELD DEFINITIONS:
+
+scenarios:
+- A list of extracted scenarios from the conversation.
+- Each item represents ONE solution.
+- Remove empty fields entirely — including empty objects {{}} and empty arrays [].
+- If no valid scenarios exist, use an empty array [].
+
+modify_indexes:
+- true  → the user's last message asks to modify simulation indexes
+            OR requests general modifications to the scenario
+            (e.g. changing parameters, values, conditions, structure, "I want to modify the scenario".
+- false → the user's last message only asks for minor surface-level
+            edits (e.g. renaming the title, fixing a typo) or is not
+            requesting any modification at all.
 
 --------------------------------------------------
 
@@ -318,8 +340,19 @@ EXTRA RULES:
 
 - Extract ONLY explicit information.
 - NEVER infer missing details.
-- Remove empty fields entirely — including empty objects {{}} and empty arrays [].
-- If no valid solutions exist, return [].
+- Remove empty fields from solution objects entirely — no empty strings, empty objects {{}}, or empty arrays [].
+
+--------------------------------------------------
+
+LAST MESSAGE:
+
+{last_message}
+
+--------------------------------------------------
+
+MESSAGE HISTORY:
+
+{format_messages(messages)}
 
 --------------------------------------------------
 
@@ -328,19 +361,14 @@ SELF-CHECK (MANDATORY BEFORE OUTPUT):
 Before producing the final answer:
 
 1) Verify the output is valid JSON.
-2) Verify the output is a list.
-3) Verify it begins with "[" and ends with "]".
-4) Verify there is NO text outside the JSON — nothing before "[", nothing after "]".
-5) Verify no empty fields, empty objects, or empty arrays exist.
+2) Verify the output is an object with exactly the keys "scenarios" and "modify_indexes".
+3) Verify it begins with "{{" and ends with "}}".
+4) Verify there is NO text outside the JSON — nothing before "{{", nothing after "}}".
+5) Verify no empty fields, empty objects, or empty arrays exist inside solution items.
 6) Verify the output does NOT contain backticks, ```json, or any markdown formatting.
+7) Verify "modify_indexes" is a boolean (true or false), not a string.
 
 Only after passing ALL checks, output the JSON and then STOP.
-
---------------------------------------------------
-
-MESSAGE HISTORY:
-
-{format_messages(messages)}
 """
     
     return llm_interaction(state, prompt, lightweight_llm=False)

@@ -97,6 +97,7 @@ class CognitiveState:
 
     # Scenario context
     scenario_info_to_extract = ScenarioInfoSchema.default()
+    scenario_extracted: Dict[str, Any] = field(default_factory=dict)
     scenarios_to_generate: List[ScenarioInfo] = field(default_factory=list)
     extracted_all_scenario: bool = False
     scenario_validation_errors: str = "" # OLD, remove

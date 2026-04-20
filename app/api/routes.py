@@ -75,21 +75,11 @@ async def run_agent_endpoint(
     else:
         state.user_input = None
 
-    # START TEMP
-    state.cognitive.active_context = ["proposal_0"]
-    state.cognitive.active_context_type = "proposal"
-    if not state.cognitive.available_entries:
-        logger.info("Loading context information")
-        available_entries = get_problems.invoke({})
-        state.cognitive.available_entries = available_entries
-    state = handle_context(state)
-    # END TEMP
-
     if integrated_mode:
         logger.info(f"Running in integrated mode with context: {context}")
         assert len(context) > 0, "Context is required in integrated mode"
 
-        #TODO: set context if needed
+        # set context if needed
         state.cognitive.previous_context = state.cognitive.active_context
         state.cognitive.active_context = context
         state.cognitive.active_context_type = "scenario"
@@ -159,9 +149,12 @@ async def save_conversation_endpoint(payload: dict = Body(...)):
         )
     
 @router.post("/agent/inject_sliders")
-async def inject_sliders_endpoint(payload: dict = Body(...)):
+async def inject_sliders_endpoint(
+    background_tasks: BackgroundTasks,
+    payload: dict = Body(...)
+):
     try:
-        logger.info(f"Recived indexes {payload}")
+        logger.info(f"Received slider indexes {payload}")
         session_id = payload.get("session_id")
         index_diffs = payload.get("values", {})
 
@@ -172,9 +165,15 @@ async def inject_sliders_endpoint(payload: dict = Body(...)):
 
         state.cognitive.scenario_validated_indexes = index_diffs
         state.sliders_data = None
+        state.user_input = "Send index change via interface"
         logger.info(f"Injected sliders for session: {index_diffs}")
 
-        return {"message": "Sliders injected successfully"}
+        # Continue workflow as if user sent a message after waiting
+        # Route through scenario_entry_router which will go to parse_scenario_confirmation
+        # since waiting_for == SCENARIO_CONFIRMATION
+        background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, "main")
+
+        return {"session_id": session_id}
 
     except Exception as e:
         logger.exception("Failed to inject sliders")
