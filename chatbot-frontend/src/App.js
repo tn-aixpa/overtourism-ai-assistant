@@ -4,7 +4,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
-const API_URL = "http://localhost:9000/agent";
+//const API_URL = "http://localhost:9000/agent";
+const API_URL = "https://9000--code-toolbox--assistenteai--flago.coder.most.atlas.fbk.eu/agent";
+
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -239,6 +241,7 @@ function SlidersPanel({ slidersData, sessionId, onSliderSubmit }) {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           session_id: sessionId,
           values: payload,
@@ -363,7 +366,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [activeContext, setActiveContext] = useState("");
-  const [language, setLanguage] = useState("Italiano");
+  const [language] = useState("Italiano");
   const [statusMessage, setStatusMessage] = useState(null);
   const [sessionId] = useState(() => generateSessionId());
   const [feedbacks, setFeedbacks] = useState({});
@@ -391,15 +394,16 @@ function App() {
   const submitFeedback = async (index, vote, comment) => {
     if (!sessionId) return;
     try {
-      await fetch(`${API_URL}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message_index: index,
-          vote: vote ?? null,
-          comment: comment ?? null,
-        }),
+      const params = new URLSearchParams({
+        session_id: sessionId,
+        message_index: String(index),
+      });
+      if (vote) params.set("vote", vote);
+      if (comment) params.set("comment", comment);
+
+      await fetch(`${API_URL}/feedback?${params.toString()}`, {
+        method: "GET",
+        credentials: "include",
       });
       saveConversation();
     } catch (err) {
@@ -452,7 +456,9 @@ function App() {
     setLoading(true);
     setStatusMessage("");
 
-    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`, {
+      withCredentials: true,
+    });
 
     eventSource.addEventListener("status", (e) => {
       setStatusMessage(e.data);
@@ -461,7 +467,9 @@ function App() {
     eventSource.addEventListener("done", async () => {
       eventSource.close();
       try {
-        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const res = await fetch(`${API_URL}/result/${sessionId}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setActiveContext(data.active_context || "-");
         setMessages([
@@ -500,7 +508,7 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     try {
-      await fetch(API_URL, { method: "POST", body: formData });
+      await fetch(API_URL, { method: "POST", body: formData, credentials: "include" });
     } catch {
       eventSource.close();
       setMessages([
@@ -523,12 +531,12 @@ function App() {
   const saveConversation = async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`${API_URL}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId }),
+      const res = await fetch(`${API_URL}/save/${sessionId}`, {
+        method: "GET",
+        credentials: "include",
       });
       const data = await res.json();
+      console.log(data.message || "Conversation saved!")
       //alert(data.message || "Conversation saved!");
     } catch {
       alert("Failed to save conversation.");
@@ -540,7 +548,9 @@ function App() {
     setLoading(true);
     setStatusMessage("");
 
-    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`, {
+      withCredentials: true,
+    });
 
     eventSource.addEventListener("status", (e) => {
       setStatusMessage(e.data);
@@ -549,7 +559,9 @@ function App() {
     eventSource.addEventListener("done", async () => {
       eventSource.close();
       try {
-        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const res = await fetch(`${API_URL}/result/${sessionId}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setActiveContext(data.active_context || "-");
         setMessages((prevMessages) => [

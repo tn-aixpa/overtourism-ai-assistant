@@ -15,9 +15,20 @@ app = FastAPI(
 )
 
 #TODO: Restrict CORS in production
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+#     allow_credentials=True,
+# )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Coder workspaces run frontend/backend on sibling subdomains (e.g. 3000--... and 9000--...).
+    # We allow those origins and enable credentials for authenticated cross-origin requests.
+    allow_origins=[],
+    allow_origin_regex=r"https://\d+--.*\.coder\.most\.atlas\.fbk\.eu",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
