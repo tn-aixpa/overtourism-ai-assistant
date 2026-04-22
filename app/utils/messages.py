@@ -10,7 +10,7 @@ class MessageCode(Enum):
 
 MSG_TEMPLATES = {
     MessageCode.GENERAL_EXIT_MESSAGE: "Let me know if you need anything else!",
-    MessageCode.SUCCESSFUL_INSTANCE_CREATION: "The {instance} was successfully created.",
+    MessageCode.SUCCESSFUL_INSTANCE_CREATION: "The {instance} was successfully created. Do you want to activate it?",
     MessageCode.CHANGED_CONTEXT: "I changed the active context to {new_context}.",
     MessageCode.INVALID_REQUEST: "I'm sorry, but I can't answer this type of request.",
     MessageCode.INVALID_CONTEXT: "The current context does not support the requested operation.",
