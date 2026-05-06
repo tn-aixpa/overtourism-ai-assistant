@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-USE_LOCAL_LLM = True
+USE_LOCAL_LLM = False
 
 LOCAL_MODEL = "mistral" #qwen2.5:14b "gpt-oss:20b"
 

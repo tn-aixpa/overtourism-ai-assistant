@@ -5,8 +5,7 @@ import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
 //const API_URL = "http://localhost:9000/agent";
-const API_URL = "https://9000--code-toolbox--assistenteai--flago.coder.most.atlas.fbk.eu/agent";
-
+const API_URL = `${window.location.origin.replace(/^https:\/\/3000--/, 'https://9000--')}/agent`;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
