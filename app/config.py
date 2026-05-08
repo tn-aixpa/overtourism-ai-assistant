@@ -30,6 +30,6 @@ Different operations are allowed depending on the active context.
 """
 
 BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else
-BACKEND_URL = "https://8000--code-toolbox--assistenteai--flago.coder.most.atlas.fbk.eu/api/v1/"
+BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
 
 VERBOSE = False
