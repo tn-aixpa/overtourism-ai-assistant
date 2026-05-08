@@ -188,55 +188,7 @@ Each action must be exactly one of:
 
 CLASSIFICATION RULES (single intent):
 
-1. LIST_AVAILABLE
-   → User asks to see/list existing problems, proposals or scenarios.
-   Signals: "show me", "list", "what problems are there", "available scenarios".
-
-2. CONTEXT_MANAGEMENT
-   → User wants to activate, switch, or remove an item from their active context.
-   Signals: "activate X", "focus on", "let's work on", "select", "open", "use problem X",
-            "remove X", "deselect", "clear context", relative refs like "the last one".
-
-3. ASSISTANT_CAPABILITIES
-   → User is greeting the assistant or asking what it can do.
-   Signals: "hi", "hello", "what can you do", "help", "how does this work".
-
-4. CREATE_NEW_PROBLEM
-   → User wants to register a new real-world problem.
-   Signals: "I have a problem", "new problem", "add a problem", "we need to address".
-   Priority: if the user mentions both a problem and scenarios, prefer CREATE_NEW_PROBLEM.
-
-5. CREATE_NEW_PROPOSAL
-   → User wants to create a new proposal.
-   Signals: "create a proposal", "new proposal", "let's define a proposal".
-
-6. CREATE_NEW_SCENARIO
-   → User wants to create, run, or modify a scenario.
-   Signals: "create a scenario", "run scenario", "new scenario", "what if we changed".
-
-7. INTERACT_CONTEXT
-   → User wants to analyse or get information about existing items on the platform.
-   Signals: "explain", "compare", "what does X show", "interpret results", "what is this about".
-
-8. INVALID
-   → Unrelated to city management / overtourism, or too vague to classify.
-   NOTE: Do NOT return INVALID for short confirmatory replies if an active workflow exists (see rule 11).
-
-MULTI-STEP RULES:
-
-9. Split on ANY sequential signal — "and", "then", "also", "after that", commas
-   implying sequence, or simply two distinct intents joined by "and" — regardless
-   of language ("e poi", "und dann", "ensuite", "y luego", "e depois", etc.).
-
-10. IMPLICIT CONTEXT ACTIVATION: if the user refers to a specific entity by name
-    or id that is NOT currently active, prepend CONTEXT_MANAGEMENT before any
-    action that operates on it.
-    Example: active context is None, user says "show me results for scenario_1"
-    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
-    Example: active context has problem_1, user says "what about scenario_1?"
-    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
-
-11. ACTIVE WORKFLOW CONFIRMATION RULE (highest priority):
+1. ACTIVE WORKFLOW CONFIRMATION RULE (highest priority):
     If an active workflow is set AND the user message is a short confirmatory or
     agreeing reply — regardless of language — return the expected intent for that
     workflow instead of INVALID.
@@ -252,6 +204,56 @@ MULTI-STEP RULES:
     split it normally and include both.
     Example: active workflow is CREATE_NEW_PROBLEM, user says "ok, and list the scenarios too"
     → ["CREATE_NEW_PROBLEM", "LIST_AVAILABLE"]
+
+CLASSIFICATION RULES (single intent):
+
+2. LIST_AVAILABLE
+   → User asks to see/list existing problems, proposals or scenarios.
+   Signals: "show me", "list", "what problems are there", "available scenarios".
+
+3. CONTEXT_MANAGEMENT
+   → User wants to activate, switch, or remove an item from their active context.
+   Signals: "activate X", "focus on", "let's work on", "select", "open", "use problem X",
+            "remove X", "deselect", "clear context", relative refs like "the last one".
+
+4. ASSISTANT_CAPABILITIES
+   → User is greeting the assistant or asking what it can do.
+   Signals: "hi", "hello", "what can you do", "help", "how does this work".
+
+5. CREATE_NEW_PROBLEM
+   → User wants to register a new real-world problem.
+   Signals: "I have a problem", "new problem", "add a problem", "we need to address".
+   Priority: if the user mentions both a problem and scenarios, prefer CREATE_NEW_PROBLEM.
+
+6. CREATE_NEW_PROPOSAL
+   → User wants to create a new proposal.
+   Signals: "create a proposal", "new proposal", "let's define a proposal".
+
+7. CREATE_NEW_SCENARIO
+   → User wants to create, run, or modify a scenario.
+   Signals: "create a scenario", "run scenario", "new scenario", "what if we changed".
+
+8. INTERACT_CONTEXT
+   → User wants to analyse or get information about existing items on the platform.
+   Signals: "explain", "compare", "what does X show", "interpret results", "what is this about".
+
+9. INVALID
+   → Unrelated to city management / overtourism, or too vague to classify.
+   NOTE: Do NOT return INVALID for short confirmatory replies if an active workflow exists (see rule 11).
+
+MULTI-STEP RULES:
+
+10. Split on ANY sequential signal — "and", "then", "also", "after that", commas
+   implying sequence, or simply two distinct intents joined by "and" — regardless
+   of language ("e poi", "und dann", "ensuite", "y luego", "e depois", etc.).
+
+11. IMPLICIT CONTEXT ACTIVATION: if the user refers to a specific entity by name
+    or id that is NOT currently active, prepend CONTEXT_MANAGEMENT before any
+    action that operates on it.
+    Example: active context is None, user says "show me results for scenario_1"
+    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
+    Example: active context has problem_1, user says "what about scenario_1?"
+    → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
 
 DECISION RULES:
 - "What can you do?" → ASSISTANT_CAPABILITIES. "What does scenario X show?" → INTERACT_CONTEXT.
