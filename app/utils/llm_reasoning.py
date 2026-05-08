@@ -5,6 +5,7 @@ import json
 from app.config import ALLOWED_ROLES
 from app.utils.state_variables import VALID_INTENTS
 from app.utils.llm import llm_interaction, format_messages
+from app.utils.common import WORKFLOW_TO_INTENT
 
 # ---------------------------------------------------------------------------
 # INTENT CLASSIFICATION

@@ -2,17 +2,10 @@ from langgraph.types import Command, interrupt
 import logging
 
 from app.agent.state import AgentState
-from app.utils.common import build_output_message
+from app.utils.common import build_output_message, WORKFLOW_TO_INTENT
 from app.utils.llm_reasoning import extract_action_plan
 
 logger = logging.getLogger(__name__)
-
-WORKFLOW_TO_INTENT = {
-    AgentState.Workflow.PROBLEM_CREATION: "CREATE_NEW_PROBLEM",
-    AgentState.Workflow.PROPOSAL_CREATION: "CREATE_NEW_PROPOSAL",
-    AgentState.Workflow.SCENARIO_CREATION: "CREATE_NEW_SCENARIO",
-    AgentState.Workflow.INTERACTION: "INTERACT_CONTEXT",
-}
 
 def _wait_instructions(state: AgentState):
     waiting_for = state.waiting_for

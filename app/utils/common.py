@@ -8,6 +8,13 @@ from app.tools.backend_tools import get_problems
 
 logger = logging.getLogger(__name__)
 
+WORKFLOW_TO_INTENT = {
+    AgentState.Workflow.PROBLEM_CREATION: "CREATE_NEW_PROBLEM",
+    AgentState.Workflow.PROPOSAL_CREATION: "CREATE_NEW_PROPOSAL",
+    AgentState.Workflow.SCENARIO_CREATION: "CREATE_NEW_SCENARIO",
+    AgentState.Workflow.INTERACTION: "INTERACT_CONTEXT",
+}
+
 
 def get_available_entries_if_missing(state: AgentState) -> str:
     if not state.cognitive.available_entries:
