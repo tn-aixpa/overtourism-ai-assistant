@@ -160,9 +160,19 @@ def extract_action_plan(state: AgentState, message: str | None = None) -> list[s
     history_block = format_messages(history) if history else "None"
     active_context = state.get_active_context_string() or "None"
 
+    # Build active workflow block for confirmatory reply handling
+    active_workflow_value = state.active_workflow.value if state.active_workflow else None
+    active_workflow_intent = WORKFLOW_TO_INTENT.get(state.active_workflow) if state.active_workflow else None
+    active_workflow_block = (
+        f"Active workflow: {active_workflow_value} (expected intent: {active_workflow_intent})"
+        if active_workflow_value and active_workflow_intent
+        else "Active workflow: None"
+    )
+
     prompt = f"""You are an intent classifier for a digital-twin assistant about city management and overtourism.
 
 Active context: {active_context}
+{active_workflow_block}
 
 Conversation so far:
 {history_block}
@@ -209,6 +219,7 @@ CLASSIFICATION RULES (single intent):
 
 8. INVALID
    → Unrelated to city management / overtourism, or too vague to classify.
+   NOTE: Do NOT return INVALID for short confirmatory replies if an active workflow exists (see rule 11).
 
 MULTI-STEP RULES:
 
@@ -224,13 +235,29 @@ MULTI-STEP RULES:
     Example: active context has problem_1, user says "what about scenario_1?"
     → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT"]
 
+11. ACTIVE WORKFLOW CONFIRMATION RULE (highest priority):
+    If an active workflow is set AND the user message is a short confirmatory or
+    agreeing reply — regardless of language — return the expected intent for that
+    workflow instead of INVALID.
+    Confirmatory signals include (non-exhaustive): "ok", "yes", "sure", "proceed",
+    "go ahead", "confirm", "correct", "fine", "agreed", "sounds good",
+    "sì", "va bene", "procedi", "confermo", "esatto",
+    "ja", "gut", "weiter", "oui", "d'accord", "да", "si".
+    Example: active workflow is CREATE_NEW_PROBLEM, user says "OK"
+    → ["CREATE_NEW_PROBLEM"]
+    Example: active workflow is CREATE_NEW_SCENARIO, user says "va bene, procedi"
+    → ["CREATE_NEW_SCENARIO"]
+    Exception: if the message ALSO contains a clearly distinct new intent,
+    split it normally and include both.
+    Example: active workflow is CREATE_NEW_PROBLEM, user says "ok, and list the scenarios too"
+    → ["CREATE_NEW_PROBLEM", "LIST_AVAILABLE"]
+
 DECISION RULES:
 - "What can you do?" → ASSISTANT_CAPABILITIES. "What does scenario X show?" → INTERACT_CONTEXT.
 - Greetings always → ASSISTANT_CAPABILITIES, never INVALID.
 - CONTEXT_MANAGEMENT = selecting an item. INTERACT_CONTEXT = analysing an item.
 - Scenario not yet existing → CREATE_NEW_SCENARIO. Already exists → INTERACT_CONTEXT.
-- Generic one-word replies ("yes", "ok") with no prior context → INVALID.
-
+- Generic one-word replies ("yes", "ok") with no active workflow → INVALID.
 
 EXAMPLES:
 "List all the available problems" → ["LIST_AVAILABLE"]
@@ -241,6 +268,10 @@ EXAMPLES:
 "Hi" → ["ASSISTANT_CAPABILITIES"]
 "Tell me a joke" → ["INVALID"]
 "Show me the results of scenario_1 and then create a new scenario" → ["CONTEXT_MANAGEMENT", "INTERACT_CONTEXT", "CREATE_NEW_SCENARIO"]
+"OK" (active workflow: CREATE_NEW_PROBLEM) → ["CREATE_NEW_PROBLEM"]
+"va bene" (active workflow: CREATE_NEW_SCENARIO) → ["CREATE_NEW_SCENARIO"]
+"ok, and list the scenarios too" (active workflow: CREATE_NEW_PROBLEM) → ["CREATE_NEW_PROBLEM", "LIST_AVAILABLE"]
+"yes" (no active workflow) → ["INVALID"]
 
 Return ONLY a JSON array of strings. No explanation, no markdown fences.
 """

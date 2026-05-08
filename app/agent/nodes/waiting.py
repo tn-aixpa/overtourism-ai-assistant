@@ -83,8 +83,16 @@ def wait_user_input_node(state: AgentState):
         return state
 
     logger.info("User input received → resuming workflow")
+    if not state.active_workflow:
+        logger.warning("active_workflow is None when resuming — falling back to intent")
+        return Command(update=state, goto=AgentState.Workflow.INTENT.value)
     expected_intent = WORKFLOW_TO_INTENT.get(state.active_workflow)
     detected_intents = extract_action_plan(state)
+    if detected_intents[0] == "INVALID":
+        # Ambiguous/confirmatory reply — stay in current workflow
+        workflow = state.active_workflow.value if state.active_workflow else AgentState.Workflow.INTENT.value
+        return Command(update=state, goto=workflow)
+
     if (
         expected_intent
         and detected_intents[0] not in ("INVALID", expected_intent)

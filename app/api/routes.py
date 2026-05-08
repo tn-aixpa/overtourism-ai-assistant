@@ -16,7 +16,7 @@ from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.agent.events import get_queue, publish_done, get_result
-from app.tools.backend_tools import get_problems
+from app.utils.common import get_available_entries_if_missing
 
 
 logger = logging.getLogger(__name__)
@@ -96,10 +96,7 @@ async def run_agent_endpoint(
         state.cognitive.previous_context = state.cognitive.active_context
         state.cognitive.active_context = context
         state.cognitive.active_context_type = "scenario"
-        if not state.cognitive.available_entries:
-            logger.info("Loading context information")
-            available_entries = get_problems.invoke({})
-            state.cognitive.available_entries = available_entries
+        state = get_available_entries_if_missing(state)
         state = handle_context(state)
 
         # ← runs in a thread pool; POST returns immediately

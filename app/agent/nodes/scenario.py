@@ -10,6 +10,7 @@ from app.utils.messages import get_message, MessageCode
 from app.tools.backend_tools import create_scenario_instance, get_sliders
 from app.utils.backend_integration_classes import ScenarioInfoSchema, ScenarioInfo, build_schema_data
 from app.config import SYSTEM_DESCRIPTION
+from app.utils.common import get_available_entries_if_missing
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,11 @@ def assert_active_proposal(state: AgentState) -> Command:
     }
 
     state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
+    state = get_available_entries_if_missing(state)
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
-        SYSTEM_DESCRIPTION
+        SYSTEM_DESCRIPTION,
+        state.cognitive.available_entries
     ]
     if state.cognitive.active_context_type == "problem":
         if state.cognitive.available_entries:

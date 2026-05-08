@@ -6,7 +6,7 @@ from app.agent.state import AgentState
 from app.utils.llm_structured_extractions import assess_what_to_list
 from app.utils.llm import parse_llm_json
 from app.utils.messages import get_message, MessageCode
-from app.tools.backend_tools import get_problems
+from app.utils.common import get_available_entries_if_missing
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +53,7 @@ def assess_list(state: AgentState) -> AgentState:
 def get_list(state: AgentState) -> AgentState:
     publish(state.session_id, "Retrieving list of relevant items based on your request and active context")
 
-    if not state.cognitive.available_entries:
-        available_entries = get_problems.invoke({})
-        state.cognitive.available_entries = available_entries
+    state = get_available_entries_if_missing(state)
 
     subject = state.cognitive.filter_list_by
     allowed_set = None  # will stay None if no filtering is needed
