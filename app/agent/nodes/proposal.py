@@ -128,6 +128,7 @@ def create_proposal(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
+    state.waiting_for = None
     state.reset_state(
         reset_listing=True,
         reset_new_problem=True,
