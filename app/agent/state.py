@@ -298,16 +298,19 @@ class AgentState:
             reset_new_scenario=False,
             reset_errors=False,
             reset_context=False,
-            reset_data=False
+            reset_data=False,
+            reset_chart=True
         ):
         self.waiting_for = None
         self.user_input = None
-        self.chart_data = None
         self.sliders_data = None
 
         # Reset general cognitive
         self.cognitive.generation_pipeline = []
         self.cognitive.selected_roles = []
+
+        if reset_chart:
+            self.chart_data = None
 
         if reset_listing:
             self.cognitive.elements_to_list = []
