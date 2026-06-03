@@ -2,17 +2,10 @@ from langgraph.types import Command, interrupt
 import logging
 
 from app.agent.state import AgentState
-from app.utils.common import build_output_message
+from app.utils.common import build_output_message, WORKFLOW_TO_INTENT
 from app.utils.llm_reasoning import extract_action_plan
 
 logger = logging.getLogger(__name__)
-
-WORKFLOW_TO_INTENT = {
-    AgentState.Workflow.PROBLEM_CREATION: "CREATE_NEW_PROBLEM",
-    AgentState.Workflow.PROPOSAL_CREATION: "CREATE_NEW_PROPOSAL",
-    AgentState.Workflow.SCENARIO_CREATION: "CREATE_NEW_SCENARIO",
-    AgentState.Workflow.INTERACTION: "INTERACT_CONTEXT",
-}
 
 def _wait_instructions(state: AgentState):
     waiting_for = state.waiting_for
@@ -83,8 +76,16 @@ def wait_user_input_node(state: AgentState):
         return state
 
     logger.info("User input received → resuming workflow")
+    if not state.active_workflow:
+        logger.warning("active_workflow is None when resuming — falling back to intent")
+        return Command(update=state, goto=AgentState.Workflow.INTENT.value)
     expected_intent = WORKFLOW_TO_INTENT.get(state.active_workflow)
     detected_intents = extract_action_plan(state)
+    if detected_intents[0] == "INVALID":
+        # Ambiguous/confirmatory reply — stay in current workflow
+        workflow = state.active_workflow.value if state.active_workflow else AgentState.Workflow.INTENT.value
+        return Command(update=state, goto=workflow)
+
     if (
         expected_intent
         and detected_intents[0] not in ("INVALID", expected_intent)

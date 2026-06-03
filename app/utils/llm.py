@@ -3,10 +3,11 @@ import re
 import json
 import logging
 from time import time, sleep
-
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import anthropic
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
+
 
 from app.agent.events import publish
 from app.agent.state import AgentState
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 # =========================
 USE_LOCAL_LLM = False
 
-LOCAL_MODEL = "qwen2.5:14b" #"gpt-oss:20b"
+LOCAL_MODEL = "mistral" #qwen2.5:14b "gpt-oss:20b"
 
 ANTHROPIC_MODELS = {
     "light": "claude-haiku-4-5",
@@ -32,6 +33,16 @@ ANTHROPIC_PRICING = {
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
     "claude-opus-4-5": {"input": 15.00, "output": 75.00},
 }
+
+
+# =========================
+# TIMEOUT
+# =========================
+EXECUTOR = ThreadPoolExecutor(max_workers=4)
+LLM_TIMEOUT = 20  # seconds
+
+def _local_call(prompt, llm_client):
+    return llm_local_interaction(prompt, llm_client)
 
 # =========================
 # CLIENT INITIALIZATION
@@ -46,7 +57,8 @@ def init_local_llm():
 
 def init_anthropic():
     return anthropic.Anthropic(
-        api_key=os.environ.get("ANTHROPIC_API_KEY")
+        api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        timeout=LLM_TIMEOUT
     )
 
 def get_llm_client():
@@ -118,7 +130,7 @@ def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: i
 # =========================
 # MAIN LLM INTERFACE
 # =========================
-def ll_local_interaction(prompt: str, llm_client: ChatOllama) -> str:
+def llm_local_interaction(prompt: str, llm_client: ChatOllama) -> str:
     model_name = LOCAL_MODEL
     response = llm_client.invoke([
         HumanMessage(content=prompt)
@@ -131,7 +143,12 @@ def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, ligh
 
         llm_client = get_llm_client()
         if USE_LOCAL_LLM:
-            result, model_name = ll_local_interaction(prompt, llm_client)
+            future = EXECUTOR.submit(_local_call, prompt, llm_client)
+            try:
+                result, model_name = future.result(timeout=LLM_TIMEOUT)
+            except FuturesTimeoutError:
+                future.cancel()
+                raise TimeoutError("Local LLM timed out after 60 seconds")
         else:
             try:
                 model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
@@ -155,7 +172,12 @@ def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, ligh
                 publish(state.session_id, "Unable to connect to Anthropic's API, switching to local LLM (answer might take longer to generate and be less accurate)", force_print=True)
                 logger.error(f"Error during Anthropic interaction: {e}, falling back to local LLM")
                 llm_client = init_local_llm()  # Re-initialize local client
-                result, model_name = ll_local_interaction(prompt, llm_client)
+                future = EXECUTOR.submit(_local_call, prompt, llm_client)
+                try:
+                    result, model_name = future.result(timeout=LLM_TIMEOUT)
+                except FuturesTimeoutError:
+                    future.cancel()
+                    raise RequestHandlingException(f"Local LLM timed out after {LLM_TIMEOUT} seconds")
 
         elapsed = time() - start
         log_time(model_name, elapsed)

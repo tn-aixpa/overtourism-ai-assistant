@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
 const API_URL = "http://localhost:9000/agent";
+//const API_URL = `${window.location.origin.replace(/^https:\/\/3000--/, 'https://9000--')}/agent`;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,72 @@ function initSlidersState(slidersData) {
   }
   return state;
 }
+// ─── Feedback ─────────────────────────────────────────────────────────────
+function FeedbackBar({ msgIndex, feedback, onVote, onComment }) {
+  const [showModal, setShowModal] = useState(false);
+  const [draft, setDraft] = useState(feedback.comment || "");
+
+  const handleSave = () => {
+    onComment(msgIndex, draft.trim());
+    setShowModal(false);
+  };
+
+  return (
+    <>
+      <div className="feedback-bar">
+        <button
+          className={`fb-btn ${feedback.vote === "up" ? "fb-active-up" : ""}`}
+          title="Good response"
+          onClick={() => onVote(msgIndex, feedback.vote === "up" ? null : "up")}
+        >
+          <ThumbUpIcon />
+        </button>
+        <button
+          className={`fb-btn ${feedback.vote === "down" ? "fb-active-down" : ""}`}
+          title="Bad response"
+          onClick={() => onVote(msgIndex, feedback.vote === "down" ? null : "down")}
+        >
+          <ThumbDownIcon />
+        </button>
+        <button
+          className={`fb-btn ${feedback.comment ? "fb-has-comment" : ""}`}
+          title="Add comment"
+          onClick={() => { setDraft(feedback.comment || ""); setShowModal(true); }}
+        >
+          <CommentIcon />
+        </button>
+        {feedback.comment && (
+          <span className="fb-comment-label">"{feedback.comment}"</span>
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fb-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
+          <div className="fb-modal">
+            <h3>Add feedback</h3>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="What could be improved? (optional)"
+              rows={4}
+              autoFocus
+            />
+            <div className="fb-modal-actions">
+              <button className="fb-btn-cancel" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="fb-btn-save" onClick={handleSave}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// SVG icon components — add these above FeedbackBar
+function ThumbUpIcon()   { return <span>👍</span>; }
+function ThumbDownIcon() { return <span>👎</span>; }
+function CommentIcon()   { return <span>💬</span>; }
+
 // ─── ChartPanel ─────────────────────────────────────────────────────────────
 
 function ChartPanel({ figure }) {
@@ -173,6 +240,7 @@ function SlidersPanel({ slidersData, sessionId, onSliderSubmit }) {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           session_id: sessionId,
           values: payload,
@@ -246,7 +314,15 @@ function SlidersPanel({ slidersData, sessionId, onSliderSubmit }) {
 
 // ─── Message ─────────────────────────────────────────────────────────────────
 
-function Message({ msg, sessionId, onSliderSubmit }) {
+function Message({
+  msg,
+  index,
+  sessionId,
+  onSliderSubmit,
+  feedback,
+  onVote,
+  onComment,
+}) {
   if (msg.role === "user") {
     return <div className="message user">{msg.content}</div>;
   }
@@ -256,6 +332,12 @@ function Message({ msg, sessionId, onSliderSubmit }) {
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
       {msg.chartData && <ChartPanel figure={msg.chartData} />}
       {msg.slidersData && <SlidersPanel slidersData={msg.slidersData} sessionId={sessionId} onSliderSubmit={onSliderSubmit} />}
+      <FeedbackBar
+        msgIndex={index}
+        feedback={feedback || {}}
+        onVote={onVote}
+        onComment={onComment}
+      />
     </div>
   );
 }
@@ -283,9 +365,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [activeContext, setActiveContext] = useState("");
-  const [language, setLanguage] = useState("Italiano");
+  const [language] = useState("Italiano");
   const [statusMessage, setStatusMessage] = useState(null);
   const [sessionId] = useState(() => generateSessionId());
+  const [feedbacks, setFeedbacks] = useState({});
 
   const textareaRef = useRef(null);
   const chatRef = useRef(null);
@@ -305,6 +388,44 @@ function App() {
     el.style.height = "auto";
     el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
   };
+
+  // Feedback
+  const submitFeedback = async (index, vote, comment) => {
+    if (!sessionId) return;
+    try {
+      const params = new URLSearchParams({
+        session_id: sessionId,
+        message_index: String(index),
+      });
+      if (vote) params.set("vote", vote);
+      if (comment) params.set("comment", comment);
+
+      await fetch(`${API_URL}/feedback?${params.toString()}`, {
+        method: "GET",
+        credentials: "include",
+      });
+      saveConversation();
+    } catch (err) {
+      console.error("Failed to submit feedback", err);
+    }
+  };
+
+  const handleVote = (index, vote) => {
+    setFeedbacks((prev) => {
+      const updated = { ...prev[index], vote };
+      submitFeedback(index, updated.vote, updated.comment);
+      return { ...prev, [index]: updated };
+    });
+  };
+
+  const handleComment = (index, comment) => {
+    setFeedbacks((prev) => {
+      const updated = { ...prev[index], comment };
+      submitFeedback(index, updated.vote, updated.comment);
+      return { ...prev, [index]: updated };
+    });
+  };
+
 
   // File handling
   const handleFileChange = (e) => {
@@ -334,7 +455,9 @@ function App() {
     setLoading(true);
     setStatusMessage("");
 
-    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`, {
+      withCredentials: true,
+    });
 
     eventSource.addEventListener("status", (e) => {
       setStatusMessage(e.data);
@@ -343,7 +466,9 @@ function App() {
     eventSource.addEventListener("done", async () => {
       eventSource.close();
       try {
-        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const res = await fetch(`${API_URL}/result/${sessionId}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setActiveContext(data.active_context || "-");
         setMessages([
@@ -363,12 +488,14 @@ function App() {
       }
       setLoading(false);
       setStatusMessage(null);
+      saveConversation();
     });
 
     eventSource.onerror = () => {
       eventSource.close();
       setLoading(false);
       setStatusMessage(null);
+      saveConversation();
     };
 
     const formData = new FormData();
@@ -380,7 +507,7 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     try {
-      await fetch(API_URL, { method: "POST", body: formData });
+      await fetch(API_URL, { method: "POST", body: formData, credentials: "include" });
     } catch {
       eventSource.close();
       setMessages([
@@ -403,13 +530,13 @@ function App() {
   const saveConversation = async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`${API_URL}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId }),
+      const res = await fetch(`${API_URL}/save/${sessionId}`, {
+        method: "GET",
+        credentials: "include",
       });
       const data = await res.json();
-      alert(data.message || "Conversation saved!");
+      console.log(data.message || "Conversation saved!")
+      //alert(data.message || "Conversation saved!");
     } catch {
       alert("Failed to save conversation.");
     }
@@ -420,7 +547,9 @@ function App() {
     setLoading(true);
     setStatusMessage("");
 
-    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`);
+    const eventSource = new EventSource(`${API_URL}/stream/${sessionId}`, {
+      withCredentials: true,
+    });
 
     eventSource.addEventListener("status", (e) => {
       setStatusMessage(e.data);
@@ -429,7 +558,9 @@ function App() {
     eventSource.addEventListener("done", async () => {
       eventSource.close();
       try {
-        const res = await fetch(`${API_URL}/result/${sessionId}`);
+        const res = await fetch(`${API_URL}/result/${sessionId}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setActiveContext(data.active_context || "-");
         setMessages((prevMessages) => [
@@ -464,14 +595,14 @@ function App() {
       <header className="header">
         <h2>Digital Twin Agent</h2>
         <div className="header-right">
-          <select
+{/*           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             className="language-select"
           >
             <option value="Italiano">Italiano</option>
             <option value="English">English</option>
-          </select>
+          </select> */}
           <span className="session">Session: {sessionId}</span>
         </div>
       </header>
@@ -479,20 +610,29 @@ function App() {
       {/* Context bar */}
       <div className="context-header">
         <span className="context">Active context: {activeContext || "-"}</span>
-        <button
+{/*         <button
           className="save-btn"
           onClick={saveConversation}
           disabled={!sessionId}
         >
           💾 Save conversation
-        </button>
+        </button> */}
       </div>
 
       {/* Chat */}
       <div className="chat-wrapper" ref={chatRef}>
         <div className="chat-container">
           {messages.map((msg, i) => (
-            <Message key={i} msg={msg} sessionId={sessionId} onSliderSubmit={handleSliderSubmit} />
+            <Message
+              key={i}
+              msg={msg}
+              index={i}
+              sessionId={sessionId}
+              onSliderSubmit={handleSliderSubmit}
+              feedback={feedbacks[i] || {}}
+              onVote={handleVote}
+              onComment={handleComment}
+            />
           ))}
           {loading && <LoadingBubble statusMessage={statusMessage} />}
         </div>

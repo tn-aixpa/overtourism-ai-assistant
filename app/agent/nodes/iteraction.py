@@ -68,7 +68,7 @@ def interact_context(state: AgentState) -> AgentState:
     logger.info(f"Selected roles: {state.cognitive.selected_roles}")
     for role in state.cognitive.selected_roles:
         answer, draw = answer_question(state, role)
-        logger.info(f"Answer for role {role}: {answer}")
+        logger.info(f"Answer for role {role} - to draw [{draw}]: {answer}")
         state.cognitive.messages_to_include.append(f"{role} answered: {answer}")
     
     # TODO: consider moving somewhere else or improving
@@ -92,7 +92,8 @@ def interact_context(state: AgentState) -> AgentState:
             reset_new_scenario=True,
             reset_errors=True,
             reset_context=False,
-            reset_data=False
+            reset_data=False,
+            reset_chart=not draw
         )
         return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
         
@@ -104,7 +105,8 @@ def interact_context(state: AgentState) -> AgentState:
         reset_new_scenario=True,
         reset_errors=True,
         reset_context=False,
-        reset_data=False
+        reset_data=False,
+        reset_chart=not draw
     )
     state.add_assistant_message(
         answer

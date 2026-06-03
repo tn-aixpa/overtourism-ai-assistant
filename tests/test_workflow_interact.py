@@ -34,7 +34,7 @@ def test_full_workflow_interact(agent):
         agent.session_id = "fakdfkl"
         result = (
             agent.start("What are the available scenarios?")
-                .reply("Plase, activate scenario model_0")
+                .reply("Plase, activate scenario scenario_base")
                 .reply("What is the most critical constraint?")
                 .run()
         )
@@ -56,7 +56,7 @@ def test_full_workflow_interact_italian(agent):
         agent.state.user_lang = "Italian"
         result = (
             agent.start("Quali sono gli scenari disponibili?")
-                .reply("Per favore, attiva lo scenario model_0")
+                .reply("Per favore, attiva lo scenario scenario_base")
                 .reply("Quale è l'indice con maggior criticità?")
                 .run()
         )
@@ -76,7 +76,7 @@ def test_full_workflow_compare(agent):
         agent.session_id = "fakdfkl"
         result = (
             agent.start("What are the available scenarios?")
-                .reply("Plase, activate model_0 and model_1")
+                .reply("Plase, activate scenario_base and scenario_allargamento_parcheggi_300")
                 .reply("What is the difference between the two?")
                 .run()
         )
@@ -95,7 +95,7 @@ def test_full_workflow_interact_italian(agent):
         agent.state.user_lang = "Italian"
         result = (
             agent.start("Quali sono gli scenari disponibili?")
-                .reply("Per favore, attiva gli scenari model_0 e model_1")
+                .reply("Per favore, attiva gli scenari scenario_base e scenario_allargamento_parcheggi_300")
                 .reply("Quali sono le principali differenze fra le due?")
                 .run()
         )

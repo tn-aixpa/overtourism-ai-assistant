@@ -29,7 +29,7 @@ Different operations are allowed depending on the active context.
 - With active scenarios you can explore results, decide to compare it another scenario.
 """
 
-BASE_SCENARIO_ID = "model_0" #TODO place it somewhere else
+BASE_SCENARIO_ID = "scenario_base" #TODO place it somewhere else
 BACKEND_URL = "http://0.0.0.0:8000/api/v1/"
 
 VERBOSE = False

@@ -16,12 +16,25 @@ from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.agent.events import get_queue, publish_done, get_result
-from app.tools.backend_tools import get_problems
+from app.utils.common import get_available_entries_if_missing
 
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _save_conversation(session_id: str):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    state = load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    state.save()
+    state.dump_to_file(f"logs/state_{state.session_id}.json")
+    return {"message": "Conversation saved successfully."}
 
 
 def _run_agent(key: str, state: AgentState, graph: str = "main"):
@@ -83,10 +96,7 @@ async def run_agent_endpoint(
         state.cognitive.previous_context = state.cognitive.active_context
         state.cognitive.active_context = context
         state.cognitive.active_context_type = "scenario"
-        if not state.cognitive.available_entries:
-            logger.info("Loading context information")
-            available_entries = get_problems.invoke({})
-            state.cognitive.available_entries = available_entries
+        state = get_available_entries_if_missing(state)
         state = handle_context(state)
 
         # ← runs in a thread pool; POST returns immediately
@@ -128,18 +138,7 @@ async def save_conversation_endpoint(payload: dict = Body(...)):
     """
     try:
         session_id = payload.get("session_id")
-        if not session_id:
-            raise HTTPException(status_code=400, detail="Session ID is required")
-
-        state = load_state(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        # Save the state
-        state.save()  # or save_state(session_id, state)
-        state.dump_to_file(f"logs/state_{state.session_id}.json")
-
-        return {"message": "Conversation saved successfully."}
+        return _save_conversation(session_id)
 
     except Exception as e:
         logger.exception("Failed to save conversation")
@@ -147,7 +146,22 @@ async def save_conversation_endpoint(payload: dict = Body(...)):
             status_code=500,
             detail=f"Failed to save conversation: {str(e)}",
         )
-    
+
+
+@router.get("/agent/save/{session_id}")
+async def save_conversation_get(session_id: str):
+    """
+    Save the current conversation state without triggering CORS preflight.
+    """
+    try:
+        return _save_conversation(session_id)
+    except Exception as e:
+        logger.exception("Failed to save conversation")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save conversation: {str(e)}",
+        )
+
 @router.post("/agent/inject_sliders")
 async def inject_sliders_endpoint(
     background_tasks: BackgroundTasks,
@@ -181,3 +195,61 @@ async def inject_sliders_endpoint(
             status_code=500,
             detail=f"Failed to inject sliders: {str(e)}",
         )
+    
+@router.post("/agent/feedback")
+async def submit_feedback(payload: dict = Body(...)):
+    session_id = payload.get("session_id")
+    message_index = payload.get("message_index")
+    vote = payload.get("vote")          # "up" | "down" | None
+    comment = payload.get("comment")    # str | None
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    state = load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = state.conversation.messages
+    if message_index is None or message_index >= len(messages):
+        raise HTTPException(status_code=400, detail="Invalid message index")
+
+    msg = messages[message_index]
+    if msg.role != "assistant":
+        raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
+
+    msg.vote = vote
+    msg.comment = comment
+
+    save_state(session_id, state)
+    return {"message": "Feedback saved."}
+
+
+@router.get("/agent/feedback")
+async def submit_feedback_get(
+    session_id: str,
+    message_index: int,
+    vote: str | None = None,
+    comment: str | None = None,
+):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+
+    state = load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = state.conversation.messages
+    if message_index is None or message_index >= len(messages):
+        raise HTTPException(status_code=400, detail="Invalid message index")
+
+    msg = messages[message_index]
+    if msg.role != "assistant":
+        raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
+
+    normalized_vote = vote if vote in {"up", "down"} else None
+    msg.vote = normalized_vote
+    msg.comment = comment
+
+    save_state(session_id, state)
+    return {"message": "Feedback saved."}

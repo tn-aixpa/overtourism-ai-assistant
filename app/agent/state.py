@@ -22,6 +22,9 @@ class ConversationMessage:
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
     generated_by: Optional[str] = None  # e.g., which LLM or tool generated this message
+    vote: Optional[str] = None        # "up" | "down" | None
+    comment: Optional[str] = None
+    # TODO: this way of storing feedback might not be ideal, we might lose track of messages if the conversation gets too long and messages get truncated. Consider storing feedback separately with message IDs.
 
 @dataclass
 class ConversationBuffer:
@@ -295,16 +298,19 @@ class AgentState:
             reset_new_scenario=False,
             reset_errors=False,
             reset_context=False,
-            reset_data=False
+            reset_data=False,
+            reset_chart=True
         ):
         self.waiting_for = None
         self.user_input = None
-        self.chart_data = None
         self.sliders_data = None
 
         # Reset general cognitive
         self.cognitive.generation_pipeline = []
         self.cognitive.selected_roles = []
+
+        if reset_chart:
+            self.chart_data = None
 
         if reset_listing:
             self.cognitive.elements_to_list = []

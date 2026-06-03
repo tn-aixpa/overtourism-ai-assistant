@@ -11,6 +11,7 @@ from app.tools.backend_tools import create_proposal_instance
 from app.tools.backend_tools_temp import get_RelatedScenario
 from app.utils.backend_integration_classes import ProposalInfoSchema, ProposalInfo, build_schema_data
 from app.config import BASE_SCENARIO_ID, SYSTEM_DESCRIPTION
+from app.utils.common import get_available_entries_if_missing
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,11 @@ def assert_active_problem(state: AgentState) -> Command:
     }
 
     state.cognitive.messages_to_include = [get_message(MessageCode.INVALID_CONTEXT)]
+    state = get_available_entries_if_missing(state)
     state.cognitive.additional_output_information = [
         f"Active contex: {state.get_active_context_string()}",
-        SYSTEM_DESCRIPTION
+        SYSTEM_DESCRIPTION,
+        state.cognitive.available_entries
     ]
     if state.cognitive.active_context_type == "":
         if state.cognitive.available_entries:
@@ -89,7 +92,7 @@ def create_proposal(state: AgentState) -> AgentState:
     problem_id = state.cognitive.active_context[0]
 
     # TODO: it would be nice to modify the call for related scenarios
-    # Currently related_scenarios=[RelatedScenario(scenario_id='model_0', scenario_name='Scenario base', scenario_description=None, index_diffs=None)]
+    # Currently related_scenarios=[RelatedScenario(scenario_id='scenario_base', scenario_name='Scenario base', scenario_description=None, index_diffs=None)]
     related_scenarios_ids = proposal.connected_scenarios if proposal.connected_scenarios is not None else []
     if not BASE_SCENARIO_ID in related_scenarios_ids:
         related_scenarios_ids.append(BASE_SCENARIO_ID)
@@ -125,6 +128,7 @@ def create_proposal(state: AgentState) -> AgentState:
 
     state.resume_nome = {}
     state.active_workflow = None
+    state.waiting_for = None
     state.reset_state(
         reset_listing=True,
         reset_new_problem=True,
