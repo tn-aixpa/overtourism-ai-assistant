@@ -145,6 +145,12 @@ def routing_after_context(state: AgentState) -> AgentState:
     logger.info("Entering routing_after_context node")
 
     if not state.resume_nome:
+        if state.cognitive.pending_actions:
+            logger.info(
+                "Skipping context-change message; pending actions: %s",
+                state.cognitive.pending_actions,
+            )
+            return Command(update=state, goto="intent", graph=Command.PARENT)
 
         context = ",".join(state.cognitive.active_context)
         state.cognitive.messages_to_include = [get_message(MessageCode.CHANGED_CONTEXT, new_context=context)]

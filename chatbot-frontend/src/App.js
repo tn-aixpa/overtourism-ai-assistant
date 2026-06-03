@@ -593,7 +593,7 @@ function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <h2>Digital Twin Agent</h2>
+        <h2>AIxPA - Digital Twin Agent</h2>
         <div className="header-right">
 {/*           <select
             value={language}
@@ -603,13 +603,13 @@ function App() {
             <option value="Italiano">Italiano</option>
             <option value="English">English</option>
           </select> */}
-          <span className="session">Session: {sessionId}</span>
+          <span className="session">Sessione: {sessionId}</span>
         </div>
       </header>
 
       {/* Context bar */}
       <div className="context-header">
-        <span className="context">Active context: {activeContext || "-"}</span>
+        <span className="context">Contesto attivo: {activeContext || "-"}</span>
 {/*         <button
           className="save-btn"
           onClick={saveConversation}
@@ -647,7 +647,8 @@ function App() {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask something..."
+              placeholder="Scrivi qui il tuo messaggio..."
+              spellCheck={false}
               rows={1}
               disabled={loading}
             />
@@ -665,7 +666,7 @@ function App() {
               style={{ display: "none" }}
             />
             <button onClick={sendMessage} disabled={loading}>
-              Send
+              Invia
             </button>
           </div>
 

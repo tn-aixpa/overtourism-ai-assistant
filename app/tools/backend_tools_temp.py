@@ -674,22 +674,23 @@ def generate_chart(chart_type: str, **kwargs) -> dict:
     Returns:
         Plotly figure JSON dict
     """
+    print(f"Chart to generate: {chart_type}")
     if chart_type == "tourists_excursionists":
         return generate_tourists_excursionists_chart(
             kwargs.get("scenario_id", "scenario_base"),
-            kwargs.get("problem_id", "parcheggi_200"),
+            kwargs.get("problem_id", "parcheggi_molveno"),
         )
     elif chart_type == "tourist_load":
         return generate_tourist_load_chart(
             kwargs.get("scenario_id", "scenario_base"),
-            kwargs.get("problem_id", "parcheggi_200"),
+            kwargs.get("problem_id", "parcheggi_molveno"),
             kwargs.get("subsystem", "default"),
         )
     elif chart_type == "comparison_bar":
         return generate_comparison_chart(
             kwargs.get("scenario_left_id", "scenario_base"),
             kwargs.get("scenario_right_id", "scenario_allargamento_parcheggi_300"),
-            kwargs.get("problem_id", "parcheggi_200"),
+            kwargs.get("problem_id", "parcheggi_molveno"),
             kwargs.get("label_left", "Scenario 1"),
             kwargs.get("label_right", "Scenario 2"),
         )
