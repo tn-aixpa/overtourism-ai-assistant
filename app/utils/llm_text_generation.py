@@ -23,6 +23,8 @@ def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
     language = state.user_lang
     additional_instructions = INSTRUCTIONS_FOR_INTEGRATED_MODE if state.integrated_mode else ""
 
+    #addional_info = "In the graph lines show constraint curves for each index (parking, beach, hotels e restaurants), so that each line delimits the capacity of the system. Each dot represents instead the amount of 'turisti' (x-axis) and 'escursionisti' (y-axis) for a given simulated day. Red dots indicates critical days, green dots non-critical days (no index capacity is exceeded), yellow dots represent uncertainy. The reason for having uncertainty is thay I don't know for real how many visitors there are on a given day and how long they are staying so how much they are impacting each index.)" if state.integrated_mode else ""
+
     prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
 
 ## Conversation History
