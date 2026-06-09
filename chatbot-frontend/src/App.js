@@ -4,8 +4,14 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
-const API_URL = "http://localhost:9000/agent";
-//const API_URL = `${window.location.origin.replace(/^https:\/\/3000--/, 'https://9000--')}/agent`;
+const local = import.meta.env.VITE_LOCAL === "true";
+
+const API_URL = local
+  ? "http://localhost:9000/agent"
+  : `${window.location.origin.replace(
+      /^https:\/\/3000--/,
+      "https://9000--"
+    )}/agent`;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -253,6 +259,9 @@ function SlidersPanel({ slidersData, sessionId, onSliderSubmit }) {
       // Notify parent to show loading and listen for results
       if (onSliderSubmit) {
         onSliderSubmit(sessionId);
+        // Note: setSubmitting will be reset by parent's loading state
+      } else {
+        setSubmitting(false);
       }
     } catch (err) {
       console.error("Error sending sliders:", err);
@@ -551,11 +560,19 @@ function App() {
       withCredentials: true,
     });
 
+    // Add a timeout in case the backend doesn't respond
+    const timeout = setTimeout(() => {
+      eventSource.close();
+      setLoading(false);
+      setStatusMessage("Request timed out. Please try again.");
+    }, 30000); // 30 second timeout
+
     eventSource.addEventListener("status", (e) => {
       setStatusMessage(e.data);
     });
 
     eventSource.addEventListener("done", async () => {
+      clearTimeout(timeout);
       eventSource.close();
       try {
         const res = await fetch(`${API_URL}/result/${sessionId}`, {
@@ -583,6 +600,7 @@ function App() {
     });
 
     eventSource.onerror = () => {
+      clearTimeout(timeout);
       eventSource.close();
       setLoading(false);
       setStatusMessage(null);

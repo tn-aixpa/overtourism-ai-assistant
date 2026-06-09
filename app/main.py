@@ -1,8 +1,10 @@
+import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 
+LOCAL = os.getenv("LOCAL", "false").lower() == "true"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,23 +17,24 @@ app = FastAPI(
 )
 
 # Local setting
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True,
-)
-#Production setting
-# app.add_middleware(
-#     CORSMiddleware,
-#     # Coder workspaces run frontend/backend on sibling subdomains (e.g. 3000--... and 9000--...).
-#     # We allow those origins and enable credentials for authenticated cross-origin requests.
-#     allow_origins=[],
-#     allow_origin_regex=r"https://\d+--.*\.coder\.most\.atlas\.fbk\.eu",
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+if LOCAL:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=True,
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        # Coder workspaces run frontend/backend on sibling subdomains (e.g. 3000--... and 9000--...).
+        # We allow those origins and enable credentials for authenticated cross-origin requests.
+        allow_origins=[],
+        allow_origin_regex=r"https://\d+--.*\.coder\.most\.atlas\.fbk\.eu",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(router)

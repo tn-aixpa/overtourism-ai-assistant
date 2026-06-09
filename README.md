@@ -33,10 +33,11 @@ To run the backend server please
 You can run the agentic system as a service with the following command
 
 ```
-uvicorn app.main:app --reload --port 9000
+LOCAL=true uvicorn app.main:app --reload --port 9000
 ```
 
 A different port can be used, just change it so that it does not conflic with overtourism, ollama or other services.
+Set LOCAL to true for testing on local machine. LOCAL=false for coder.
 
 ### Demo
 

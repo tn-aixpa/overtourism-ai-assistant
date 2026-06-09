@@ -187,9 +187,20 @@ def extract_scenario(state: AgentState) -> Command:
             )
         state.cognitive.additional_output_information = [f"Extracted so far: {state.cognitive.scenario_extracted}"]
         state.cognitive.scenarios_to_generate = []
-        if not state.cognitive.scenario_displayed_ranges or modify_indexes or not state.cognitive.scenario_validated_indexes:
+        
+        # Determine if we should show sliders and whether to reset validated indexes
+        should_show_sliders = (
+            not state.cognitive.scenario_displayed_ranges 
+            or (modify_indexes and not state.cognitive.scenario_extracted)
+        )
+        
+        if should_show_sliders:
+            # Starting fresh - reset indexes only if we're initializing sliders
             state.cognitive.scenario_validated_indexes = {}
             state.cognitive.scenario_displayed_ranges = True
+            state.sliders_data = get_sliders.invoke({})
+        elif not state.cognitive.scenario_extracted and state.cognitive.scenario_validated_indexes:
+            # We have indexes but missing title/description - show sliders again, preserving indexes
             state.sliders_data = get_sliders.invoke({})
         else:
             state.sliders_data = None
