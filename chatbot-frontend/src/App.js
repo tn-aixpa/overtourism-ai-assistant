@@ -4,14 +4,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Plot from "react-plotly.js";
 
-const local = import.meta.env.VITE_LOCAL === "true";
+//const local = import.meta.env.VITE_LOCAL === "true";
 
-const API_URL = local
-  ? "http://localhost:9000/agent"
-  : `${window.location.origin.replace(
-      /^https:\/\/3000--/,
-      "https://9000--"
-    )}/agent`;
+const API_URL =
+  `${window.location.origin.replace("3000", "9000")}/agent`;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
