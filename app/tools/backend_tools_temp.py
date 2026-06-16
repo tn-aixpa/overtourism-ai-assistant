@@ -395,6 +395,7 @@ def build_comparison_bar_chart(
 def load_plot_input(
     scenario_id: str,
     problem_id: str,
+    tenant: str = "molveno"
 ) -> Optional[dict]:
     """Load plot input data from backend for a scenario.
     
@@ -408,7 +409,7 @@ def load_plot_input(
     """
     try:
         response = requests.get(
-            f"{BACKEND_URL}scenarios/{scenario_id}",
+            f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}",
             params={"problem_id": problem_id}
         )
         response.raise_for_status()

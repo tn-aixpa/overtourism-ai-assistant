@@ -103,10 +103,10 @@ def get_tool_executor(tool_name: str) -> Callable | None:
 
 def execute_list_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_problems tool."""
-    from app.tools.backend_tools import get_problems
+    from app.tools.backend_tools import get_all_items
     
     logger.info("Executing list_problems tool")
-    result = get_problems.invoke({})
+    result = get_all_items.invoke({})
     
     # Store in state for later use
     state.cognitive.available_entries = result

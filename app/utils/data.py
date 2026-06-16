@@ -12,48 +12,43 @@ def translate_string(s):
 
 def translate_obj(obj):
     if isinstance(obj, dict):
-        return {
-            translate_string(k): translate_obj(v)
-            for k, v in obj.items()
-        }
-
+        return {translate_string(k): translate_obj(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [translate_obj(item) for item in obj]
-
     elif isinstance(obj, str):
         return translate_string(obj)
-
     else:
         return obj
 
 def parse_data(data: dict, type: str):
-    if type=="problem":
-        data.pop("proposals")
-        data.pop("editable_indexes")
-        if "groups" in data:
+    if type == "problem":
+        extras = data.pop("extras", {})
+        if "groups" in extras:
             data["groups"] = [
-                translation.get(group.lower(), group) for group in data["groups"]
+                translation.get(group.lower(), group) for group in extras["groups"]
             ]
-    elif type=="proposal":
-        data.pop("related_scenarios")
-    elif type=="scenario":
-        data.pop("editable_indexes")
-        data.pop("widgets")        
-        cleaned_data = data["data"]
-        cleaned_data.pop("points")
+        # editable_indexes lives in extras now, just drop it (fetched separately via widgets)
+
+    elif type == "proposal":
+        data.pop("related_scenario_ids", None)
+
+    elif type == "scenario":
+        extras = data.pop("extras", {})
+        cleaned_data = data.get("index_values", [])
         data["data"] = translate_obj(cleaned_data)
+        data.pop("index_values", None)
+
     return data
 
 def parse_editable_indexes(input_json):
     """
-    Parses the input JSON and return editable_indexes with their limits.
+    Parses the input JSON and returns editable_indexes with their limits.
     """
     editable_indexes_with_limits = {}
 
     for group, indexes in input_json.get("widgets", {}).items():
         for index in indexes:
             if index.get("editable", False):
-                # Use 'v' for 'loc' if 'loc' not present (for constant indexes)
                 editable_indexes_with_limits[index["index_id"]] = {
                     "loc": index.get("loc", index.get("v", 0.0)),
                     "scale": index.get("scale", 0.0),
