@@ -149,26 +149,29 @@ from app.tools.tool_config import initialize_tools
 initialize_tools()
 ```
 
-### 2. Set User ID (for access control)
+### 2. Create Agent State and Add User Input
 ```python
-state = AgentState(session_id="...", user_id="user@company.com")
+state = AgentState(session_id="session_123")
+state.add_user_message("I want to create a new problem")
 ```
 
-### 3. Configure User Roles (optional)
+### 3. Use the New Graph
+```python
+from app.agent.graph_agentic import app
+
+# Agent automatically selects tools and executes
+result = app.invoke(state)
+```
+
+### 4. Future: Configure User Roles (for access control)
+When you're ready to implement user-based restrictions, the infrastructure is ready:
+
 ```python
 from app.tools.tool_config import get_tool_configuration
 
 config = get_tool_configuration()
-config.configure_viewer_user("viewer@company.com")
-config.configure_creator_user("creator@company.com")
-```
-
-### 4. Use New Graph
-```python
-from app.agent.graph_agentic import app
-
-# Agent now selects tools automatically based on user input
-result = app.invoke(state)
+# config.configure_viewer_user("viewer@company.com")
+# config.configure_creator_user("creator@company.com")
 ```
 
 ## Key Features

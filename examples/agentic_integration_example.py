@@ -3,74 +3,53 @@ Integration example and validation for the agentic refactoring.
 
 This module shows how to:
 1. Initialize the tool system
-2. Configure users with different access levels
+2. Demonstrate available tools (all users have access)
 3. Use the new agentic graph
 4. Monitor tool selection and execution
 """
 
 from app.agent.state import AgentState
-from app.tools.tool_config import initialize_tools, get_tool_configuration, reset_tools
+from app.tools.tool_config import initialize_tools, reset_tools
 from app.tools.tool_registry import get_tool_registry
 
 def setup_tool_system():
-    """Initialize tool system with example configurations."""
+    """Initialize tool system."""
     print("Setting up tool system...")
     
     # Initialize
     initialize_tools()
-    config = get_tool_configuration()
     
     # Show registration
     registry = get_tool_registry()
     stats = registry.get_stats()
     print(f"Registered tools: {stats['total_tools']}")
     print(f"Tools by category: {stats['tools_by_category']}")
+    print("\nNote: All users currently have access to all tools.")
+    print("Access control infrastructure is ready for future implementation.")
     
-    # Configure example users
-    config.configure_viewer_user("viewer@example.com")
-    print("Configured: viewer@example.com (read-only)")
-    
-    config.configure_creator_user("creator@example.com")
-    print("Configured: creator@example.com (can create)")
-    
-    config.configure_power_user("admin@example.com")
-    print("Configured: admin@example.com (full access)")
-    
-    return config
+    return registry
 
 
 def demonstrate_tool_selection():
-    """Show how tool selection works."""
+    """Show available tools."""
     print("\n" + "="*60)
-    print("TOOL SELECTION DEMONSTRATION")
+    print("AVAILABLE TOOLS DEMONSTRATION")
     print("="*60)
     
     registry = get_tool_registry()
     
-    # Get tools for different contexts
+    # Get all enabled tools
     all_tools = registry.get_all_enabled_tools()
-    print(f"\nAll enabled tools: {list(all_tools.keys())}")
+    print(f"\nAll available tools ({len(all_tools)}):")
+    for tool_name, tool_def in sorted(all_tools.items()):
+        print(f"  - {tool_name}: {tool_def.description}")
     
-    # Get tools for viewer
-    viewer_tools = registry.get_user_allowed_tools("viewer@example.com")
-    print(f"\nViewer can access: {list(viewer_tools.keys())}")
+    # Get tools in different contexts
+    problem_context_tools = registry.get_context_tools(active_context="problem")
+    print(f"\nTools available in problem context: {list(problem_context_tools.keys())}")
     
-    # Get tools for creator
-    creator_tools = registry.get_user_allowed_tools("creator@example.com")
-    print(f"\nCreator can access: {list(creator_tools.keys())}")
-    
-    # Get tools in context
-    problem_context_tools = registry.get_context_tools(
-        user_id="creator@example.com",
-        active_context="problem"
-    )
-    print(f"\nIn problem context, creator can use: {list(problem_context_tools.keys())}")
-    
-    proposal_context_tools = registry.get_context_tools(
-        user_id="creator@example.com",
-        active_context="proposal"
-    )
-    print(f"\nIn proposal context, creator can use: {list(proposal_context_tools.keys())}")
+    proposal_context_tools = registry.get_context_tools(active_context="proposal")
+    print(f"\nTools available in proposal context: {list(proposal_context_tools.keys())}")
 
 
 def demonstrate_state_setup():
@@ -81,13 +60,11 @@ def demonstrate_state_setup():
     
     state = AgentState(
         session_id="demo_session_001",
-        user_id="creator@example.com",
         user_lang="English",
     )
     
     print(f"\nCreated state:")
     print(f"  Session ID: {state.session_id}")
-    print(f"  User ID: {state.user_id}")
     print(f"  Language: {state.user_lang}")
     
     # Add user message
@@ -127,8 +104,8 @@ def demonstrate_tool_discovery():
     problem_tools = registry.get_tools_by_category(ToolCategory.PROBLEM_MANAGEMENT)
     print(f"\nProblem management tools: {list(problem_tools.keys())}")
     
-    # Get tool descriptions for LLM
-    llm_tools = registry.get_tools_for_llm("creator@example.com", "problem")
+    # Get tool descriptions for LLM (user_id=None grants all tools)
+    llm_tools = registry.get_tools_for_llm(user_id=None, active_context="problem")
     print(f"\nTools formatted for LLM in problem context ({len(llm_tools)} tools)")
     if llm_tools:
         first_tool = llm_tools[0]['function']
@@ -136,52 +113,14 @@ def demonstrate_tool_discovery():
         print(f"           {first_tool['description']}")
     
     # Get text description
-    description = registry.get_tools_description("creator@example.com", "proposal")
+    description = registry.get_tools_description(user_id=None, active_context="proposal")
     print(f"\nTools description for prompt (in proposal context):")
     for line in description.split('\n')[:5]:  # First 5 lines
         print(f"  {line}")
 
 
-def demonstrate_access_control():
-    """Show access control patterns."""
-    print("\n" + "="*60)
-    print("ACCESS CONTROL DEMONSTRATION")
-    print("="*60)
-    
-    config = get_tool_configuration()
-    registry = get_tool_registry()
-    
-    # Restricted user
-    print("\nRestricting user to specific tools...")
-    config.configure_user_tools(
-        user_id="restricted@example.com",
-        tool_names=["list_problems", "get_context_details"]
-    )
-    
-    restricted_tools = registry.get_user_allowed_tools("restricted@example.com")
-    print(f"Restricted user tools: {list(restricted_tools.keys())}")
-    
-    # Check if a specific tool is available
-    has_create = "create_problem" in restricted_tools
-    print(f"Can create problem? {has_create}")
-    
-    # Enable/disable tools
-    print("\nDisabling 'create_problem' tool globally...")
-    registry.set_tool_enabled("create_problem", False)
-    
-    admin_tools = registry.get_user_allowed_tools("admin@example.com")
-    can_create = "create_problem" in admin_tools
-    print(f"Admin can create problem (after disable)? {can_create}")
-    
-    # Re-enable
-    registry.set_tool_enabled("create_problem", True)
-    print("Re-enabled 'create_problem' tool")
-
-
 def run_all_demonstrations():
     """Run all demonstrations."""
-    print(f'(levelname)s: %(message)s')
-    
     try:
         # Reset to clean state
         reset_tools()
@@ -191,14 +130,13 @@ def run_all_demonstrations():
         demonstrate_tool_selection()
         demonstrate_state_setup()
         demonstrate_tool_discovery()
-        demonstrate_access_control()
         
         print("\n" + "="*60)
         print("ALL DEMONSTRATIONS COMPLETED SUCCESSFULLY")
         print("="*60)
         
     except Exception as e:
-        logger.error(f"Error in demonstrations: {e}", exc_info=True)
+        print(f"Error in demonstrations: {e}")
         raise
 
 

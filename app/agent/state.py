@@ -150,7 +150,6 @@ class AgentState:
     session_id: str = ""
     user_lang: str = "English"
     integrated_mode: bool = False
-    user_id: Optional[str] = None  # For tool access control
 
     # Workflow orchestration
     class Workflow(StrEnum):

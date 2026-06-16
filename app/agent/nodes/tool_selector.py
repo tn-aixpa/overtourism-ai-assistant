@@ -33,15 +33,16 @@ def initialize_tools(state: AgentState) -> Command:
         all_tools = get_all_agent_tools()
         registry.register_tools(all_tools)
     
-    # Get tools available to this user and context
+    # Get tools available in this context
+    # Note: user_id=None grants all tools. In future, pass specific user_id to restrict.
     available_tools = registry.get_context_tools(
-        user_id=state.user_id,
+        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
     
     state.cognitive.available_tools = list(available_tools.keys())
     
-    logger.info(f"Available tools for user {state.user_id}: {state.cognitive.available_tools}")
+    logger.info(f"Available tools: {state.cognitive.available_tools}")
     
     return Command(update=state, goto="tool_selector")
 
@@ -64,8 +65,9 @@ def tool_selector_node(state: AgentState) -> Command:
     registry = get_tool_registry()
     
     # Get available tools formatted for LLM
+    # Note: user_id=None grants all tools. In future, pass specific user_id to restrict.
     tools_for_llm = registry.get_tools_for_llm(
-        user_id=state.user_id,
+        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
     
@@ -77,8 +79,9 @@ def tool_selector_node(state: AgentState) -> Command:
         return Command(update=state, goto="generate_output_message")
     
     # Prepare prompt for tool selection
+    # Note: user_id=None grants all tools. In future, pass specific user_id to restrict.
     tool_descriptions = registry.get_tools_description(
-        user_id=state.user_id,
+        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
     

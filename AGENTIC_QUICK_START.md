@@ -31,7 +31,6 @@ from app.agent.state import AgentState
 # Create state
 state = AgentState(
     session_id="session_123",
-    user_id="user@company.com",  # Important: set user_id for access control
 )
 
 # Add user input
@@ -63,7 +62,26 @@ for step in trace:
         print(f"Executed tool: {step.node}")
 ```
 
-## 5. Restrict Tools for Specific Users
+## 5. Check Available Tools
+
+```python
+from app.tools.tool_registry import get_tool_registry
+
+registry = get_tool_registry()
+
+# Get all available tools
+all_tools = registry.list_tool_names()
+print(f"Available tools: {all_tools}")
+
+# Get statistics
+stats = registry.get_stats()
+print(f"Total tools: {stats['total_tools']}")
+print(f"Tools by category: {stats['tools_by_category']}")
+```
+
+## 6. Future: Restrict Tools for Specific Users
+
+The infrastructure for restricting tools per user is in place but disabled for now. When you're ready to implement user-based restrictions (based on user roles, chatbot mode, etc.), use:
 
 ```python
 config = get_tool_configuration()
@@ -77,27 +95,9 @@ config.configure_user_tools(
         "set_active_context",
     ]
 )
-```
 
-## 6. Check Available Tools
-
-```python
-from app.tools.tool_registry import get_tool_registry
-
-registry = get_tool_registry()
-
-# Get all available tools
-all_tools = registry.list_tool_names()
-print(f"Available tools: {all_tools}")
-
-# Get tools for a specific user
-user_tools = registry.get_user_allowed_tools("user@company.com")
-print(f"User tools: {list(user_tools.keys())}")
-
-# Get statistics
-stats = registry.get_stats()
-print(f"Total tools: {stats['total_tools']}")
-print(f"Tools by category: {stats['tools_by_category']}")
+# Then pass user_id in tool selector:
+# registry.get_context_tools(user_id="readonly@company.com", ...)
 ```
 
 ## 7. Adding Custom Tools
@@ -223,17 +223,11 @@ print(f"User can access: {tools}")
 
 **Agent not selecting tools:**
 - Verify `initialize_tools()` was called
-- Check `state.user_id` is set
 - Check logs for LLM reasoning
 
 **Tool returns error:**
 - Check tool arguments match schema
 - Verify context requirements (e.g., active problem for proposals)
 - Check backend/API connectivity
-
-**Permission denied:**
-- User may not have access to that tool
-- Call `config.get_user_tools(user_id)` to check
-- Use `config.configure_user_tools()` to grant access
 
 For more details, see [AGENTIC_REFACTORING.md](./AGENTIC_REFACTORING.md)

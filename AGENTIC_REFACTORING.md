@@ -76,56 +76,61 @@ New streamlined graph:
 ### Basic Usage
 
 ```python
-from app.tools.tool_config import initialize_tools, get_tool_configuration
+from app.tools.tool_config import initialize_tools
 
-# Initialize the tool system
+# Initialize the tool system (call once during app startup)
 initialize_tools()
 
 # In your agent state/setup
-state.user_id = "user_123"
+state = AgentState(session_id="session_123")
 
 # The agent will now use tools for decision making
 # instead of hardcoded workflows
+result = app.invoke(state)
 ```
 
-### Configure User Access
+### Future: Configure User Access (Infrastructure Ready)
+
+Tool access control infrastructure is built and ready for when you need it. Currently all users have access to all tools. To implement restrictions later:
 
 ```python
 from app.tools.tool_config import get_tool_configuration
 
 config = get_tool_configuration()
 
-# Read-only viewer
-config.configure_viewer_user("viewer@company.com")
+# Read-only viewer (when implemented)
+# config.configure_viewer_user("viewer@company.com")
 
-# Creator with limited permissions
-config.configure_creator_user("creator@company.com")
+# Creator with limited permissions (when implemented)
+# config.configure_creator_user("creator@company.com")
 
-# Power user with full access
-config.configure_power_user("admin@company.com")
+# Power user with full access (when implemented)
+# config.configure_power_user("admin@company.com")
 
-# Custom permissions
-config.configure_user_tools(
-    user_id="special@company.com",
-    tool_names=[
-        "list_problems",
-        "get_context_details",
-        "extract_problem_details",
-        # ... only these tools
-    ]
-)
+# Custom permissions (when implemented)
+# config.configure_user_tools(
+#     user_id="special@company.com",
+#     tool_names=[
+#         "list_problems",
+#         "get_context_details",
+#         "extract_problem_details",
+#         # ... only these tools
+#     ]
+# )
 ```
 
 ### Get Available Tools
 
 ```python
-config = get_tool_configuration()
+from app.tools.tool_registry import get_tool_registry
 
-# All tools for a user
-tools = config.get_user_tools("user_123")
+registry = get_tool_registry()
+
+# All available tools
+tools = registry.list_tool_names()
 
 # Get registry stats
-stats = config.get_stats()
+stats = registry.get_stats()
 print(f"Total tools: {stats['total_tools']}")
 print(f"Enabled: {stats['enabled_tools']}")
 ```
@@ -207,9 +212,6 @@ from app.tools.tool_config import initialize_tools
 # Initialize tools once
 initialize_tools()
 
-# Set user for access control
-state.user_id = "user_id_here"
-
 # Agent now uses LLM-selected tools
 result = app.invoke(state)
 ```
@@ -237,9 +239,8 @@ result = app.invoke(state)
 ## Troubleshooting
 
 ### No tools available
-- Check `state.user_id` is set
-- Verify user restrictions haven't been too strict
 - Call `initialize_tools()` before using agent
+- Check if tools are registered in registry
 
 ### Tool not executing
 - Check tool is in available_tools list
