@@ -128,6 +128,14 @@ class CognitiveState:
     messages_to_include: List[str] = field(default_factory=list)
     additional_output_information: List[str] = field(default_factory=list)
 
+    # Tool execution state
+    available_tools: List[str] = field(default_factory=list)  # List of available tool names
+    selected_tool: Optional[str] = None  # Currently selected tool
+    tool_arguments: Dict[str, Any] = field(default_factory=dict)  # Arguments for the selected tool
+    tool_result: Optional[Dict[str, Any]] = None  # Result from last tool execution
+    tool_confirmation_needed: bool = False  # Whether tool result needs user confirmation
+    pending_tools: List[str] = field(default_factory=list)  # Queue of tools to execute
+
     def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
 
