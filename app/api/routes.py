@@ -40,31 +40,41 @@ def _save_conversation(session_id: str):
 def _run_agent(key: str, state: AgentState):
     """
     Runs synchronously inside a thread — never call from the event loop directly.
-
-    Both standard and integrated modes now go through the single agentic graph.
-    Routing between initialize_tools and inject_tools is handled internally.
     """
-    updated = agent_app.invoke(state)
+    try:
+        updated = agent_app.invoke(state)
 
-    state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
-    final_state = AgentState(**state_dict)
-    save_state(key, final_state)
+        state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
+        final_state = AgentState(**state_dict)
+        save_state(key, final_state)
 
-    active_context = final_state.get_active_context_string()
-    last_msg = final_state.get_last_message()
-    response_text = (
-        last_msg.content
-        if last_msg and last_msg.role == "assistant"
-        else get_error_message(ErrorCode.REQUEST_ERROR)
-    )
-    result = {
-        "response": response_text,
-        "session_id": key,
-        "active_context": active_context,
-        "chart_data": getattr(final_state, "chart_data", None),
-        "sliders_data": getattr(final_state, "sliders_data", None),
-    }
-    publish_done(key, result)
+        active_context = final_state.get_active_context_string()
+        last_msg = final_state.get_last_message()
+        response_text = (
+            last_msg.content
+            if last_msg and last_msg.role == "assistant"
+            else get_error_message(ErrorCode.REQUEST_ERROR)
+        )
+        result = {
+            "response": response_text,
+            "session_id": key,
+            "active_context": active_context,
+            "chart_data": getattr(final_state, "chart_data", None),
+            "sliders_data": getattr(final_state, "sliders_data", None),
+        }
+
+    except Exception as e:
+        logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
+        result = {
+            "response": get_error_message(ErrorCode.REQUEST_ERROR),
+            "session_id": key,
+            "active_context": None,
+            "chart_data": None,
+            "sliders_data": None,
+        }
+
+    finally:
+        publish_done(key, result)
 
 
 @router.post("/agent", status_code=202)
@@ -133,19 +143,6 @@ async def stream_events(session_id: str):
             yield f"event: status\ndata: {event}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@router.post("/agent/save")
-async def save_conversation_endpoint(payload: dict = Body(...)):
-    try:
-        session_id = payload.get("session_id")
-        return _save_conversation(session_id)
-    except Exception as e:
-        logger.exception("Failed to save conversation")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save conversation: {str(e)}",
-        )
 
 
 @router.get("/agent/save/{session_id}")
