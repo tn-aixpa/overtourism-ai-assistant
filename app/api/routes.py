@@ -11,7 +11,7 @@ import asyncio
 
 from app.schemas import AgentResponse
 from app.agent.state import AgentState
-from app.agent.graph import app as agent_app, interaction_subgraph
+from app.agent.graph_agentic import app as agent_app
 from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state
 from app.utils.error_codes import get_error_message, ErrorCode
@@ -37,14 +37,14 @@ def _save_conversation(session_id: str):
     return {"message": "Conversation saved successfully."}
 
 
-def _run_agent(key: str, state: AgentState, graph: str = "main"):
-    """Runs synchronously inside a thread — never call from the event loop directly."""
-    if graph == "main":
-        updated = agent_app.invoke(state)
-    elif graph == "interaction":
-        updated = interaction_subgraph.invoke(state)
-    else:
-        raise
+def _run_agent(key: str, state: AgentState):
+    """
+    Runs synchronously inside a thread — never call from the event loop directly.
+
+    Both standard and integrated modes now go through the single agentic graph.
+    Routing between initialize_tools and inject_tools is handled internally.
+    """
+    updated = agent_app.invoke(state)
 
     state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
     final_state = AgentState(**state_dict)
@@ -64,7 +64,7 @@ def _run_agent(key: str, state: AgentState, graph: str = "main"):
         "chart_data": getattr(final_state, "chart_data", None),
         "sliders_data": getattr(final_state, "sliders_data", None),
     }
-    publish_done(key, result)   # stores result then signals __done__
+    publish_done(key, result)
 
 
 @router.post("/agent", status_code=202)
@@ -78,7 +78,11 @@ async def run_agent_endpoint(
     context: list[str] = Form(default=[])
 ):
     key = session_id or generate_key()
-    state = load_state(key) or AgentState(session_id=key, user_lang=user_lang, integrated_mode=integrated_mode)
+    state = load_state(key) or AgentState(
+        session_id=key,
+        user_lang=user_lang,
+        integrated_mode=integrated_mode,
+    )
 
     assert message, "No message provided"
     state.add_user_message(message)
@@ -92,18 +96,17 @@ async def run_agent_endpoint(
         logger.info(f"Running in integrated mode with context: {context}")
         assert len(context) > 0, "Context is required in integrated mode"
 
-        # set context if needed
+        # Set context on state — the graph's inject_tools node will use
+        # active_context_type to filter available tools at graph entry.
+        state.integrated_mode = True
         state.cognitive.previous_context = state.cognitive.active_context
         state.cognitive.active_context = context
         state.cognitive.active_context_type = "scenario"
         state = get_available_entries_if_missing(state)
         state = handle_context(state)
 
-        # ← runs in a thread pool; POST returns immediately
-        background_tasks.add_task(asyncio.to_thread, _run_agent, key, state, "interaction")
-    else:
-        # ← runs in a thread pool; POST returns immediately
-        background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
+    # Single graph handles both modes; no graph parameter needed
+    background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
 
     return {"session_id": key}
 
@@ -131,15 +134,12 @@ async def stream_events(session_id: str):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
 @router.post("/agent/save")
 async def save_conversation_endpoint(payload: dict = Body(...)):
-    """
-    Save the current conversation state to persistent storage.
-    """
     try:
         session_id = payload.get("session_id")
         return _save_conversation(session_id)
-
     except Exception as e:
         logger.exception("Failed to save conversation")
         raise HTTPException(
@@ -150,9 +150,6 @@ async def save_conversation_endpoint(payload: dict = Body(...)):
 
 @router.get("/agent/save/{session_id}")
 async def save_conversation_get(session_id: str):
-    """
-    Save the current conversation state without triggering CORS preflight.
-    """
     try:
         return _save_conversation(session_id)
     except Exception as e:
@@ -161,6 +158,7 @@ async def save_conversation_get(session_id: str):
             status_code=500,
             detail=f"Failed to save conversation: {str(e)}",
         )
+
 
 @router.post("/agent/inject_sliders")
 async def inject_sliders_endpoint(
@@ -173,7 +171,6 @@ async def inject_sliders_endpoint(
         index_diffs = payload.get("values", {})
 
         state = load_state(session_id)
-
         if not state:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -182,10 +179,9 @@ async def inject_sliders_endpoint(
         state.user_input = "Send index change via interface"
         logger.info(f"Injected sliders for session: {index_diffs}")
 
-        # Continue workflow as if user sent a message after waiting
-        # Route through scenario_entry_router which will go to parse_scenario_confirmation
-        # since waiting_for == SCENARIO_CONFIRMATION
-        background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, "main")
+        # integrated_mode is already set on the persisted state, so the graph's
+        # resume_router will correctly route to inject_tools on next invocation
+        background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state)
 
         return {"session_id": session_id}
 
@@ -195,13 +191,14 @@ async def inject_sliders_endpoint(
             status_code=500,
             detail=f"Failed to inject sliders: {str(e)}",
         )
-    
+
+
 @router.post("/agent/feedback")
 async def submit_feedback(payload: dict = Body(...)):
     session_id = payload.get("session_id")
     message_index = payload.get("message_index")
-    vote = payload.get("vote")          # "up" | "down" | None
-    comment = payload.get("comment")    # str | None
+    vote = payload.get("vote")
+    comment = payload.get("comment")
 
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required")

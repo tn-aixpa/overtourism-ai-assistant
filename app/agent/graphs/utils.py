@@ -2,7 +2,7 @@ import logging
 from langgraph.types import Command
 
 from app.utils.common import RequestHandlingException
-from app.utils.error_codes import ErrorCode, GraphError
+from app.utils.error_codes import GraphError
 
 logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────

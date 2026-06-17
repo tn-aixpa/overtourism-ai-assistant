@@ -1,6 +1,6 @@
 import json
 
-from app.utils.llm import llm_interaction, format_messages
+from app.utils.llm import llm_interaction
 from app.agent. state import AgentState
 
 # ---------------------------------------------------------------------------
@@ -10,65 +10,6 @@ from app.agent. state import AgentState
 INSTRUCTIONS_FOR_INTEGRATED_MODE = """
 - Keep the answer as short as possible, NEVER include tables and reduce markdown as much as possible.
 """
-
-def answer_question(state: AgentState, role: str) -> tuple[str, bool]:
-    """
-    Generate answer to user question using available context data.
-    Returns a tuple of (answer, draw) where draw indicates if the user wants a visualization.
-    """
-
-    question = state.get_last_user_message().content
-    data = state.cognitive.context_data
-    messages = state.get_reasoning_context()
-    language = state.user_lang
-    additional_instructions = INSTRUCTIONS_FOR_INTEGRATED_MODE if state.integrated_mode else ""
-
-    #addional_info = "In the graph lines show constraint curves for each index (parking, beach, hotels e restaurants), so that each line delimits the capacity of the system. Each dot represents instead the amount of 'turisti' (x-axis) and 'escursionisti' (y-axis) for a given simulated day. Red dots indicates critical days, green dots non-critical days (no index capacity is exceeded), yellow dots represent uncertainy. The reason for having uncertainty is thay I don't know for real how many visitors there are on a given day and how long they are staying so how much they are impacting each index.)" if state.integrated_mode else ""
-
-    prompt = f"""You are a {role}. Your task is to answer the user's question using only the provided context data.
-
-## Conversation History
-{format_messages(messages)}
-
-## Context Data
-{data}
-
-## User Question
-{question}
-
-## Instructions
-- Base your answer **exclusively** on the context data above.
-- You may use conversation history only to clarify what the user is asking — never as a source of facts.
-- If the context data does not contain enough information to answer, respond with a clear statement such as: "I don't have enough information to answer this question."
-- Do not reveal internal system details: agent names, node names, workflow states, field names, or implementation specifics.
-- Be concise and directly address the question.
-{additional_instructions}
-- Respond in: **{language}**
-
-## Output Format
-Respond in the following XML format and nothing else:
-
-<response>
-    <answer>Your answer here</answer>
-    <draw>true or false</draw>
-</response>
-
-Set <draw> to true if the user is explicitly asking for a visual representation (e.g. "show me", "plot", "chart", "visualize", "graph", "diagram"). Otherwise set it to false.
-"""
-
-    raw = llm_interaction(state, prompt, lightweight_llm=False)
-
-    import re
-    answer_match = re.search(r"<answer>(.*?)</answer>", raw, re.DOTALL)
-    answer = answer_match.group(1).strip() if answer_match else raw.strip()
-    
-    if state.integrated_mode:
-        draw = False
-    else:
-        draw_match = re.search(r"<draw>(.*?)</draw>", raw, re.DOTALL)
-        draw = draw_match.group(1).strip().lower() == "true" if draw_match else False
-
-    return answer, draw
 
 # ---------------------------------------------------------------------------
 # ANSWER GENERATION

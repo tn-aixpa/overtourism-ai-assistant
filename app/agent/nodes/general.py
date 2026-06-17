@@ -1,14 +1,9 @@
-from dataclasses import dataclass
-from typing import Optional
 import logging
 from langgraph.types import Command
 from langgraph.graph import END
 
 from app.agent.state import AgentState
-from app.utils.error_codes import get_error_message, ErrorCode
-from app.utils.messages import get_message, MessageCode
 from app.utils.common import build_output_message
-from app.utils.common import parse_confirmation_message
 
 logger = logging.getLogger(__name__)
 
@@ -51,104 +46,55 @@ def error_recovery_node(state: AgentState) -> Command:
 
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
+
+    # If there's a tool result and no messages prepared yet, build them from the result
+    if state.cognitive.tool_result and not state.cognitive.messages_to_include:
+        state.cognitive.messages_to_include = _build_messages_from_tool_result(
+            state.cognitive.selected_tool,
+            state.cognitive.tool_result,
+        )
+
     state = build_output_message(state)
 
-    if state.cognitive.pending_actions and not state.waiting_for:
-        return Command(update=state, goto="intent")
-    
     state.cognitive.messages_to_include = []
     state.cognitive.additional_output_information = []
-    
+    state.cognitive.tool_result = None
+
     return Command(update=state, goto=END)
 
-# ---------------------------------------------------------------------------
-# CONFIRMATION PARSING
-# ---------------------------------------------------------------------------
 
-@dataclass
-class ConfirmationConfig:
-    suffix: str
-    workflow: AgentState.Workflow
-    waiting_for: AgentState.WaitingFor
-    confirm_goto: str
-    confirm_graph: Optional[str]   # None means stay in current graph
-    edit_goto: str
-    edit_graph: Optional[str]
+def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[str]:
+    """Translate a tool result into messages for the output generator."""
 
+    if not tool_result.get("success", True):
+        error = tool_result.get("error", "An unknown error occurred.")
+        return [f"The operation failed: {error}"]
 
-CONFIRMATION_CONFIGS = {
-    "PROBLEM": ConfirmationConfig(
-        suffix="_PROBLEM",
-        workflow=AgentState.Workflow.PROBLEM_CREATION,
-        waiting_for=AgentState.WaitingFor.PROBLEM_CONFIRMATION,
-        confirm_goto="create_problem",
-        confirm_graph=None,
-        edit_goto="extract_problem",
-        edit_graph=Command.PARENT,
-    ),
-    "PROPOSAL": ConfirmationConfig(
-        suffix="_PROPOSAL",
-        workflow=AgentState.Workflow.PROPOSAL_CREATION,
-        waiting_for=AgentState.WaitingFor.PROPOSAL_CONFIRMATION,
-        confirm_goto="create_proposal",
-        confirm_graph=None,
-        edit_goto="extract_proposal",
-        edit_graph=None,
-    ),
-    "SCENARIO": ConfirmationConfig(
-        suffix="_SCENARIO",
-        workflow=AgentState.Workflow.SCENARIO_CREATION,
-        waiting_for=AgentState.WaitingFor.SCENARIO_CONFIRMATION,
-        confirm_goto="create_scenario",
-        confirm_graph=None,
-        edit_goto="extract_scenario",
-        edit_graph=None,
-    ),
-}
+    # Unwrap the inner output dict
+    output = tool_result.get("output", tool_result)
 
+    match tool_name:
 
-def parse_confirmation(state: AgentState, context: str) -> Command:
-    """
-    Unified confirmation parser.
-    context: one of "PROBLEM", "PROPOSAL", "SCENARIO"
-    """
-    cfg = CONFIRMATION_CONFIGS[context]
-    logger.info(f"Entering parse_confirmation [{context}]")
+        case "get_system_capabilities":
+            return [output.get("system_description", "System description unavailable.")]
 
-    state.cognitive.next_action = parse_confirmation_message(state) + cfg.suffix
-    logger.info(f"Parsed user confirmation: {state.cognitive.next_action}")
-    state.add_trace("node_execution", node="parse_confirmation",
-                    data={"next_action": state.cognitive.next_action, "context": context})
+        case "list_problems":
+            return [f"Here are the available items: {output}"]
 
-    # WAIT — needs more input before deciding
-    if state.cognitive.next_action == f"WAIT_CONFIRMATION{cfg.suffix}":
-        state.active_workflow = cfg.workflow
-        state.waiting_for = cfg.waiting_for
-        state.user_input = None
-        return Command(update=state, goto="WAIT_USER_INPUT", graph=Command.PARENT)
+        case "set_active_context":
+            return [output.get("message", "Context updated successfully.")]
 
-    # CONFIRM — proceed to creation/execution
-    if state.cognitive.next_action == f"CONFIRM{cfg.suffix}":
-        state.waiting_for = None
-        state.user_input = None
-        kwargs = {"goto": cfg.confirm_goto}
-        if cfg.confirm_graph:
-            kwargs["graph"] = cfg.confirm_graph
-        return Command(update=state, **kwargs)
+        case "get_context_details":
+            return [f"Here are the requested details: {output}"]
 
-    # CANCEL — exit the workflow entirely
-    if state.cognitive.next_action in (f"CANCEL{cfg.suffix}", "CANCEL_PROPOSAL"):
-        state.waiting_for = None
-        state.user_input = None
-        state.active_workflow = None
-        state.cognitive.messages_to_include = [get_message(MessageCode.GENERAL_EXIT_MESSAGE)]
-        state.cognitive.additional_output_information = []
-        return Command(update=state, goto="generate_output_message", graph=Command.PARENT)
+        case "extract_problem_details" | "extract_proposal_details" | "extract_scenario_details":
+            return [output.get("error", "Extraction completed.")]
 
-    # EDIT (fallthrough)
-    state.waiting_for = None
-    state.user_input = None
-    kwargs = {"goto": cfg.edit_goto}
-    if cfg.edit_graph:
-        kwargs["graph"] = cfg.edit_graph
-    return Command(update=state, **kwargs)
+        case "create_problem" | "create_proposal" | "create_scenario":
+            return [f"Created successfully: {output}"]
+
+        case "interact_with_context":
+            return [output.get("message", str(output))]
+
+        case _:
+            return [str(output)]

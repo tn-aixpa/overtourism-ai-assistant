@@ -119,19 +119,3 @@ class ToolDefinition:
             "tags": self.tags,
         }
 
-
-@dataclass
-class ToolExecutionResult:
-    """Result of tool execution."""
-    success: bool
-    output: Any
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "success": self.success,
-            "output": self.output,
-            "error": self.error,
-            "metadata": self.metadata,
-        }

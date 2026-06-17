@@ -5,7 +5,7 @@ Manages available tools and provides context-aware tool filtering.
 Allows restricting tools based on user roles, subscription levels, or other contexts.
 """
 
-from typing import Dict, List, Optional, Set, Callable, Any
+from typing import Dict, List, Optional, Set,  Any
 import logging
 
 from app.tools.tool_schema import ToolDefinition, ToolCategory

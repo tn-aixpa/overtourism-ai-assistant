@@ -4,14 +4,13 @@ Tool definitions for the agentic system.
 Converts existing workflows into reusable, decision-based tools that the agent can invoke.
 """
 
-from typing import List, Optional, Any, Dict
+from typing import List
 import logging
 
 from app.tools.tool_schema import (
     ToolDefinition, 
     ToolParameter, 
     ToolCategory,
-    ToolExecutionResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,6 +19,24 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # TOOL DEFINITIONS
 # =============================================================================
+
+def create_get_system_capabilities_tool() -> ToolDefinition:
+    """Tool to retrieve system description and capabilities."""
+    return ToolDefinition(
+        name="get_system_capabilities",
+        description="Retrieve a description of the system and its capabilities",
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Returns a description of the system, its core concepts (problems, proposals, scenarios), "
+            "allowed operations per context level, and which tools are available in each context. "
+            "Call this at startup or whenever clarification about system capabilities is needed."
+        ),
+        parameters=[],
+        output_description="System description, context rules, and available tools per context",
+        tags=["data", "read-only", "system", "navigation"],
+        requires_context=None,
+        requires_confirmation=False,
+    )
 
 def create_list_problems_tool() -> ToolDefinition:
     """Tool to list all available problems."""
@@ -370,6 +387,9 @@ def create_interact_with_context_tool() -> ToolDefinition:
 def get_all_agent_tools() -> List[ToolDefinition]:
     """Get all available agent tools."""
     return [
+        # System
+        create_get_system_capabilities_tool(),
+
         # Data retrieval
         create_list_problems_tool(),
         create_get_context_tool(),

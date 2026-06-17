@@ -1,11 +1,8 @@
 from enum import Enum
 from typing import Optional
 
-# consider using gettext for i18n support
-
 class ErrorCode(Enum):
     REQUEST_ERROR = "E001"
-
 
 class GraphError(Exception):
     def __init__(self, details: Optional[str] = None):

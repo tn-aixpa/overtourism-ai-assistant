@@ -9,46 +9,48 @@ This module shows how to:
 """
 
 from app.agent.state import AgentState
-from app.tools.tool_config import initialize_tools, reset_tools
 from app.tools.tool_registry import get_tool_registry
+from app.tools.agent_tools import get_all_agent_tools
+
 
 def setup_tool_system():
-    """Initialize tool system."""
+    """Initialize and register the tool system."""
     print("Setting up tool system...")
-    
-    # Initialize
-    initialize_tools()
-    
-    # Show registration
+
     registry = get_tool_registry()
+
+    # Register tools before inspecting stats
+    if not registry.list_tool_names():
+        all_tools = get_all_agent_tools()
+        registry.register_tools(all_tools)
+
     stats = registry.get_stats()
     print(f"Registered tools: {stats['total_tools']}")
+    print(f"Enabled tools: {stats['enabled_tools']}")
     print(f"Tools by category: {stats['tools_by_category']}")
-    print("\nNote: All users currently have access to all tools.")
-    print("Access control infrastructure is ready for future implementation.")
-    
+
     return registry
 
 
 def demonstrate_tool_selection():
-    """Show available tools."""
+    """Show available tools across different contexts."""
     print("\n" + "="*60)
     print("AVAILABLE TOOLS DEMONSTRATION")
     print("="*60)
-    
+
     registry = get_tool_registry()
-    
-    # Get all enabled tools
-    all_tools = registry.get_all_enabled_tools()
+
+    # Get all enabled tools (user_id=None grants all tools)
+    all_tools = registry.get_user_allowed_tools(user_id=None)
     print(f"\nAll available tools ({len(all_tools)}):")
     for tool_name, tool_def in sorted(all_tools.items()):
         print(f"  - {tool_name}: {tool_def.description}")
-    
-    # Get tools in different contexts
-    problem_context_tools = registry.get_context_tools(active_context="problem")
+
+    # Get tools filtered by context (user_id=None grants all tools)
+    problem_context_tools = registry.get_context_tools(user_id=None, active_context="problem")
     print(f"\nTools available in problem context: {list(problem_context_tools.keys())}")
-    
-    proposal_context_tools = registry.get_context_tools(active_context="proposal")
+
+    proposal_context_tools = registry.get_context_tools(user_id=None, active_context="proposal")
     print(f"\nTools available in proposal context: {list(proposal_context_tools.keys())}")
 
 
@@ -57,26 +59,24 @@ def demonstrate_state_setup():
     print("\n" + "="*60)
     print("STATE SETUP DEMONSTRATION")
     print("="*60)
-    
+
     state = AgentState(
         session_id="demo_session_001",
         user_lang="English",
     )
-    
+
     print(f"\nCreated state:")
     print(f"  Session ID: {state.session_id}")
     print(f"  Language: {state.user_lang}")
-    
-    # Add user message
+
     state.add_user_message("I want to create a new problem about traffic congestion")
     print(f"\nAdded user message: {state.get_last_user_message().content}")
-    
-    # Check tool state fields
+
     print(f"\nTool execution state:")
     print(f"  Available tools: {state.cognitive.available_tools}")
     print(f"  Selected tool: {state.cognitive.selected_tool}")
     print(f"  Tool confirmation needed: {state.cognitive.tool_confirmation_needed}")
-    
+
     return state
 
 
@@ -85,9 +85,9 @@ def demonstrate_tool_discovery():
     print("\n" + "="*60)
     print("TOOL DISCOVERY DEMONSTRATION")
     print("="*60)
-    
+
     registry = get_tool_registry()
-    
+
     # Get a specific tool
     tool = registry.get_tool("list_problems")
     print(f"\nTool: {tool.name}")
@@ -97,13 +97,13 @@ def demonstrate_tool_discovery():
     print(f"  Requires confirmation: {tool.requires_confirmation}")
     print(f"  Version: {tool.version}")
     print(f"  Tags: {tool.tags}")
-    
+
     # Get tools by category
     from app.tools.tool_schema import ToolCategory
-    
+
     problem_tools = registry.get_tools_by_category(ToolCategory.PROBLEM_MANAGEMENT)
     print(f"\nProblem management tools: {list(problem_tools.keys())}")
-    
+
     # Get tool descriptions for LLM (user_id=None grants all tools)
     llm_tools = registry.get_tools_for_llm(user_id=None, active_context="problem")
     print(f"\nTools formatted for LLM in problem context ({len(llm_tools)} tools)")
@@ -111,30 +111,26 @@ def demonstrate_tool_discovery():
         first_tool = llm_tools[0]['function']
         print(f"  Example: {first_tool['name']}")
         print(f"           {first_tool['description']}")
-    
-    # Get text description
+
+    # Get text description for prompt
     description = registry.get_tools_description(user_id=None, active_context="proposal")
     print(f"\nTools description for prompt (in proposal context):")
-    for line in description.split('\n')[:5]:  # First 5 lines
+    for line in description.split('\n')[:5]:
         print(f"  {line}")
 
 
 def run_all_demonstrations():
     """Run all demonstrations."""
     try:
-        # Reset to clean state
-        reset_tools()
-        
-        # Run demos
         setup_tool_system()
         demonstrate_tool_selection()
         demonstrate_state_setup()
         demonstrate_tool_discovery()
-        
+
         print("\n" + "="*60)
         print("ALL DEMONSTRATIONS COMPLETED SUCCESSFULLY")
         print("="*60)
-        
+
     except Exception as e:
         print(f"Error in demonstrations: {e}")
         raise

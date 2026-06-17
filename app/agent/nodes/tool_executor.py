@@ -71,6 +71,9 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     """
     # Map tool names to executor functions
     executors: Dict[str, Callable] = {
+        # System
+        "get_system_capabilities": execute_get_system_capabilities,
+        
         # Data retrieval
         "list_problems": execute_list_problems,
         "get_context_details": execute_get_context_details,
@@ -100,6 +103,20 @@ def get_tool_executor(tool_name: str) -> Callable | None:
 # =============================================================================
 # TOOL IMPLEMENTATIONS
 # =============================================================================
+
+def execute_get_system_capabilities(
+    state: AgentState,
+    **kwargs
+) -> Dict[str, Any]:
+    """Execute get_system_capabilities tool."""
+    from app.config import SYSTEM_DESCRIPTION
+    
+    logger.info("Executing get_system_capabilities tool")
+    
+    return {
+        "success": True,
+        "system_description": SYSTEM_DESCRIPTION,
+    }
 
 def execute_list_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_problems tool."""
