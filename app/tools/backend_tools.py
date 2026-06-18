@@ -8,7 +8,8 @@ from app.config import BACKEND_URL #, BASE_SCENARIO_ID
 
 # logger = logging.getLogger(__name__)
 
-def _get_all_problems(tenant="molveno"):
+@tool
+def get_all_problems(tenant="molveno"):
     """Fetch all problems from the API."""
     url = f"{BACKEND_URL}{tenant}/problems"
     headers = {"accept": "application/json"}
@@ -16,8 +17,8 @@ def _get_all_problems(tenant="molveno"):
     response.raise_for_status()
     return response.json()
 
-
-def _get_all_proposals(tenant="molveno"):
+@tool
+def get_all_proposals(tenant="molveno"):
     """Fetch all proposals from the API."""
     url = f"{BACKEND_URL}{tenant}/proposals"
     headers = {"accept": "application/json"}
@@ -25,77 +26,14 @@ def _get_all_proposals(tenant="molveno"):
     response.raise_for_status()
     return response.json()
 
-
-def _get_all_scenarios(tenant="molveno"):
+@tool
+def get_all_scenarios(tenant="molveno"):
     """Fetch all scenarios from the API."""
     url = f"{BACKEND_URL}{tenant}/scenarios"
     headers = {"accept": "application/json"}
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.json()
-
-
-# Expose as tools
-get_all_problems = tool(_get_all_problems)
-get_all_proposals = tool(_get_all_proposals)
-get_all_scenarios = tool(_get_all_scenarios)
-
-
-@tool
-def get_all_items(tenant="molveno"):
-    """Fetch and aggregate problems, proposals, and scenarios from the API."""
-    problems = _get_all_problems(tenant)
-    proposals = _get_all_proposals(tenant)
-    scenarios = _get_all_scenarios(tenant)
-
-    ids_dict = {
-        "problems": set(),
-        "proposals": set(),
-        "scenarios": set()
-    }
-
-    connections_dict = {
-        "problem_to_proposals": {},
-        "proposal_to_scenarios": {}
-    }
-
-    names_dict = {
-        "problems": {},
-        "proposals": {},
-        "scenarios": {}
-    }
-
-    for problem in problems:
-        pid = problem["problem_id"]
-        ids_dict["problems"].add(pid)
-        names_dict["problems"][pid] = problem["name"]
-
-    # Build proposal -> scenarios connections using related_scenario_ids
-    problem_to_proposals = {}
-    for proposal in proposals:
-        prop_id = proposal["proposal_id"]
-        pid = proposal["problem_id"]
-        ids_dict["proposals"].add(prop_id)
-        names_dict["proposals"][prop_id] = proposal["name"]
-
-        problem_to_proposals.setdefault(pid, []).append(prop_id)
-        connections_dict["proposal_to_scenarios"][prop_id] = proposal.get("related_scenario_ids", [])
-
-    connections_dict["problem_to_proposals"] = problem_to_proposals
-
-    for scenario in scenarios:
-        scen_id = scenario["scenario_id"]
-        ids_dict["scenarios"].add(scen_id)
-        names_dict["scenarios"][scen_id] = scenario["name"]
-
-    all_ids = ids_dict["problems"] | ids_dict["proposals"] | ids_dict["scenarios"]
-
-    return {
-        "all_ids": all_ids,
-        "ids_dict": ids_dict,
-        "connections_dict": connections_dict,
-        "names_dict": names_dict
-    }
 
 
 @tool

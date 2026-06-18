@@ -23,7 +23,7 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 
 # Typical workflows
 
-1. **Explore**: call list_available_items → set_active_context → interact_with_context
+1. **Explore**: call list_available_scenarios → set_active_context → interact_with_context
 2. **Create a proposal**: set a problem context → extract_proposal_details → confirm → create_proposal
 3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
 

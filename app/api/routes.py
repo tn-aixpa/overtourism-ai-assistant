@@ -16,8 +16,6 @@ from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state, _get_lock
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.agent.events import get_queue, publish_done, get_result
-from app.utils.common import get_available_entries_if_missing
-
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +111,7 @@ async def run_agent_endpoint(
             state.cognitive.previous_context = state.cognitive.active_context
             state.cognitive.active_context = context
             state.cognitive.active_context_type = "scenario"
-            state = get_available_entries_if_missing(state)
+            # TODO: limit available tools
             state = handle_context(state)
         
         save_state(state)

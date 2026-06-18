@@ -16,10 +16,11 @@ def handle_context(state: AgentState) -> AgentState:
         or len(state.cognitive.editable_indexes) == 0
     )
 
+    # TODO: fix or remove
     extracted_data = get_data_from_context.invoke({
         "context_type": state.cognitive.active_context_type,
         "context": list(state.cognitive.active_context),
-        "relations": state.cognitive.available_entries["connections_dict"],
+        "relations": {},
         "extract_editable": extract_editable
     })
     retrieved = extracted_data["retrieved"]

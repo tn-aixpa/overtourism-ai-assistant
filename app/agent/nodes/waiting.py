@@ -57,9 +57,6 @@ def wait_user_input_node(state: AgentState):
     - If user confirms: route to tool_executor to run the pending create_* tool.
     - If user cancels: clear pending tool and route to generate_output_message.
     - Otherwise: route back to initialize_tools to re-interpret the new input.
-
-    NOTE: build_output_message is intentionally NOT called here. generate_output_message_node
-    is the single place that adds assistant messages, avoiding double conversation updates.
     """
     logger.info(f"Entered WAIT_USER_INPUT node. Pending tool: {state.cognitive.selected_tool}")
 

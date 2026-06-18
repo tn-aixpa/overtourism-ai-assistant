@@ -3,9 +3,9 @@ from langgraph.types import Command
 from langgraph.graph import END
 
 from app.agent.state import AgentState
-from app.utils.common import build_output_message
 from app.utils.common import RequestHandlingException
 from app.utils.error_codes import GraphError
+from app.utils.llm_text_generation import generate_answer
 
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,16 @@ def generate_output_message_node(state: AgentState) -> Command:
             state.cognitive.tool_result,
         )
 
-    state = build_output_message(state)
+    try:
+        output_message = generate_answer(state)
+    except Exception as e:
+        logger.error(f"Error {e}")
+        output_message = "System error"
+    state.add_assistant_message(
+        output_message
+    )
+
+    logger.info(f"Output message: {output_message}")
 
     state.cognitive.messages_to_include = []
     state.cognitive.additional_output_information = []
@@ -118,7 +127,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
-        case "list_available_items":
+        case "list_available_problems" | "list_available_proposals" | "list_available_scenarios" :
             return [f"Here are the available items: {output}"]
 
         case "set_active_context":

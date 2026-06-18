@@ -97,7 +97,6 @@ class CognitiveState:
     scenario_validated_indexes: Dict[str, Any] = field(default_factory=dict)
 
     # Data layer
-    available_entries: Dict[str, Any] = field(default_factory=dict) #{"all_ids": ..., "ids_dict": ..., "connections_dict": ..., "names_dict": ...}
     context_data: Dict[str, Any] = field(default_factory=dict)
     editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
@@ -317,7 +316,6 @@ class AgentState:
             self.cognitive.scenario_validation_errors = ""
 
         if reset_data:
-            self.cognitive.available_entries = {}
             self.cognitive.context_data = {}
             self.cognitive.editable_indexes = {}
 

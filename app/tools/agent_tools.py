@@ -38,15 +38,47 @@ def create_get_system_capabilities_tool() -> ToolDefinition:
         requires_confirmation=False,
     )
 
-def create_list_available_items_tool() -> ToolDefinition:
+
+def create_list_available_problems_tool() -> ToolDefinition:
     """Tool to list all available problems."""
     return ToolDefinition(
-        name="list_available_items",
-        description="List all available problems, proposals and scenarios from the backend",
+        name="list_available_problems",
+        description="List all available problems from the backend",
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
-            "Fetches and displays all available problems, proposals, and scenarios. "
-            "Shows relationships between problems and their proposals, and proposals with their scenarios."
+            "Fetches and displays all available problems. "
+        ),
+        parameters=[],
+        output_description="Dictionary containing all IDs, names, and relationships",
+        tags=["data", "read-only", "navigation"],
+        requires_context=None,
+        requires_confirmation=False,
+    )
+
+def create_list_available_proposals_tool() -> ToolDefinition:
+    """Tool to list all available proposals."""
+    return ToolDefinition(
+        name="list_available_proposals",
+        description="List all available proposals from the backend",
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches and displays all available proposals. "
+        ),
+        parameters=[],
+        output_description="Dictionary containing all IDs, names, and relationships",
+        tags=["data", "read-only", "navigation"],
+        requires_context=None,
+        requires_confirmation=False,
+    )
+
+def create_list_available_scenarios_tool() -> ToolDefinition:
+    """Tool to list all available scenarios."""
+    return ToolDefinition(
+        name="list_available_scenarios",
+        description="List all available scenarios from the backend",
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches and displays all scenarios. "
         ),
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
@@ -379,6 +411,28 @@ def create_interact_with_context_tool() -> ToolDefinition:
         requires_confirmation=False,
     )
 
+def sample_not_implemented_tool(
+    name: str,
+    description: str,
+    long_description: str,
+    tags: list[str] | None = None,
+) -> ToolDefinition:
+    """Placeholder for functionality that is planned but not yet implemented."""
+    return ToolDefinition(
+        name=name,
+        description=description,
+        category=ToolCategory.SYSTEM,
+        long_description=(
+            f"{long_description} "
+            "This functionality is planned but is not currently available."
+        ),
+        parameters=[],
+        output_description="Returns a message indicating the feature is not yet implemented",
+        tags=(tags or []) + ["placeholder", "not-implemented"],
+        requires_context=None,
+        requires_confirmation=False,
+    )
+
 
 # =============================================================================
 # TOOL COLLECTION
@@ -391,7 +445,10 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_system_capabilities_tool(),
 
         # Data retrieval
-        create_list_available_items_tool(),
+        create_list_available_problems_tool(),
+        create_list_available_proposals_tool(),
+        create_list_available_scenarios_tool(),
+
         create_get_context_tool(),
         
         # Context management

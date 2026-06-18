@@ -81,7 +81,7 @@ def demonstrate_tool_discovery():
     registry = get_tool_registry()
 
     # Get a specific tool
-    tool = registry.get_tool("list_available_items")
+    tool = registry.get_tool("list_available_problems")
     print(f"\nTool: {tool.name}")
     print(f"  Description: {tool.description}")
     print(f"  Category: {tool.category.value}")

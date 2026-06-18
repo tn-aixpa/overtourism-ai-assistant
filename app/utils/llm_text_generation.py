@@ -63,6 +63,7 @@ The following messages represent the core findings of the answering process. The
 - Never say things like "I haven't found messages from agests to answer to your question" even if there are no agent messages.
 - Write your response in the following language: **{language}**
 - Be concise, accurate, and directly address the user's question.
+- Never include system informations like ids, creation time or similar unless specifically requested by the user
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, title, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar — just the answer itself.
 {additional_instructions}
 
