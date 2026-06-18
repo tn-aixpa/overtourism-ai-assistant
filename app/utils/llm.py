@@ -199,10 +199,10 @@ def format_messages(messages):
         f"{m['role'].upper()}: {m['content']}" for m in messages
     )
 
-# def parse_llm_json(raw: str):
-#     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
-#     # Fix Python literals that are invalid JSON
-#     cleaned = re.sub(r'\bNone\b', 'null', cleaned)
-#     cleaned = re.sub(r'\bTrue\b', 'true', cleaned)
-#     cleaned = re.sub(r'\bFalse\b', 'false', cleaned)
-#     return json.loads(cleaned)
+def parse_llm_json(raw: str):
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    # Fix Python literals that are invalid JSON
+    cleaned = re.sub(r'\bNone\b', 'null', cleaned)
+    cleaned = re.sub(r'\bTrue\b', 'true', cleaned)
+    cleaned = re.sub(r'\bFalse\b', 'false', cleaned)
+    return json.loads(cleaned)

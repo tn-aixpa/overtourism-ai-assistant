@@ -20,12 +20,19 @@ logger = logging.getLogger(__name__)
 def initialize_tools(state: AgentState) -> Command:
     """
     Initialize available tools based on user context and access control.
-    
-    This node runs early to populate available tools that the agent can choose from.
+
+    This node is the graph entry point for standard mode. If the session is
+    waiting for user input (e.g. a confirmation), route directly to
+    WAIT_USER_INPUT instead of re-running tool selection.
     """
     logger.info("Initializing available tools")
     publish(state.session_id, "Analyzing your request...")
-   
+
+    # Resume a suspended confirmation flow without re-running tool selection.
+    if state.waiting_for and state.user_input:
+        logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
+        return Command(update=state, goto="WAIT_USER_INPUT")
+
     # Register tools if not already done
     registry = get_tool_registry()
     if not registry.list_tool_names():
@@ -161,12 +168,19 @@ def inject_tools_node(state: AgentState) -> Command:
 
     Expects state.cognitive.active_context_type to already be set by the API
     layer before the graph is invoked.
+
+    Also handles resuming a suspended confirmation flow in integrated mode.
     """
     logger.info(
         "Injecting tools for integrated mode "
         f"(context_type={state.cognitive.active_context_type})"
     )
     publish(state.session_id, "Analyzing your request...")
+
+    # Resume a suspended confirmation flow without re-running tool selection.
+    if state.waiting_for and state.user_input:
+        logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
+        return Command(update=state, goto="WAIT_USER_INPUT")
 
     registry = get_tool_registry()
 
