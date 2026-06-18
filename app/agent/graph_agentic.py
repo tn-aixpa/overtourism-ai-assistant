@@ -19,10 +19,8 @@ from langgraph.graph import StateGraph, END
 from app.agent.state import AgentState
 from app.agent.nodes.tool_selector import initialize_tools, inject_tools_node, tool_selector_node
 from app.agent.nodes.tool_executor import tool_executor_node
-from app.agent.nodes.general import error_recovery_node, generate_output_message_node
+from app.agent.nodes.general import add_safe_node, error_recovery_node, generate_output_message_node
 from app.agent.nodes.waiting import wait_user_input_node
-from app.agent.graphs.utils import add_safe_node
-
 
 def build_agentic_graph():
     """Build the simplified agentic graph."""

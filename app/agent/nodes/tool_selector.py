@@ -55,22 +55,11 @@ def initialize_tools(state: AgentState) -> Command:
 
 
 def tool_selector_node(state: AgentState) -> Command:
-    """
-    Use LLM reasoning to select which tool to execute and extract its arguments.
-
-    The LLM receives:
-    1. The user's message and conversation history
-    2. Available tools with their descriptions and parameters
-    3. Current active context
-
-    Then selects a tool and extracts the required arguments.
-    """
     logger.info("Entering tool selector node")
     publish(state.session_id, "Determining next action...")
 
     registry = get_tool_registry()
 
-    # Get available tools for the current context
     tools_for_llm = registry.get_tools_for_llm(
         user_id=None,
         active_context=state.cognitive.active_context_type or None,
@@ -82,8 +71,8 @@ def tool_selector_node(state: AgentState) -> Command:
         state.cognitive.tool_arguments = {}
         return Command(update=state, goto="generate_output_message")
 
-    # Build prompt
     import json
+    import re
     from app.utils.llm import llm_interaction, format_messages
 
     message = (state.get_last_user_message() or "").content
@@ -92,74 +81,117 @@ def tool_selector_node(state: AgentState) -> Command:
     active_context = state.get_active_context_string() or "None"
     tools_json = json.dumps(tools_for_llm, indent=2)
 
-    prompt = f"""You are a tool selector for a digital-twin assistant about city management and overtourism.
+    prompt = f"""
+You are an assistant for a digital twin platform named AIxPA related to tourism management.
+
+You may return ONE of the following JSON objects:
+
+Tool selection:
+{{
+  "tool_name": "<tool name>",
+  "arguments": {{}}
+}}
+
+Clarification:
+{{
+  "action": "clarify",
+  "message": "..."
+}}
+
+Out of scope:
+{{
+  "action": "out_of_scope",
+  "message": "..."
+}}
+
+No action needed:
+{{
+  "tool_name": null,
+  "arguments": {{}}
+}}
 
 Active context: {active_context}
 
 Conversation so far:
 {history_block}
 
-New user message: "{message}"
+New user message:
+"{message}"
 
 Available tools:
 {tools_json}
 
-Your task:
-1. Select the single most appropriate tool to handle the user's request.
-2. Extract all required (and relevant optional) arguments for that tool from the user message and conversation history.
-3. If no tool is needed (e.g. simple conversational reply), return null for the tool name.
-
-Return ONLY a JSON object in this exact format, no explanation, no markdown fences:
-{{
-  "tool_name": "<tool name or null>",
-  "arguments": {{
-    "<param_name>": "<param_value>"
-  }}
-}}
-
-Rules:
-- tool_name must be one of the available tool names, or null.
-- arguments must match the tool's parameter definitions exactly.
-- For extract_* tools, pass the full user message as user_input.
-- If the user is just greeting or asking a general question, return null.
-- Never invent tool names not in the list.
+Return ONLY valid JSON.
 """
 
     try:
         raw = llm_interaction(state, prompt).strip()
-        raw = re.sub(r"^```[a-z]*\n?|```$", "", raw, flags=re.MULTILINE).strip()
-        parsed = json.loads(raw)
 
-        selected_tool = parsed.get("tool_name")
-        tool_arguments = parsed.get("arguments", {})
+        raw = re.sub(
+            r"^```(?:json)?\s*|\s*```$",
+            "",
+            raw,
+            flags=re.MULTILINE,
+        ).strip()
+
+        response_json = json.loads(raw)
 
     except Exception as e:
-        logger.error(f"Error parsing tool selection response: {e}")
+        logger.exception("Error parsing tool selection response")
         state.cognitive.error_details = str(e)
         return Command(update=state, goto="error")
 
-    logger.info(f"Selected tools: {tools_for_llm}")
-    # Validate selected tool is actually available in this context
-    available_tool_names = {t["function"]["name"] for t in tools_for_llm}
+    action = response_json.get("action")
+
+    if action == "clarify":
+        state.cognitive.messages_to_include = [
+            response_json.get("message", "Could you clarify your request?")
+        ]
+        return Command(update=state, goto="generate_output_message")
+
+    if action == "out_of_scope":
+        state.cognitive.messages_to_include = [
+            response_json.get("message", "That request is outside my scope.")
+        ]
+        return Command(update=state, goto="generate_output_message")
+
+    selected_tool = response_json.get("tool_name")
+    tool_arguments = response_json.get("arguments", {})
+
+    available_tool_names = {
+        t.get("function", {}).get("name")
+        for t in tools_for_llm
+        if t.get("function", {}).get("name")
+    }
+
     if selected_tool and selected_tool not in available_tool_names:
-        logger.warning(f"LLM selected tool '{selected_tool}' not available in current context")
+        logger.warning(
+            f"LLM selected unavailable tool '{selected_tool}'"
+        )
         selected_tool = None
         tool_arguments = {}
 
     state.cognitive.selected_tool = selected_tool
     state.cognitive.tool_arguments = tool_arguments or {}
-    state.add_trace("tool_selection", "tool_selector", {
-        "selected_tool": selected_tool,
-        "tool_arguments": tool_arguments,
-        "available_tools": list(available_tool_names),
-    })
 
-    logger.info(f"Selected tool: {selected_tool} with args: {tool_arguments}")
+    state.add_trace(
+        "tool_selection",
+        "tool_selector",
+        {
+            "selected_tool": selected_tool,
+            "tool_arguments": tool_arguments,
+            "available_tools": list(available_tool_names),
+        },
+    )
+
+    logger.info(
+        f"Selected tool: {selected_tool}, args: {tool_arguments}"
+    )
 
     if selected_tool:
         return Command(update=state, goto="tool_executor")
-    else:
-        return Command(update=state, goto="generate_output_message")
+
+    return Command(update=state, goto="generate_output_message")
     
 def inject_tools_node(state: AgentState) -> Command:
     """
@@ -199,13 +231,3 @@ def inject_tools_node(state: AgentState) -> Command:
     logger.info(f"Injected tools for integrated mode: {state.cognitive.available_tools}")
 
     return Command(update=state, goto="tool_selector")
-
-
-# def tool_router(state: AgentState) -> str:
-#     """
-#     Route based on whether a tool was selected.
-#     """
-#     if state.cognitive.selected_tool:
-#         return "tool_executor"
-#     else:
-#         return "generate_output_message"
