@@ -7,7 +7,6 @@ This is the core of the agentic decision-making.
 
 import logging
 from langgraph.types import Command
-import re
 
 from app.agent.state import AgentState
 from app.tools.tool_registry import get_tool_registry

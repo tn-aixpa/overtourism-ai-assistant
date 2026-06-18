@@ -69,19 +69,8 @@ class TraceBuffer:
 
 @dataclass
 class CognitiveState:
-    # Canonical reasoning language: ENGLISH
-
-    # Routing
-    next_action: Optional[str] = None
-    pending_actions: List[str] = field(default_factory=list)
-
     # Operations
     generation_pipeline: List[str] = field(default_factory=list) # which LLMs where used
-
-    # Listing
-    elements_to_list: List[str] = field(default_factory=list)
-    filter_list_by: str = None
-    partial_list: Dict[str, Any] = field(default_factory=dict)
 
     # Active context
     active_context_type: str = "" #problem, proposal, scenario
@@ -106,10 +95,6 @@ class CognitiveState:
     scenario_validation_errors: str = "" # OLD, remove
     scenario_displayed_ranges: bool = False
     scenario_validated_indexes: Dict[str, Any] = field(default_factory=dict)
-
-
-    # Expert reasoning
-    selected_roles: List[str] = field(default_factory=list)
 
     # Data layer
     available_entries: Dict[str, Any] = field(default_factory=dict) #{"all_ids": ..., "ids_dict": ..., "connections_dict": ..., "names_dict": ...}
@@ -300,7 +285,6 @@ class AgentState:
                 f.write(f"  - {trace.timestamp} | {trace.step_type} | {trace.node} | {str(trace.data)}\n")
 
     def reset_state(self,
-            reset_listing=False,
             reset_new_problem=False,
             reset_new_proposal=False,
             reset_new_scenario=False,
@@ -315,15 +299,9 @@ class AgentState:
 
         # Reset general cognitive
         self.cognitive.generation_pipeline = []
-        self.cognitive.selected_roles = []
 
         if reset_chart:
-            self.chart_data = None
-
-        if reset_listing:
-            self.cognitive.elements_to_list = []
-            self.cognitive.filter_list_by = ""
-            self.cognitive.partial_list = {}        
+            self.chart_data = None    
         
         if reset_new_problem:
             self.cognitive.problem_info_extracted = {}

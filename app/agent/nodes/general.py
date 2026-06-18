@@ -70,7 +70,6 @@ def error_recovery_node(state: AgentState) -> Command:
 
     state.cognitive.messages_to_include = [state.cognitive.error_details] if state.cognitive.error_details else ["Something went wrong, please try again later."]
     state.reset_state(
-            reset_listing=True,
             reset_new_problem=True,
             reset_new_proposal=True,
             reset_new_scenario=True,
@@ -119,7 +118,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
-        case "list_problems":
+        case "list_available_items":
             return [f"Here are the available items: {output}"]
 
         case "set_active_context":

@@ -38,11 +38,11 @@ def create_get_system_capabilities_tool() -> ToolDefinition:
         requires_confirmation=False,
     )
 
-def create_list_problems_tool() -> ToolDefinition:
+def create_list_available_items_tool() -> ToolDefinition:
     """Tool to list all available problems."""
     return ToolDefinition(
-        name="list_problems",
-        description="List all available problems from the backend",
+        name="list_available_items",
+        description="List all available problems, proposals and scenarios from the backend",
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Fetches and displays all available problems, proposals, and scenarios. "
@@ -391,7 +391,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_system_capabilities_tool(),
 
         # Data retrieval
-        create_list_problems_tool(),
+        create_list_available_items_tool(),
         create_get_context_tool(),
         
         # Context management

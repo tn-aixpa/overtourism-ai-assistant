@@ -75,7 +75,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_system_capabilities": execute_get_system_capabilities,
         
         # Data retrieval
-        "list_problems": execute_list_problems,
+        "list_available_items": execute_list_available_items,
         "get_context_details": execute_get_context_details,
         
         # Context management
@@ -118,11 +118,11 @@ def execute_get_system_capabilities(
         "system_description": SYSTEM_DESCRIPTION,
     }
 
-def execute_list_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
-    """Execute list_problems tool."""
+def execute_list_available_items(state: AgentState, **kwargs) -> Dict[str, Any]:
+    """Execute list_available_items tool."""
     from app.tools.backend_tools import get_all_items
     
-    logger.info("Executing list_problems tool")
+    logger.info("Executing list_available_items tool")
     result = get_all_items.invoke({})
     
     # Store in state for later use
@@ -145,7 +145,7 @@ def execute_get_context_details(
     
     # Get available entries if not already retrieved
     if not state.cognitive.available_entries:
-        state.cognitive.available_entries = execute_list_problems(state)
+        state.cognitive.available_entries = execute_list_available_items(state)
     
     result = get_data_from_context.invoke({
         "context_type": context_type,
@@ -173,7 +173,7 @@ def execute_set_active_context(
     
     # Validate context exists
     if not state.cognitive.available_entries:
-        execute_list_problems(state)
+        execute_list_available_items(state)
     
     available_ids = state.cognitive.available_entries.get("ids_dict", {}).get(context_type + "s", set())
     if context_id not in available_ids:

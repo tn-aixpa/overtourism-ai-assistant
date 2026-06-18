@@ -21,31 +21,9 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 - **Scenario**: a simulation that explores the consequences of changes in a model's parameters,
   useful for evaluating and comparing alternative strategies.
 
-# Context levels and allowed operations
-
-The system operates on an active context, which determines what operations and tools are available.
-Always set the appropriate context before performing context-dependent operations.
-
-## No active context
-Available tools: get_system_capabilities, list_problems, get_context_details,
-set_active_context, extract_problem_details, create_problem
-
-## Problem context (active problem set)
-Available tools: get_system_capabilities, list_problems, get_context_details,
-set_active_context, extract_problem_details, create_problem,
-extract_proposal_details, create_proposal, interact_with_context
-
-## Proposal context (active proposal set)
-Available tools: get_system_capabilities, list_problems, get_context_details,
-set_active_context, extract_problem_details, create_problem,
-extract_scenario_details, create_scenario
-
-## Scenario context (active scenario set)
-To be defined.
-
 # Typical workflows
 
-1. **Explore**: call list_problems → set_active_context → interact_with_context
+1. **Explore**: call list_available_items → set_active_context → interact_with_context
 2. **Create a proposal**: set a problem context → extract_proposal_details → confirm → create_proposal
 3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
 
