@@ -225,7 +225,7 @@ def create_extract_proposal_tool() -> ToolDefinition:
         ],
         output_description="Structured proposal information ready for confirmation",
         tags=["extraction", "proposal"],
-        requires_context="problem",  # Requires active problem context
+        requires_context=None,  # "problem" if it requires active problem context
         requires_confirmation=True,
     )
 
@@ -269,7 +269,7 @@ def create_create_proposal_tool() -> ToolDefinition:
         ],
         output_description="Created proposal instance with ID",
         tags=["creation", "proposal"],
-        requires_context="problem",
+        requires_context=None,  # "problem" if it requires active problem context
         requires_confirmation=False,
     )
 
@@ -294,7 +294,7 @@ def create_extract_scenario_tool() -> ToolDefinition:
         ],
         output_description="Structured scenario information with validated model values",
         tags=["extraction", "scenario"],
-        requires_context="proposal",  # Requires active proposal context
+        requires_context=None,  # "proposal" if it requires active proposal context
         requires_confirmation=True,
     )
 
@@ -337,7 +337,7 @@ def create_create_scenario_tool() -> ToolDefinition:
         ],
         output_description="Created scenario instance with ID",
         tags=["creation", "scenario"],
-        requires_context="proposal",
+        requires_context=None,  # "proposal" if it requires active proposal context
         requires_confirmation=False,
     )
 
@@ -375,7 +375,7 @@ def create_interact_with_context_tool() -> ToolDefinition:
         ],
         output_description="Result of the interaction",
         tags=["interaction"],
-        requires_context="problem",  # At minimum
+        requires_context=None,  # TODO: check if needs to be
         requires_confirmation=False,
     )
 

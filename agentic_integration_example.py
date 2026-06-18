@@ -40,19 +40,11 @@ def demonstrate_tool_selection():
 
     registry = get_tool_registry()
 
-    # Get all enabled tools (user_id=None grants all tools)
-    all_tools = registry.get_user_allowed_tools(user_id=None)
+    # Get all enabled tools
+    all_tools = registry.get_all_enabled_tools()
     print(f"\nAll available tools ({len(all_tools)}):")
     for tool_name, tool_def in sorted(all_tools.items()):
         print(f"  - {tool_name}: {tool_def.description}")
-
-    # Get tools filtered by context (user_id=None grants all tools)
-    problem_context_tools = registry.get_context_tools(user_id=None, active_context="problem")
-    print(f"\nTools available in problem context: {list(problem_context_tools.keys())}")
-
-    proposal_context_tools = registry.get_context_tools(user_id=None, active_context="proposal")
-    print(f"\nTools available in proposal context: {list(proposal_context_tools.keys())}")
-
 
 def demonstrate_state_setup():
     """Show how to setup agent state for tool usage."""
@@ -104,8 +96,8 @@ def demonstrate_tool_discovery():
     problem_tools = registry.get_tools_by_category(ToolCategory.PROBLEM_MANAGEMENT)
     print(f"\nProblem management tools: {list(problem_tools.keys())}")
 
-    # Get tool descriptions for LLM (user_id=None grants all tools)
-    llm_tools = registry.get_tools_for_llm(user_id=None, active_context="problem")
+    # Get tool descriptions for LLM
+    llm_tools = registry.get_tools_for_llm(active_context="problem")
     print(f"\nTools formatted for LLM in problem context ({len(llm_tools)} tools)")
     if llm_tools:
         first_tool = llm_tools[0]['function']
@@ -113,7 +105,7 @@ def demonstrate_tool_discovery():
         print(f"           {first_tool['description']}")
 
     # Get text description for prompt
-    description = registry.get_tools_description(user_id=None, active_context="proposal")
+    description = registry.get_tools_description(active_context="proposal")
     print(f"\nTools description for prompt (in proposal context):")
     for line in description.split('\n')[:5]:
         print(f"  {line}")

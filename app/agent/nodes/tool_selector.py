@@ -40,9 +40,7 @@ def initialize_tools(state: AgentState) -> Command:
         registry.register_tools(all_tools)
    
     # Get tools available in this context
-    # Note: user_id=None grants all tools. In future, pass specific user_id to restrict.
     available_tools = registry.get_context_tools(
-        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
     
@@ -60,7 +58,6 @@ def tool_selector_node(state: AgentState) -> Command:
     registry = get_tool_registry()
 
     tools_for_llm = registry.get_tools_for_llm(
-        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
 
@@ -222,7 +219,6 @@ def inject_tools_node(state: AgentState) -> Command:
         registry.register_tools(all_tools)
 
     available_tools = registry.get_context_tools(
-        user_id=None,
         active_context=state.cognitive.active_context_type or None,
     )
 
