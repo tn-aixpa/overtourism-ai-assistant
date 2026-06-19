@@ -34,7 +34,6 @@ def create_get_system_capabilities_tool() -> ToolDefinition:
         parameters=[],
         output_description="System description, context rules, and available tools per context",
         tags=["data", "read-only", "system", "navigation"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -54,7 +53,6 @@ def create_list_available_problems_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -70,7 +68,6 @@ def create_list_available_proposals_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -86,7 +83,6 @@ def create_list_available_scenarios_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -135,7 +131,6 @@ def create_get_context_ids_tool() -> ToolDefinition:
             "(empty list when that type is not relevant)."
         ),
         tags=["data", "read-only", "navigation", "resolution"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -144,16 +139,20 @@ def create_get_context_tool() -> ToolDefinition:
     """Tool to retrieve detailed information about current context."""
     return ToolDefinition(
         name="get_context_details",
-        description="Get full details about the current context, including all related problems, proposals, and scenarios",
+        description=(
+            "Get full details about the current context, including all related problems, "
+            "proposals, and scenarios. MUST be called before interact_with_context if context "
+            "details have not yet been retrieved in this conversation."
+        ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Retrieves full details for the current context, fetching all associated "
-            "problems, proposals, and scenarios with their properties and relationships."
+            "problems, proposals, and scenarios with their properties and relationships. "
+            "This tool must always precede interact_with_context in the tool plan."
         ),
         parameters=[],  # No parameters — operates on state.cognitive.current_context directly
         output_description="Dictionary with retrieved details for all problems, proposals, and scenarios in the current context",
         tags=["data", "read-only"],
-        requires_context=None,
         requires_confirmation=False,
     )
 
@@ -178,7 +177,6 @@ def create_interact_with_context_tool() -> ToolDefinition:
         ],
         output_description="Answer or analysis based on the retrieved context data",
         tags=["interaction", "read-only"],
-        requires_context=None,
         requires_confirmation=False,
     )
 

@@ -85,7 +85,6 @@ def demonstrate_tool_discovery():
     print(f"\nTool: {tool.name}")
     print(f"  Description: {tool.description}")
     print(f"  Category: {tool.category.value}")
-    print(f"  Requires context: {tool.requires_context}")
     print(f"  Requires confirmation: {tool.requires_confirmation}")
     print(f"  Version: {tool.version}")
     print(f"  Tags: {tool.tags}")
@@ -95,20 +94,6 @@ def demonstrate_tool_discovery():
 
     problem_tools = registry.get_tools_by_category(ToolCategory.PROBLEM_MANAGEMENT)
     print(f"\nProblem management tools: {list(problem_tools.keys())}")
-
-    # Get tool descriptions for LLM
-    llm_tools = registry.get_tools_for_llm(active_context="problem")
-    print(f"\nTools formatted for LLM in problem context ({len(llm_tools)} tools)")
-    if llm_tools:
-        first_tool = llm_tools[0]['function']
-        print(f"  Example: {first_tool['name']}")
-        print(f"           {first_tool['description']}")
-
-    # Get text description for prompt
-    description = registry.get_tools_description(active_context="proposal")
-    print(f"\nTools description for prompt (in proposal context):")
-    for line in description.split('\n')[:5]:
-        print(f"  {line}")
 
 
 def run_all_demonstrations():

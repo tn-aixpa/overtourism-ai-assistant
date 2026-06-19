@@ -32,22 +32,23 @@ def initialize_tools(state: AgentState) -> Command:
         logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
         return Command(update=state, goto="WAIT_USER_INPUT")
 
-    # Register tools if not already done
+    # Register tools once per process lifetime (idempotent guard).
     registry = get_tool_registry()
     if not registry.list_tool_names():
         logger.info("Registering default agent tools")
-        all_tools = get_all_agent_tools()
-        registry.register_tools(all_tools)
-   
-    # Get tools available in this context
-    available_tools = registry.get_context_tools(
-        active_context=state.cognitive.active_context_type or None,
-    )
-    
+        registry.register_tools(get_all_agent_tools())
+
+    # Resolve the effective tool allowlist.
+    # state.cognitive.available_tools is populated by the API layer when a
+    # subset of tools should be exposed (e.g. integrated mode); otherwise it
+    # is empty and we expose every enabled tool.
+    allowlist = state.cognitive.available_tools or None
+
+    available_tools = registry.get_context_tools(allowlist=allowlist)
     state.cognitive.available_tools = list(available_tools.keys())
-    
+
     logger.info(f"Available tools: {state.cognitive.available_tools}")
-    
+
     return Command(update=state, goto="tool_selector")
 
 
@@ -57,9 +58,9 @@ def tool_selector_node(state: AgentState) -> Command:
 
     registry = get_tool_registry()
 
-    tools_for_llm = registry.get_tools_for_llm(
-        active_context=state.cognitive.active_context_type or None,
-    )
+    # Use the allowlist already resolved by initialize_tools / inject_tools_node.
+    allowlist = state.cognitive.available_tools or None
+    tools_for_llm = registry.get_tools_for_llm(allowlist=allowlist)
 
     if not tools_for_llm:
         logger.warning("No tools available for this context")
@@ -124,6 +125,10 @@ No action needed:
 IMPORTANT – when the user asks for something that requires multiple steps (e.g. "list problems AND proposals",
 or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
 use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
+
+IMPORTANT – if interact_with_context is in the plan and get_context_details has NOT already produced
+results in this conversation (check prior tool results), always prepend get_context_details to the plan
+so context is fetched before being queried.
 
 Previously collected tool results (available for argument resolution):
 {prior_results_block}
@@ -224,12 +229,10 @@ Return ONLY valid JSON.
     
 def inject_tools_node(state: AgentState) -> Command:
     """
-    Integrated-mode fast path: inject tools filtered by active_context_type,
-    skipping the full initialize_tools registration flow.
+    Integrated-mode fast path: inject tools filtered by the allowlist already
+    set on state.cognitive.available_tools by the API layer.
 
-    Expects state.cognitive.active_context_type to already be set by the API
-    layer before the graph is invoked.
-
+    Falls back to all enabled tools when the allowlist is empty.
     Also handles resuming a suspended confirmation flow in integrated mode.
     """
     logger.info(
@@ -243,30 +246,19 @@ def inject_tools_node(state: AgentState) -> Command:
         logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
         return Command(update=state, goto="WAIT_USER_INPUT")
 
+    # Register tools once per process lifetime (idempotent guard).
     registry = get_tool_registry()
-
-    # Ensure tools are registered (idempotent)
     if not registry.list_tool_names():
         logger.info("Registering default agent tools")
-        all_tools = get_all_agent_tools()
-        registry.register_tools(all_tools)
+        registry.register_tools(get_all_agent_tools())
 
-    available_tools = registry.get_context_tools(
-        active_context=state.cognitive.active_context_type or None,
-    )
+    # Honour the allowlist set by the API layer (routes.py).
+    # state.cognitive.available_tools is populated there; if empty, expose all.
+    allowlist = state.cognitive.available_tools or None
 
-    # In integrated mode the embedding application already provides context, so
-    # high-level discovery tools add noise rather than value. Exclude
-    # get_system_capabilities whenever an active context type is already set.
-    if state.integrated_mode and state.cognitive.active_context_type:
-        available_tools = {
-            name: tool
-            for name, tool in available_tools.items()
-            if name != "get_system_capabilities"
-        }
-        logger.info("Integrated mode: excluded get_system_capabilities (context already set)")
-
+    available_tools = registry.get_context_tools(allowlist=allowlist)
     state.cognitive.available_tools = list(available_tools.keys())
+
     logger.info(f"Injected tools for integrated mode: {state.cognitive.available_tools}")
 
     return Command(update=state, goto="tool_selector")

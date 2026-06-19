@@ -110,7 +110,7 @@ async def run_agent_endpoint(
                 "proposals": [],
                 "scenarios": context
             }
-            state.available_tools = ['get_context_details', 'interact_with_context']
+            state.cognitive.available_tools = ['get_context_details', 'interact_with_context']
         
         save_state(state)
 

@@ -51,7 +51,6 @@ class ToolDefinition:
     
     # Configuration
     enabled: bool = True
-    requires_context: Optional[str] = None  # e.g., "problem", "proposal", "scenario"
     requires_confirmation: bool = False
     streaming: bool = False  # If true, tool can provide streaming output
     
@@ -112,7 +111,6 @@ class ToolDefinition:
             ],
             "output_description": self.output_description,
             "enabled": self.enabled,
-            "requires_context": self.requires_context,
             "requires_confirmation": self.requires_confirmation,
             "version": self.version,
             "tags": self.tags,

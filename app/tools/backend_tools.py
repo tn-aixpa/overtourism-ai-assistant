@@ -37,7 +37,7 @@ def get_all_scenarios(tenant="molveno"):
 
 @tool
 def get_data_from_context(
-    current_contex,
+    current_context,
     tenant="molveno",
 ):
     """Fetch data from the API."""
@@ -48,7 +48,7 @@ def get_data_from_context(
     }
 
     for key in ["problems", "proposals", "scenarios"]:
-        for id in current_contex[key]:
+        for id in current_context[key]:
             url = f"{BACKEND_URL}{tenant}/{key}/{id}"
     
             response = requests.get(url, headers=headers)

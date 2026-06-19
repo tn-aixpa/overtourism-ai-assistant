@@ -97,58 +97,55 @@ class ToolRegistry:
     # ---- Context-Aware Filtering ----
     
     def get_context_tools(
-        self, 
-        active_context: Optional[str] = None,
+        self,
+        allowlist: Optional[List[str]] = None,
     ) -> Dict[str, ToolDefinition]:
         """
-        Get tools available in a specific context.
-        
+        Get tools available in the current context.
+
         Args:
-            active_context: Type of active context (e.g., "problem", "proposal", "scenario")
-            
+            allowlist: Optional explicit list of tool names to include.
+                       When provided, only tools whose names appear in this list
+                       are returned (and they must also be enabled).
+                       When None, all enabled tools are returned.
+
         Returns:
-            Dictionary of available tools for this context
+            Dictionary of available tools.
         """
-        # Start with user-allowed tools
         tools = self.get_all_enabled_tools()
-        
-        # Filter by active context if provided
-        if active_context:
-            tools = {
-                name: tool 
-                for name, tool in tools.items() 
-                if tool.requires_context is None or tool.requires_context == active_context
-            }
-        
+
+        if allowlist is not None:
+            tools = {name: tool for name, tool in tools.items() if name in allowlist}
+
         return tools
     
     # ---- Tool Description Format ----
     
     def get_tools_for_llm(
         self,
-        active_context: Optional[str] = None,
+        allowlist: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get tools formatted for LLM tool calling.
-        
+
         Returns list of tool definitions in Claude/OpenAI format.
         """
-        tools = self.get_context_tools(active_context)
+        tools = self.get_context_tools(allowlist=allowlist)
         return [
-            tool.to_tool_description() 
+            tool.to_tool_description()
             for tool in tools.values()
         ]
-    
+
     def get_tools_description(
         self,
-        active_context: Optional[str] = None,
+        allowlist: Optional[List[str]] = None,
     ) -> str:
         """
         Get human-readable description of available tools.
-        
+
         Useful for prompts and debugging.
         """
-        tools = self.get_context_tools(active_context)
+        tools = self.get_context_tools(allowlist=allowlist)
         
         if not tools:
             return "No tools available."

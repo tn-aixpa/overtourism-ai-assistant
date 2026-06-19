@@ -272,11 +272,13 @@ def execute_get_context_details(
     
     logger.info(f"Executing get_context_details for context {state.cognitive.current_context}")
 
-    retrieved_context = get_data_from_context.invoke(state.cognitive.current_context)
+    retrieved_context = get_data_from_context.invoke({
+        "current_context": state.cognitive.current_context
+    })
+    
     state.cognitive.retrieved_context = retrieved_context
        
-    return get_data_from_context.invoke(state.cognitive.current_context)
-
+    return retrieved_context
 
 def execute_interact_with_context(
     state: AgentState,
