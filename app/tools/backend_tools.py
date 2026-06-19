@@ -50,13 +50,14 @@ def get_data_from_context(
 
             if key == "scenarios":
                 try:
-                    #TODO: check if correct API
-                    url = f"{BACKEND_URL}{tenant}/evaluations/{id}"
-                    extracted_evaluation_for_scenario = get_data(url)
-                    evaluation_id = extracted_evaluation_for_scenario["evaluation_id"]
+                    #TODO: now I get the first (latest)
+                    url = f"{BACKEND_URL}{tenant}/evaluations/"
+                    scenarios_to_evals = get_data(url)
+                    item = next((item for item in scenarios_to_evals if item["scenario_id"] == id), None)
 
-                    url = f"{BACKEND_URL}{tenant}/evaluations/{evaluation_id}/data"
-                    api_response["evaluation_data"] = get_data(url)
+                    if item is not None:
+                        url = f"{BACKEND_URL}{tenant}/evaluations/{item["evaluation_id"]}/data"
+                        api_response["evaluation_data"] = get_data(url)
                 except Exception as e:
                     logger.warning(f"Unable to get scenario data due to error: {e}")
         
