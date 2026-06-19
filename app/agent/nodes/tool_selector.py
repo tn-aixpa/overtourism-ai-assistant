@@ -77,7 +77,6 @@ def tool_selector_node(state: AgentState) -> Command:
     message = (state.get_last_user_message() or "").content
     history = state.get_reasoning_context()
     history_block = format_messages(history) if history else "None"
-    active_context = state.get_active_context_string() or "None"
     tools_json = json.dumps(tools_for_llm, indent=2)
 
     # Summarise previously collected tool results so the LLM can use them
@@ -132,8 +131,6 @@ so context is fetched before being queried.
 
 Previously collected tool results (available for argument resolution):
 {prior_results_block}
-
-Active context: {active_context}
 
 Conversation so far:
 {history_block}
@@ -237,7 +234,6 @@ def inject_tools_node(state: AgentState) -> Command:
     """
     logger.info(
         "Injecting tools for integrated mode "
-        f"(context_type={state.cognitive.active_context_type})"
     )
     publish(state.session_id, "Analyzing your request...")
 

@@ -39,7 +39,6 @@ def _run_agent(key: str, state: AgentState):
         state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
         final_state = AgentState(**state_dict)
 
-        active_context = final_state.get_active_context_string()
         last_msg = final_state.get_last_message()
         response_text = (
             last_msg.content
@@ -49,7 +48,6 @@ def _run_agent(key: str, state: AgentState):
         result = {
             "response": response_text,
             "session_id": key,
-            "active_context": active_context,
             "chart_data": getattr(final_state, "chart_data", None),
             "sliders_data": getattr(final_state, "sliders_data", None),
         }
@@ -61,7 +59,6 @@ def _run_agent(key: str, state: AgentState):
         result = {
             "response": get_error_message(ErrorCode.REQUEST_ERROR),
             "session_id": key,
-            "active_context": None,
             "chart_data": None,
             "sliders_data": None,
         }

@@ -76,9 +76,6 @@ class CognitiveState:
     current_context : Dict[str, Any] = field(default_factory=list)
     retrieved_context: Dict[str, Any] = field(default_factory=list)
 
-    active_context_type: str = "" #problem, proposal, scenario
-    active_context: List[str] = field(default_factory=list)
-
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
     problem_info_extracted: ProblemInfo = None
@@ -222,17 +219,7 @@ class AgentState:
 
     def get_reasoning_context(self, n: Optional[int] = DEFAULT_REASONING_CONTEXT_SIZE):
         return self.conversation.get_context_window(n)
-    
-    def get_active_context_string(self):
-        context_type = self.cognitive.active_context_type
-        contexts = self.cognitive.active_context or []
-
-        if context_type:
-            plural = "s" if len(contexts) > 1 else ""
-            return f"{context_type}{plural} {', '.join(contexts)}"
         
-        return ""
-    
     # -------------------------
     # Dump state
     # -------------------------
@@ -293,8 +280,6 @@ class AgentState:
             reset_new_proposal=False,
             reset_new_scenario=False,
             reset_errors=False,
-            reset_context=False,
-            reset_data=False,
             reset_chart=True
         ):
         self.waiting_for = None
@@ -334,7 +319,3 @@ class AgentState:
             self.cognitive.error_node = ""
             self.cognitive.error_details = ""
             self.cognitive.messages_to_include = []
-
-        if reset_context:
-            self.cognitive.active_context_type = ""
-            self.cognitive.active_context = []

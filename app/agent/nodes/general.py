@@ -74,8 +74,6 @@ def error_recovery_node(state: AgentState) -> Command:
             reset_new_proposal=True,
             reset_new_scenario=True,
             reset_errors=True,
-            reset_context=False,
-            reset_data=False
         )
 
     return Command(update=state, goto="generate_output_message")
