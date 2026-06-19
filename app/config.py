@@ -23,15 +23,10 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 
 # Typical workflows
 
-1. **Explore**: call list_available_scenarios → set_active_context → interact_with_context
+1. **Explore**: call list_available_scenarios → get_context_details → interact_with_context
 2. **Create a proposal**: set a problem context → extract_proposal_details → confirm → create_proposal
 3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
 
-# Important rules
-
-- extract_* tools always require user confirmation before the corresponding create_* tool is called.
-- Proposals require an active problem context; scenarios require an active proposal context.
-- set_active_context and get_context_details are always available regardless of current context.
 """
 
 BASE_SCENARIO_ID = "scenario_base" #TODO place it somewhere else

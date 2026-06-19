@@ -16,7 +16,6 @@ class ToolCategory(str, Enum):
     PROBLEM_MANAGEMENT = "problem_management"
     PROPOSAL_MANAGEMENT = "proposal_management"
     SCENARIO_MANAGEMENT = "scenario_management"
-    CONTEXT_MANAGEMENT = "context_management"
     INTERACTION = "interaction"
     UTILITY = "utility"
 

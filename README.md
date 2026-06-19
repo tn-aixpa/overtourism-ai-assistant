@@ -7,9 +7,6 @@ This projects aims contains the first prototype of an Agentic AI for the Digital
 Model the system as a separate service exposing APIs that can be called both from a UX (e.g, webpage) or programmatically.
 
 The system is a context-aware, stateful, multi-node agent with explicit routing. In this way each node has clear boundaries and responsibilities.
-Below a visual representation of the states is presented.
-
-![graph](Diagram.png)
 
 ## Usage
 

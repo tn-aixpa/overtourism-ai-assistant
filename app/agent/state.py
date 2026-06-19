@@ -73,9 +73,11 @@ class CognitiveState:
     generation_pipeline: List[str] = field(default_factory=list) # which LLMs where used
 
     # Active context
+    current_context : Dict[str, Any] = field(default_factory=list)
+    retrieved_context: Dict[str, Any] = field(default_factory=list)
+
     active_context_type: str = "" #problem, proposal, scenario
     active_context: List[str] = field(default_factory=list)
-    previous_context: List[str] = field(default_factory=list)
 
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
@@ -95,10 +97,6 @@ class CognitiveState:
     scenario_validation_errors: str = "" # OLD, remove
     scenario_displayed_ranges: bool = False
     scenario_validated_indexes: Dict[str, Any] = field(default_factory=dict)
-
-    # Data layer
-    context_data: Dict[str, Any] = field(default_factory=dict)
-    editable_indexes: Dict[str, Any] = field(default_factory=dict)
 
     # Tracing
     trace: TraceBuffer = field(default_factory=TraceBuffer)
@@ -126,7 +124,6 @@ class CognitiveState:
     # Accumulated results keyed by tool name (and occurrence index for duplicates)
     tool_results: Dict[str, Any] = field(default_factory=dict)
     tool_confirmation_needed: bool = False  # Whether tool result needs user confirmation
-    pending_tools: List[str] = field(default_factory=list)  # Queue of tools to execute
 
     def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
@@ -332,10 +329,6 @@ class AgentState:
             self.cognitive.scenarios_to_generate = []
             self.cognitive.scenario_validation_errors = ""
 
-        if reset_data:
-            self.cognitive.context_data = {}
-            self.cognitive.editable_indexes = {}
-
         if reset_errors:
             self.cognitive.error_code = ""
             self.cognitive.error_node = ""
@@ -345,4 +338,3 @@ class AgentState:
         if reset_context:
             self.cognitive.active_context_type = ""
             self.cognitive.active_context = []
-            self.cognitive.previous_context = []

@@ -124,23 +124,16 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
     match tool_name:
 
+        #TODO: check if I need to insert also other tools. Some don't actually have output are meant to be in-betweens
+
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
         case "list_available_problems" | "list_available_proposals" | "list_available_scenarios" :
             return [f"Here are the available items: {output}"]
 
-        case "set_active_context":
-            return [output.get("message", "Context updated successfully.")]
-
         case "get_context_details":
             return [f"Here are the requested details: {output}"]
-
-        case "extract_problem_details" | "extract_proposal_details" | "extract_scenario_details":
-            return [output.get("error", "Extraction completed.")]
-
-        case "create_problem" | "create_proposal" | "create_scenario":
-            return [f"Created successfully: {output}"]
 
         case "interact_with_context":
             return [output.get("message", str(output))]

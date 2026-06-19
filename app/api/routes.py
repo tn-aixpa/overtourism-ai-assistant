@@ -12,7 +12,6 @@ import asyncio
 from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
-from app.agent.nodes.context_management import handle_context
 from app.agent.memory import generate_key, load_state, save_state, _get_lock
 from app.utils.error_codes import get_error_message, ErrorCode
 from app.agent.events import get_queue, publish_done, get_result
@@ -105,14 +104,13 @@ async def run_agent_endpoint(
             logger.info(f"Running in integrated mode with context: {context}")
             assert len(context) > 0, "Context is required in integrated mode"
 
-            # Set context on state — the graph's inject_tools node will use
-            # active_context_type to filter available tools at graph entry.
-            state.integrated_mode = True
-            state.cognitive.previous_context = state.cognitive.active_context
-            state.cognitive.active_context = context
-            state.cognitive.active_context_type = "scenario"
-            # TODO: limit available tools
-            state = handle_context(state)
+            #TODO: to extent in future
+            state.cognitive.current_context = {
+                "problems": [],
+                "proposals": [],
+                "scenarios": context
+            }
+            state.available_tools = ['get_context_details', 'interact_with_context']
         
         save_state(state)
 
@@ -171,35 +169,6 @@ async def inject_sliders_endpoint(
     background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state)
 
     return {"session_id": session_id}
-
-
-@router.post("/agent/feedback")
-async def submit_feedback(payload: dict = Body(...)):
-    session_id = payload.get("session_id")
-    message_index = payload.get("message_index")
-    vote = payload.get("vote")
-    comment = payload.get("comment")
-
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Session ID is required")
-
-    state = load_state(session_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    messages = state.conversation.messages
-    if message_index is None or message_index >= len(messages):
-        raise HTTPException(status_code=400, detail="Invalid message index")
-
-    msg = messages[message_index]
-    if msg.role != "assistant":
-        raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
-
-    msg.vote = vote if vote in {"up", "down"} else None
-    msg.comment = comment
-
-    save_state(state)
-    return {"message": "Feedback saved."}
 
 
 @router.get("/agent/feedback")

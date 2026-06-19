@@ -78,23 +78,9 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "list_available_problems": execute_list_available_problems,
         "list_available_proposals": execute_list_available_proposals,
         "list_available_scenarios": execute_list_available_scenarios,
+        "get_context_ids": execute_get_context_ids,
         "get_context_details": execute_get_context_details,
-        
-        # Context management
-        "set_active_context": execute_set_active_context,
-        
-        # Problem management
-        "extract_problem_details": execute_extract_problem_details,
-        "create_problem": execute_create_problem,
-        
-        # Proposal management
-        "extract_proposal_details": execute_extract_proposal_details,
-        "create_proposal": execute_create_proposal,
-        
-        # Scenario management
-        "extract_scenario_details": execute_extract_scenario_details,
-        "create_scenario": execute_create_scenario,
-        
+               
         # Interaction
         "interact_with_context": execute_interact_with_context,
     }
@@ -148,287 +134,166 @@ def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, A
     return result
 
 
+def execute_get_context_ids(
+    state: AgentState,
+    user_intent: str,
+    source_tools: list,
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Execute get_context_ids tool.
+
+    Reads raw list data that was already collected by list_available_problems /
+    list_available_proposals / list_available_scenarios (stored in
+    state.cognitive.tool_results) and uses an LLM call to reason over every
+    field of every object, returning only the IDs that match the user's intent.
+
+    Returns:
+        {
+            "success": True,
+            "context_ids": {
+                "problems":  [<id>, ...],
+                "proposals": [<id>, ...],
+                "scenarios": [<id>, ...],
+            }
+        }
+    """
+    import json
+    import re
+    from app.utils.llm import llm_interaction
+
+    logger.info(
+        f"Executing get_context_ids | intent='{user_intent}' | sources={source_tools}"
+    )
+
+    # ------------------------------------------------------------------ #
+    # 1. Collect the raw list data from tool_results
+    # ------------------------------------------------------------------ #
+    tool_results = state.cognitive.tool_results
+
+    # Build a mapping  entity_type -> raw data, tolerating key variants
+    # (e.g. the selector might store them as "list_available_problems" or
+    #  with a collision suffix like "list_available_problems__1").
+    def _find_result(key_prefix: str) -> Any:
+        """Return the first tool_results value whose key starts with key_prefix."""
+        for k, v in tool_results.items():
+            if k == key_prefix or k.startswith(key_prefix + "__"):
+                return v
+        return None
+
+    sections: Dict[str, Any] = {}
+    for source in source_tools:
+        data = _find_result(source)
+        if data is None:
+            logger.warning(
+                f"get_context_ids: source '{source}' not found in tool_results "
+                f"(available keys: {list(tool_results.keys())})"
+            )
+        else:
+            sections[source] = data
+
+    if not sections:
+        return {
+            "success": False,
+            "error": (
+                "None of the requested source tools have results in tool_results. "
+                f"Requested: {source_tools}. "
+                f"Available: {list(tool_results.keys())}. "
+                "Run the list tools first."
+            ),
+            "context_ids": {"problems": [], "proposals": [], "scenarios": []},
+        }
+
+    # ------------------------------------------------------------------ #
+    # 2. Build prompt
+    # ------------------------------------------------------------------ #
+    sections_block = json.dumps(sections, indent=2, default=str)
+
+    prompt = f"""
+You are a semantic matching assistant for a digital twin platform about tourism management.
+
+Your task: given a user intent and a set of object lists fetched from the backend,
+identify which objects (by their ID) are relevant to the intent.
+
+Consider ALL fields of each object (name, description, tags, location, relationships, etc.)
+when deciding relevance. Be inclusive — if an object is plausibly related, include it.
+
+User intent:
+\"{user_intent}\"
+
+Available data (raw API responses, one section per list tool):
+{sections_block}
+
+Return ONLY a valid JSON object with exactly these three keys (lists may be empty):
+{{
+  "problems":  ["<id>", ...],
+  "proposals": ["<id>", ...],
+  "scenarios": ["<id>", ...]
+}}
+
+Do not include any explanation or markdown. Return JSON only.
+"""
+
+    # ------------------------------------------------------------------ #
+    # 3. Call the LLM and parse
+    # ------------------------------------------------------------------ #
+    try:
+        raw = llm_interaction(state, prompt).strip()
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+        context_ids = json.loads(raw)
+
+        # Ensure all three keys exist and are lists
+        for key in ("problems", "proposals", "scenarios"):
+            if key not in context_ids or not isinstance(context_ids[key], list):
+                context_ids[key] = []
+
+    except Exception as e:
+        logger.exception("get_context_ids: failed to parse LLM response")
+        return {
+            "success": False,
+            "error": str(e),
+            "context_ids": {"problems": [], "proposals": [], "scenarios": []},
+        }
+
+    logger.info(f"get_context_ids resolved: {context_ids}")
+
+    state.cognitive.current_context = context_ids
+    return {
+        "success": True,
+        "context_ids": context_ids,
+    }
+
+
 def execute_get_context_details(
     state: AgentState,
-    context_type: str,
-    context_ids: list,
-    extract_editable: bool = True,
-    **kwargs
 ) -> Dict[str, Any]:
     """Execute get_context_details tool."""
     from app.tools.backend_tools import get_data_from_context
     
-    logger.info(f"Executing get_context_details for {context_type}s: {context_ids}")
+    logger.info(f"Executing get_context_details for context {state.cognitive.current_context}")
+
+    retrieved_context = get_data_from_context.invoke(state.cognitive.current_context)
+    state.cognitive.retrieved_context = retrieved_context
        
-    result = get_data_from_context.invoke({
-        "context_type": context_type,
-        "context": context_ids,
-        "relations": {},
-        "extract_editable": extract_editable,
-    })
-    
-    # Store context data in state
-    state.cognitive.context_data.update(result.get("retrieved", {}))
-    if result.get("editable_indexes"):
-        state.cognitive.editable_indexes = result["editable_indexes"]
-    
-    return result
-
-
-def execute_set_active_context(
-    state: AgentState,
-    context_type: str,
-    context_id: str,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute set_active_context tool."""
-    logger.info(f"Setting active context to {context_type}: {context_id}")
-    
-    
-    available_ids = {}
-    if context_id not in available_ids:
-        raise ValueError(f"Context {context_type} '{context_id}' not found")
-    
-    # Update state
-    state.cognitive.previous_context = state.cognitive.active_context
-    state.cognitive.active_context_type = context_type
-    state.cognitive.active_context = [context_id]
-    
-    return {
-        "success": True,
-        "message": f"Active context set to {context_type}: {context_id}",
-        "previous_context": state.cognitive.previous_context,
-    }
-
-
-def execute_extract_problem_details(
-    state: AgentState,
-    user_input: str,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute extract_problem_details tool."""
-    from app.utils.llm_structured_extractions import extract_problem_data
-    from app.utils.llm import parse_llm_json
-    from app.utils.backend_integration_classes import (
-        ProblemInfoSchema, ProblemInfo, build_schema_data
-    )
-    
-    logger.info("Executing extract_problem_details tool")
-    
-    # Set user input for extraction
-    state.user_input = user_input
-    
-    # Extract problem data using existing LLM logic
-    answer = extract_problem_data(state)
-    problem = parse_llm_json(answer)
-    
-    schema = ProblemInfoSchema.default()
-    
-    try:
-        extracted = build_schema_data(schema, problem, ProblemInfo)
-        state.cognitive.problem_info_extracted = extracted
-        state.cognitive.extracted_all_problem = True
-        
-        # Mark as needing confirmation
-        state.cognitive.tool_confirmation_needed = True
-        state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
-        
-        return {
-            "success": True,
-            "extracted": extracted,
-            "needs_confirmation": True,
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "needs_confirmation": False,
-        }
-
-
-def execute_create_problem(
-    state: AgentState,
-    problem_title: str,
-    problem_description: str,
-    objectives: list = None,
-    available_subsystems: list = None,
-    additional_data: dict = None,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute create_problem tool."""
-    from app.tools.backend_tools import create_problem_instance
-    
-    logger.info(f"Executing create_problem tool: {problem_title}")
-    
-    payload = {
-        "problem_name": problem_title,
-        "problem_description": problem_description,
-        "objective": objectives or [],
-        "groups": available_subsystems or [],
-        "links": additional_data or {},
-    }
-    
-    # Remove empty fields
-    payload = {k: v for k, v in payload.items() if v not in [None, "", [], {}]}
-    
-    result = create_problem_instance.invoke({"payload": payload})
-    
-    # Update state
-    state.active_workflow = None
-    state.waiting_for = None
-    state.cognitive.extracted_all_problem = False
-    
-    return result
-
-
-def execute_extract_proposal_details(
-    state: AgentState,
-    user_input: str,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute extract_proposal_details tool."""
-    from app.utils.llm_structured_extractions import extract_proposal_data
-    from app.utils.llm import parse_llm_json
-    from app.utils.backend_integration_classes import (
-        ProposalInfoSchema, ProposalInfo, build_schema_data
-    )
-    
-    logger.info("Executing extract_proposal_details tool")
-    
-    # Check for active problem context
-    if state.cognitive.active_context_type != "problem":
-        raise ValueError("No active problem context. Please set a problem context first.")
-    
-    # Set user input for extraction
-    state.user_input = user_input
-    
-    # Extract proposal data using existing LLM logic
-    answer = extract_proposal_data(state)
-    proposal = parse_llm_json(answer)
-    
-    schema = ProposalInfoSchema.default()
-    
-    try:
-        extracted = build_schema_data(schema, proposal, ProposalInfo)
-        state.cognitive.proposal_info_extracted = extracted
-        state.cognitive.extracted_all_proposal = True
-        
-        # Mark as needing confirmation
-        state.cognitive.tool_confirmation_needed = True
-        state.waiting_for = AgentState.WaitingFor.PROPOSAL_CONFIRMATION
-        
-        return {
-            "success": True,
-            "extracted": extracted,
-            "needs_confirmation": True,
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "needs_confirmation": False,
-        }
-
-
-def execute_create_proposal(
-    state: AgentState,
-    proposal_title: str,
-    proposal_description: str,
-    connected_scenarios: list = None,
-    additional_data: dict = None,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute create_proposal tool."""
-    from app.tools.backend_tools import create_proposal_instance
-    
-    logger.info(f"Executing create_proposal tool: {proposal_title}")
-    
-    # Check for active problem context
-    if state.cognitive.active_context_type != "problem":
-        raise ValueError("No active problem context")
-    
-    problem_id = state.cognitive.active_context[0]
-    
-    payload = {
-        "proposal_title": proposal_title,
-        "proposal_description": proposal_description,
-        "additional_data": additional_data or {},
-    }
-    
-    result = create_proposal_instance.invoke({
-        "problem_id": problem_id,
-        "payload": payload,
-    })
-    
-    # Update state
-    state.active_workflow = None
-    state.waiting_for = None
-    state.cognitive.extracted_all_proposal = False
-    
-    return result
-
-
-def execute_extract_scenario_details(
-    state: AgentState,
-    user_input: str,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute extract_scenario_details tool."""
-    logger.info("Executing extract_scenario_details tool")
-    
-    # Check for active proposal context
-    if state.cognitive.active_context_type != "proposal":
-        raise ValueError("No active proposal context. Please set a proposal context first.")
-    
-    # TODO: Implement scenario extraction similar to problem/proposal
-    # For now, return placeholder
-    return {
-        "success": True,
-        "message": "Scenario extraction not yet implemented",
-        "needs_confirmation": True,
-    }
-
-
-def execute_create_scenario(
-    state: AgentState,
-    scenario_name: str,
-    scenario_description: str,
-    model_values: dict,
-    additional_data: dict = None,
-    **kwargs
-) -> Dict[str, Any]:
-    """Execute create_scenario tool."""
-    logger.info(f"Executing create_scenario tool: {scenario_name}")
-    
-    # Check for active proposal context
-    if state.cognitive.active_context_type != "proposal":
-        raise ValueError("No active proposal context")
-    
-    # TODO: Implement scenario creation
-    # For now, return placeholder
-    return {
-        "success": True,
-        "message": "Scenario creation not yet implemented",
-    }
+    return get_data_from_context.invoke(state.cognitive.current_context)
 
 
 def execute_interact_with_context(
     state: AgentState,
-    interaction_type: str,
-    query: str = None,
-    modifications: dict = None,
+    query: str,
     **kwargs
 ) -> Dict[str, Any]:
     """Execute interact_with_context tool."""
-    logger.info(f"Executing interact_with_context tool: {interaction_type}")
-    
-    if not state.cognitive.active_context_type:
-        raise ValueError("No active context to interact with")
-    
-    # TODO: Implement different interaction types
+    logger.info(f"Executing interact_with_context tool with query: {query}")
+
+    retrieved = state.cognitive.retrieved_context
+    if not retrieved:
+        raise ValueError("No context data available — run get_context_details first")
+
     return {
         "success": True,
-        "message": f"Interaction type '{interaction_type}' not yet implemented",
+        "query": query,
+        "data": retrieved,
     }
 
 
