@@ -434,41 +434,79 @@ def execute_interact_with_context(
 
 def tool_executor_node(state: AgentState) -> Command:
     """
-    Main tool executor node that orchestrates tool execution.
+    Main tool executor node that iterates through the tool plan.
+
+    On each graph visit it executes the *current* tool (tool_plan[tool_plan_index]),
+    stores the result in cognitive.tool_results, advances the index, and either:
+      - loops back to itself (via tool_executor) for the next tool in the plan, or
+      - forwards to generate_output_message when the plan is exhausted.
+
+    Confirmation-requiring tools still pause the plan and route to WAIT_USER_INPUT;
+    when the user confirms, the waiting node resumes here.
     """
-    logger.info(f"Entering tool executor node for tool: {state.cognitive.selected_tool}")
-    publish(state.session_id, f"Executing: {state.cognitive.selected_tool}")
-    
-    if not state.cognitive.selected_tool:
-        logger.warning("No tool selected in executor node")
+    plan = state.cognitive.tool_plan
+    idx = state.cognitive.tool_plan_index
+
+    if not plan or idx >= len(plan):
+        logger.warning("tool_executor reached with empty/exhausted plan")
         return Command(update=state, goto="generate_output_message")
-    
+
+    current_step = plan[idx]
+    tool_name = current_step["tool_name"]
+    tool_arguments = current_step.get("arguments", {})
+
+    logger.info(f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}")
+    publish(state.session_id, f"Executing: {tool_name}")
+
+    # Keep legacy aliases in sync so existing executors that read
+    # state.cognitive.selected_tool / tool_arguments continue to work.
+    state.cognitive.selected_tool = tool_name
+    state.cognitive.tool_arguments = tool_arguments
+
     try:
-        # Execute the tool
-        result = execute_selected_tool(
-            state.cognitive.selected_tool,
-            state.cognitive.tool_arguments,
-            state,
-        )
-        
+        result = execute_selected_tool(tool_name, tool_arguments, state)
+
         state.cognitive.tool_result = result
-        state.add_trace("tool_execution", state.cognitive.selected_tool, result)
-        
-        logger.info(f"Tool execution result: {result}")
-        
-        if result["success"]:
-            # Tool executed successfully
-            # Check if confirmation is needed
-            if state.cognitive.tool_confirmation_needed:
-                return Command(update=state, goto="WAIT_USER_INPUT")
-            else:
-                # Continue to output
-                return Command(update=state, goto="generate_output_message")
-        else:
-            # Tool execution failed
+
+        # ---- Persist result in tool_results dict ----
+        # Use a unique key: tool_name, or tool_name__N if already present.
+        result_key = tool_name
+        collision = 0
+        while result_key in state.cognitive.tool_results:
+            collision += 1
+            result_key = f"{tool_name}__{collision}"
+        state.cognitive.tool_results[result_key] = result
+
+        state.add_trace(
+            "tool_execution",
+            tool_name,
+            {"plan_index": idx, "result_key": result_key, "result": result},
+        )
+
+        logger.info(f"Tool '{tool_name}' result stored as '{result_key}'")
+
+        if not result["success"]:
             state.cognitive.error_details = result.get("error", "Unknown error")
             return Command(update=state, goto="error")
-    
+
+        # Confirmation pause: halt the plan here until the user responds.
+        if state.cognitive.tool_confirmation_needed:
+            # tool_plan_index is NOT advanced — after confirmation the waiting
+            # node will route back here and we will advance then.
+            return Command(update=state, goto="WAIT_USER_INPUT")
+
+        # Advance to next tool
+        state.cognitive.tool_plan_index = idx + 1
+
+        # More tools in the plan?
+        if state.cognitive.tool_plan_index < len(plan):
+            next_tool = plan[state.cognitive.tool_plan_index]["tool_name"]
+            logger.info(f"Continuing to next tool in plan: {next_tool}")
+            return Command(update=state, goto="tool_executor")
+
+        # Plan exhausted — generate final response.
+        return Command(update=state, goto="generate_output_message")
+
     except Exception as e:
         logger.error(f"Exception in tool executor: {e}", exc_info=True)
         state.cognitive.error_details = str(e)

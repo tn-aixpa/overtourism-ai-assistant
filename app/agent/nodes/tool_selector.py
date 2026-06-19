@@ -65,6 +65,8 @@ def tool_selector_node(state: AgentState) -> Command:
         logger.warning("No tools available for this context")
         state.cognitive.selected_tool = None
         state.cognitive.tool_arguments = {}
+        state.cognitive.tool_plan = []
+        state.cognitive.tool_plan_index = 0
         return Command(update=state, goto="generate_output_message")
 
     import json
@@ -77,12 +79,25 @@ def tool_selector_node(state: AgentState) -> Command:
     active_context = state.get_active_context_string() or "None"
     tools_json = json.dumps(tools_for_llm, indent=2)
 
+    # Summarise previously collected tool results so the LLM can use them
+    prior_results_block = "None"
+    if state.cognitive.tool_results:
+        prior_results_block = json.dumps(state.cognitive.tool_results, indent=2, default=str)
+
     prompt = f"""
 You are an assistant for a digital twin platform named AIxPA related to tourism management.
 
 You may return ONE of the following JSON objects:
 
-Tool selection:
+Tool plan (one OR more tools to run in sequence):
+{{
+  "tool_plan": [
+    {{"tool_name": "<tool name>", "arguments": {{}}}},
+    {{"tool_name": "<tool name>", "arguments": {{}}}}
+  ]
+}}
+
+Single tool (shorthand, also valid):
 {{
   "tool_name": "<tool name>",
   "arguments": {{}}
@@ -105,6 +120,13 @@ No action needed:
   "tool_name": null,
   "arguments": {{}}
 }}
+
+IMPORTANT – when the user asks for something that requires multiple steps (e.g. "list problems AND proposals",
+or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
+use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
+
+Previously collected tool results (available for argument resolution):
+{prior_results_block}
 
 Active context: {active_context}
 
@@ -151,40 +173,51 @@ Return ONLY valid JSON.
         ]
         return Command(update=state, goto="generate_output_message")
 
-    selected_tool = response_json.get("tool_name")
-    tool_arguments = response_json.get("arguments", {})
-
     available_tool_names = {
         t.get("function", {}).get("name")
         for t in tools_for_llm
         if t.get("function", {}).get("name")
     }
 
-    if selected_tool and selected_tool not in available_tool_names:
-        logger.warning(
-            f"LLM selected unavailable tool '{selected_tool}'"
-        )
-        selected_tool = None
-        tool_arguments = {}
+    # ---- Normalise response into a tool_plan list ----
+    if "tool_plan" in response_json:
+        raw_plan = response_json["tool_plan"]
+    elif response_json.get("tool_name"):
+        raw_plan = [{"tool_name": response_json["tool_name"], "arguments": response_json.get("arguments", {})}]
+    else:
+        raw_plan = []
 
-    state.cognitive.selected_tool = selected_tool
-    state.cognitive.tool_arguments = tool_arguments or {}
+    # Validate each step against available tools
+    tool_plan = []
+    for step in raw_plan:
+        tool_name = step.get("tool_name")
+        if tool_name and tool_name in available_tool_names:
+            tool_plan.append({"tool_name": tool_name, "arguments": step.get("arguments", {})})
+        elif tool_name:
+            logger.warning(f"LLM planned unavailable tool '{tool_name}', skipping")
+
+    state.cognitive.tool_plan = tool_plan
+    state.cognitive.tool_plan_index = 0
+    # Convenience aliases kept in sync with first step for backwards compat
+    if tool_plan:
+        state.cognitive.selected_tool = tool_plan[0]["tool_name"]
+        state.cognitive.tool_arguments = tool_plan[0]["arguments"]
+    else:
+        state.cognitive.selected_tool = None
+        state.cognitive.tool_arguments = {}
 
     state.add_trace(
         "tool_selection",
         "tool_selector",
         {
-            "selected_tool": selected_tool,
-            "tool_arguments": tool_arguments,
+            "tool_plan": tool_plan,
             "available_tools": list(available_tool_names),
         },
     )
 
-    logger.info(
-        f"Selected tool: {selected_tool}, args: {tool_arguments}"
-    )
+    logger.info(f"Tool plan: {tool_plan}")
 
-    if selected_tool:
+    if tool_plan:
         return Command(update=state, goto="tool_executor")
 
     return Command(update=state, goto="generate_output_message")
@@ -221,6 +254,17 @@ def inject_tools_node(state: AgentState) -> Command:
     available_tools = registry.get_context_tools(
         active_context=state.cognitive.active_context_type or None,
     )
+
+    # In integrated mode the embedding application already provides context, so
+    # high-level discovery tools add noise rather than value. Exclude
+    # get_system_capabilities whenever an active context type is already set.
+    if state.integrated_mode and state.cognitive.active_context_type:
+        available_tools = {
+            name: tool
+            for name, tool in available_tools.items()
+            if name != "get_system_capabilities"
+        }
+        logger.info("Integrated mode: excluded get_system_capabilities (context already set)")
 
     state.cognitive.available_tools = list(available_tools.keys())
     logger.info(f"Injected tools for integrated mode: {state.cognitive.available_tools}")

@@ -1,17 +1,12 @@
 """
 Agentic graph for the digital twin agent.
 
-This is the refactored graph structure that uses tool-based decision making
-instead of hardcoded workflow routing.
-
 Graph flow:
 1. Initialize tools (determine which tools are available)
-2. Select tool (LLM decides which tool to call)
-3. Execute tool (run the selected tool)
+2. Select tool plan (LLM decides which tools to call in order)
+3. Execute tool plan (executor iterates through plan, looping back to itself)
 4. Handle result (confirmation, error handling, etc.)
 5. Generate output (format response to user)
-
-This graph is much simpler and more extensible than the original workflow-based design.
 """
 
 from langgraph.graph import StateGraph, END
@@ -43,19 +38,25 @@ def build_agentic_graph():
     graph.add_edge("inject_tools", "tool_selector")
 
     # tool_selector routes via Command to:
-    #   tool_executor           (tool selected)
+    #   tool_executor           (plan has ≥1 tool)
     #   generate_output_message (no tool needed — conversational reply)
     #   error                   (parse failure)
     # No static edge from tool_selector: all routing is Command-based.
 
     # tool_executor routes via Command to:
-    #   generate_output_message | WAIT_USER_INPUT | error
+    #   tool_executor           (more tools left in the plan — self-loop)
+    #   generate_output_message (plan exhausted)
+    #   WAIT_USER_INPUT         (confirmation pause mid-plan)
+    #   error                   (tool failure)
+    # The self-loop is expressed as a Command goto="tool_executor"; LangGraph
+    # supports this without an explicit static edge.
+
     graph.add_edge("error", "generate_output_message")
     graph.add_edge("generate_output_message", END)
 
     # WAIT_USER_INPUT routes via Command to:
     #   generate_output_message (first pass — emit prompt, then END)
-    #   tool_executor           (user confirmed)
+    #   tool_executor           (user confirmed — resumes plan)
     #   generate_output_message (user cancelled)
     #   initialize_tools        (ambiguous reply — re-interpret)
     # No static edge from WAIT_USER_INPUT: all routing is Command-based.

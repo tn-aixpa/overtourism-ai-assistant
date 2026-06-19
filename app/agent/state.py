@@ -114,9 +114,17 @@ class CognitiveState:
 
     # Tool execution state
     available_tools: List[str] = field(default_factory=list)  # List of available tool names
-    selected_tool: Optional[str] = None  # Currently selected tool
+    selected_tool: Optional[str] = None  # Currently selected tool (single, for legacy compat)
     tool_arguments: Dict[str, Any] = field(default_factory=dict)  # Arguments for the selected tool
+
+    # Multi-tool plan: ordered list of {"tool_name": str, "arguments": dict}
+    tool_plan: List[Dict[str, Any]] = field(default_factory=list)
+    # Index into tool_plan pointing at the next tool to execute
+    tool_plan_index: int = 0
+
     tool_result: Optional[Dict[str, Any]] = None  # Result from last tool execution
+    # Accumulated results keyed by tool name (and occurrence index for duplicates)
+    tool_results: Dict[str, Any] = field(default_factory=dict)
     tool_confirmation_needed: bool = False  # Whether tool result needs user confirmation
     pending_tools: List[str] = field(default_factory=list)  # Queue of tools to execute
 
@@ -298,6 +306,15 @@ class AgentState:
 
         # Reset general cognitive
         self.cognitive.generation_pipeline = []
+
+        # Reset tool plan
+        self.cognitive.tool_plan = []
+        self.cognitive.tool_plan_index = 0
+        self.cognitive.tool_results = {}
+        self.cognitive.selected_tool = None
+        self.cognitive.tool_arguments = {}
+        self.cognitive.tool_result = None
+        self.cognitive.tool_confirmation_needed = False
 
         if reset_chart:
             self.chart_data = None    
