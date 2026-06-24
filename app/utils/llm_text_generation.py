@@ -43,8 +43,11 @@ The following supplementary data was collected from the agent state (may include
 """
 
     prompt = f"""You are a helpful assistant tasked with synthesizing information gathered by multiple agents into a clear, accurate final answer.
+Answer the following question using ONLY the data provided below.
+If the data does not contain enough information to answer, say so explicitly — do not infer or speculate.
+Be concise and factual. Use a neutral, professional tone.
 
-## User Input
+## Question
 {question}
 
 ## Agent Messages

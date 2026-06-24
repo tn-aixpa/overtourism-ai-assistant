@@ -1,13 +1,12 @@
 import os
 import re
-import json
 import logging
+import requests
 from time import time, sleep
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import anthropic
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
-
 
 from app.agent.events import publish
 from app.agent.state import AgentState
@@ -19,9 +18,16 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-USE_LOCAL_LLM = False
+USE_ANTHROPIC = True
 
-LOCAL_MODEL = "mistral" #qwen2.5:14b "gpt-oss:20b"
+# Backup LLM provider when USE_ANTHROPIC is False (or Anthropic fails)
+# Options: "ollama" | "smartlab"
+BACKUP_PROVIDER = "smartlab"
+
+LOCAL_MODEL = "mistral"  # used when BACKUP_PROVIDER = "ollama"
+
+SMARTLAB_BASE_URL = "https://owu.smartcommunitylab.it/api/chat/completions"
+SMARTLAB_MODEL = "llama31"  # used when BACKUP_PROVIDER = "smartlab"
 
 ANTHROPIC_MODELS = {
     "light": "claude-haiku-4-5",
@@ -44,10 +50,11 @@ LLM_TIMEOUT = 20  # seconds
 def _local_call(prompt, llm_client):
     return llm_local_interaction(prompt, llm_client)
 
+
 # =========================
 # CLIENT INITIALIZATION
 # =========================
-def init_local_llm():
+def init_ollama_llm():
     return ChatOllama(
         model=LOCAL_MODEL,
         base_url="http://localhost:11434",
@@ -58,18 +65,25 @@ def init_local_llm():
 def init_anthropic():
     return anthropic.Anthropic(
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
-        timeout=LLM_TIMEOUT
+        timeout=LLM_TIMEOUT,
     )
 
 def get_llm_client():
     global _llm_client
 
-    desired_type = ChatOllama if USE_LOCAL_LLM else anthropic.Anthropic
-
-    if _llm_client is None or not isinstance(_llm_client, desired_type):
-        _llm_client = init_local_llm() if USE_LOCAL_LLM else init_anthropic()
+    if USE_ANTHROPIC:
+        if _llm_client is None or not isinstance(_llm_client, anthropic.Anthropic):
+            _llm_client = init_anthropic()
+    else:
+        if BACKUP_PROVIDER == "ollama":
+            if _llm_client is None or not isinstance(_llm_client, ChatOllama):
+                _llm_client = init_ollama_llm()
+        else:
+            # SmartLab is stateless (plain HTTP), no client object needed
+            _llm_client = None
 
     return _llm_client
+
 
 # =========================
 # HELPERS
@@ -88,7 +102,6 @@ def log_time(model_name: str, elapsed: float):
 def log_cost(model_name: str, input_tokens: int, output_tokens: int):
     ensure_logs_dir()
     pricing = ANTHROPIC_PRICING.get(model_name)
-
     if not pricing:
         return
 
@@ -128,56 +141,88 @@ def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: i
 
 
 # =========================
+# BACKUP LLM CALLS
+# =========================
+def llm_local_interaction(prompt: str, llm_client: ChatOllama) -> tuple[str, str]:
+    """Call the local Ollama model."""
+    logger.info(f"Using ollama ({LOCAL_MODEL})")
+    response = llm_client.invoke([HumanMessage(content=prompt)])
+    return response.content.strip(), LOCAL_MODEL
+
+
+def llm_smartlab_interaction(prompt: str) -> tuple[str, str]:
+    """Call the SmartLab OpenAI-compatible API."""
+    logger.info(f"Using smartlab ({SMARTLAB_MODEL})")
+    api_key = os.environ.get("SMARTLAB_API_KEY")
+    if not api_key:
+        raise RequestHandlingException("SMARTLAB_API_KEY environment variable is not set")
+
+    response = requests.post(
+        SMARTLAB_BASE_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": SMARTLAB_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=LLM_TIMEOUT,
+    )
+    response.raise_for_status()
+    result = response.json()
+    text = result["choices"][0]["message"]["content"].strip()
+    return text, SMARTLAB_MODEL
+
+
+def call_backup_llm(prompt: str) -> tuple[str, str]:
+    """Dispatch to the configured backup provider."""
+    if BACKUP_PROVIDER == "ollama":
+        llm_client = init_ollama_llm()
+        future = EXECUTOR.submit(_local_call, prompt, llm_client)
+        try:
+            return future.result(timeout=LLM_TIMEOUT)
+        except FuturesTimeoutError:
+            future.cancel()
+            raise RequestHandlingException(f"Ollama LLM timed out after {LLM_TIMEOUT} seconds")
+
+    elif BACKUP_PROVIDER == "smartlab":
+        return llm_smartlab_interaction(prompt)
+
+    else:
+        raise RequestHandlingException(f"Unknown BACKUP_PROVIDER: '{BACKUP_PROVIDER}'")
+
+
+# =========================
 # MAIN LLM INTERFACE
 # =========================
-def llm_local_interaction(prompt: str, llm_client: ChatOllama) -> str:
-    model_name = LOCAL_MODEL
-    response = llm_client.invoke([
-        HumanMessage(content=prompt)
-    ])
-    return response.content.strip(), model_name
-
 def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True) -> str:
     try:
         start = time()
 
-        llm_client = get_llm_client()
-        if USE_LOCAL_LLM:
-            future = EXECUTOR.submit(_local_call, prompt, llm_client)
-            try:
-                result, model_name = future.result(timeout=LLM_TIMEOUT)
-            except FuturesTimeoutError:
-                future.cancel()
-                raise TimeoutError("Local LLM timed out after 60 seconds")
-        else:
+        if USE_ANTHROPIC:
+            llm_client = get_llm_client()
             try:
                 model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
-
                 response = call_anthropic_with_retry(
                     llm_client=llm_client,
                     model=model_name,
                     prompt=prompt,
                     max_tokens=max_tokens,
                 )
-
                 result = response.content[0].text.strip()
+                log_cost(model_name, response.usage.input_tokens, response.usage.output_tokens)
 
-                # Logging usage
-                log_cost(
-                    model_name,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens
-                )
             except Exception as e:
-                publish(state.session_id, "Unable to connect to Anthropic's API, switching to local LLM (answer might take longer to generate and be less accurate)", force_print=True)
-                logger.error(f"Error during Anthropic interaction: {e}, falling back to local LLM")
-                llm_client = init_local_llm()  # Re-initialize local client
-                future = EXECUTOR.submit(_local_call, prompt, llm_client)
-                try:
-                    result, model_name = future.result(timeout=LLM_TIMEOUT)
-                except FuturesTimeoutError:
-                    future.cancel()
-                    raise RequestHandlingException(f"Local LLM timed out after {LLM_TIMEOUT} seconds")
+                publish(
+                    state.session_id,
+                    f"Unable to connect to Anthropic's API, switching to backup LLM ({BACKUP_PROVIDER}) — answer may take longer and be less accurate.",
+                    force_print=True,
+                )
+                logger.error(f"Anthropic error: {e}, falling back to {BACKUP_PROVIDER}")
+                result, model_name = call_backup_llm(prompt)
+        else:
+            result, model_name = call_backup_llm(prompt)
 
         elapsed = time() - start
         log_time(model_name, elapsed)

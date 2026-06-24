@@ -115,19 +115,33 @@ Out of scope:
   "message": "..."
 }}
 
-No action needed:
+No action needed (greetings, thanks, chitchat):
 {{
   "tool_name": null,
   "arguments": {{}}
 }}
 
-IMPORTANT – when the user asks for something that requires multiple steps (e.g. "list problems AND proposals",
+## Tool selection rules — follow in order
+
+RULE 1 – GREETINGS AND GENERAL QUESTIONS:
+If the user message is a greeting (e.g. "Ciao", "Hello", "Hi"), a thank-you, or a general
+question about what the system can do, return:
+  {{"tool_name": "get_system_capabilities", "arguments": {{}}}}
+Do NOT call get_context_details or interact_with_context for greetings or general questions.
+
+RULE 2 – CONTEXT TOOLS REQUIRE ACTUAL DATA:
+Only use get_context_details or interact_with_context when the user is explicitly asking
+about specific problems, proposals, or scenarios that exist in the system.
+Do NOT use these tools for greetings, general questions, or small talk.
+
+RULE 3 – MULTI-STEP PLANS:
+When the user asks for something that requires multiple steps (e.g. "list problems AND proposals",
 or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
 use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
 
-IMPORTANT – if interact_with_context is in the plan and get_context_details has NOT already produced
-results in this conversation (check prior tool results), always prepend get_context_details to the plan
-so context is fetched before being queried.
+RULE 4 – CONTEXT MUST BE FETCHED BEFORE QUERYING:
+If interact_with_context is in the plan AND get_context_details has NOT already produced
+results (check prior tool results), always prepend get_context_details to the plan.
 
 Previously collected tool results (available for argument resolution):
 {prior_results_block}
@@ -141,7 +155,7 @@ New user message:
 Available tools:
 {tools_json}
 
-Return ONLY valid JSON.
+Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
 """
 
     try:

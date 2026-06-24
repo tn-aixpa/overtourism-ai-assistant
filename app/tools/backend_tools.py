@@ -1,9 +1,9 @@
+import os
 import requests
 from langchain.tools import tool
 import logging
-# import json
 
-from app.config import BACKEND_URL
+BACKEND_URL = os.environ.get("BACKEND_URL")
 
 logger = logging.getLogger(__name__)
 

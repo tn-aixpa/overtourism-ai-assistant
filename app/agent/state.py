@@ -73,8 +73,10 @@ class CognitiveState:
     generation_pipeline: List[str] = field(default_factory=list) # which LLMs where used
 
     # Active context
-    current_context : Dict[str, Any] = field(default_factory=list)
-    retrieved_context: Dict[str, Any] = field(default_factory=list)
+    current_context: Dict[str, Any] = field(
+        default_factory=lambda: {"problems": [], "proposals": [], "scenarios": []}
+    )
+    retrieved_context: Dict[str, Any] = field(default_factory=dict)
 
     # Problem context
     problem_info_to_extract = ProblemInfoSchema.default()
@@ -187,16 +189,28 @@ class AgentState:
         )
 
     def add_assistant_message(self, content: str):
+        from app.utils.llm import BACKUP_PROVIDER, LOCAL_MODEL, SMARTLAB_MODEL
 
-        starts_with = sum(s.startswith("claude") for s in self.cognitive.generation_pipeline)
-        not_starts_with = len(self.cognitive.generation_pipeline) - starts_with
-        if starts_with > 0 and not_starts_with == 0:
-            generated_by = "anthropic"
-        elif not_starts_with > 0 and starts_with == 0:
-            generated_by = "local"
+        pipeline = self.cognitive.generation_pipeline
+
+        def _provider_label(model_name: str) -> str:
+            """Map a raw model name to its provider label."""
+            if model_name.startswith("claude"):
+                return "anthropic"
+            if model_name == SMARTLAB_MODEL:
+                return f"smartlab-{SMARTLAB_MODEL}"
+            if model_name == LOCAL_MODEL:
+                return f"ollama-{LOCAL_MODEL}"
+            return f"{BACKUP_PROVIDER}-{model_name}"
+
+        labels = {_provider_label(m) for m in pipeline}
+
+        if len(labels) == 0:
+            generated_by = "unknown"
+        elif len(labels) == 1:
+            generated_by = labels.pop()
         else:
             generated_by = "mixed"
-
 
         self.conversation.add_message(
             ConversationMessage(

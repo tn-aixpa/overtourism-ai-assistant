@@ -35,7 +35,7 @@ def safe(node_fn, node_name):
             return Command(update=state, goto="error", graph=Command.PARENT)
 
         except GraphError as ge:
-            logger.warning(f"GraphError in node {node_name}: {rhe}")
+            logger.warning(f"GraphError in node {node_name}: {ge}")
             state.cognitive.error_details = ge.details
             state.cognitive.error_node = node_name
             return Command(update=state, goto="error", graph=Command.PARENT)
@@ -54,15 +54,12 @@ def safe(node_fn, node_name):
 
 def error_recovery_node(state: AgentState) -> Command:
     logger.info("Entering error recovery node")
-    to_log = True
 
     if state.cognitive.error_details:
         logger.error(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}")
         
-        # Only write to file for unexpected/system errors, not request-level ones
-        if to_log:
-            with open("logs/errors.txt", "a+") as f:
-                f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
+        with open("logs/errors.txt", "a+") as f:
+            f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
 
         state.cognitive.additional_output_information = [
             f"Error details: {state.cognitive.error_details}"
@@ -134,7 +131,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             return [f"Here are the requested details: {output}"]
 
         case "interact_with_context":
-            return [output.get("message", str(output))]
+            return [output.get("message", "No answer could be generated.")]
 
         case _:
             return [str(output)]

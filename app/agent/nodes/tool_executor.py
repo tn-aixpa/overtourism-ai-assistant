@@ -286,16 +286,32 @@ def execute_interact_with_context(
     **kwargs
 ) -> Dict[str, Any]:
     """Execute interact_with_context tool."""
+    import json
+    from app.utils.llm import llm_interaction
+
     logger.info(f"Executing interact_with_context tool with query: {query}")
 
     retrieved = state.cognitive.retrieved_context
     if not retrieved:
         raise ValueError("No context data available — run get_context_details first")
 
+    prompt = f"""You are an analyst for a tourism digital twin platform.
+Answer the following question using ONLY the data provided below.
+If the data does not contain enough information to answer, say so explicitly — do not infer or speculate.
+Be concise and factual. Use a neutral, professional tone.
+
+Question: {query}
+
+Context data:
+{json.dumps(retrieved, indent=2, default=str)}
+
+Answer:"""
+
+    answer = llm_interaction(state, prompt)
+
     return {
         "success": True,
-        "query": query,
-        "data": retrieved,
+        "message": answer,   # ← "message" key is now always present
     }
 
 
