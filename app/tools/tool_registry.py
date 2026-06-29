@@ -36,7 +36,7 @@ class ToolRegistry:
     def list_tool_names(self) -> List[str]:
         return list(self._tools.keys())
 
-    def get_all_enabled_tools(self) -> Dict[str, ToolDefinition]:
+    def get_all_known_tools(self) -> Dict[str, ToolDefinition]:
         return {name: tool for name, tool in self._tools.items() if tool.enabled}
 
     def set_tool_enabled(self, tool_name: str, enabled: bool) -> None:
@@ -44,7 +44,7 @@ class ToolRegistry:
             self._tools[tool_name].enabled = enabled
 
     def get_context_tools(self, allowlist: Optional[List[str]] = None) -> Dict[str, ToolDefinition]:
-        tools = self.get_all_enabled_tools()
+        tools = self.get_all_known_tools()
         if allowlist is not None:
             tools = {name: tool for name, tool in tools.items() if name in allowlist}
         return tools

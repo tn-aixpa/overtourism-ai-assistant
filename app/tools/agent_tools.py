@@ -67,17 +67,12 @@ def create_get_context_ids_tool() -> ToolDefinition:
         name="get_context_ids",
         description=(
             "Resolve the user's intent into specific problem, proposal, and/or scenario IDs "
-            "by semantically matching the request against previously fetched list data. "
-            "Also follows cross-entity relationships: if the user asks which proposals belong "
-            "to a problem (or vice versa), it will resolve the related IDs even when the "
-            "relationship field is stored on the other entity type."
+            "by semantically matching the request against previously fetched list data."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Uses LLM reasoning to match the user's natural-language request against the full "
             "content of one or more already-fetched lists. "
-            "Accepts an optional 'prior_context' field that carries already-resolved IDs from "
-            "the current conversation turn so cross-entity relationships can be followed. "
             "Returns a structured dict {problems: [...], proposals: [...], scenarios: [...]} "
             "containing only the IDs that are relevant to the request. "
             "Always run the required list tools first, then call this tool to extract relevant IDs."
@@ -94,9 +89,7 @@ def create_get_context_ids_tool() -> ToolDefinition:
                 description=(
                     "List of tool result keys to search. "
                     "Valid values: 'list_available_problems', 'list_available_proposals', "
-                    "'list_available_scenarios'. "
-                    "For relational questions (e.g. 'proposals for this problem') include ALL "
-                    "relevant entity list keys so relationships can be followed."
+                    "'list_available_scenarios'."
                 ),
                 type="array",
                 required=True,
@@ -149,6 +142,148 @@ def create_interact_with_context_tool() -> ToolDefinition:
     )
 
 
+def create_new_problem_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="create_new_problem",
+        description="Create a new problem in the system",
+        category=ToolCategory.PROBLEM_MANAGEMENT,
+        long_description=(
+            "Registers a new Problem in the platform. "
+            "A Problem represents a critical situation or phenomenon to be analyzed "
+            "(e.g. overtourism, mobility congestion). "
+            "NOTE: this tool is not yet implemented — it will acknowledge the request "
+            "and inform the user that the feature is coming soon."
+        ),
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new problem.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="description",
+                description="Detailed description of the problem to be addressed.",
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description="Acknowledgement that the feature is not yet implemented.",
+        tags=["write", "problem", "not-implemented"],
+    )
+
+
+def create_new_proposal_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="create_new_proposal",
+        description="Create a new proposal linked to an existing problem",
+        category=ToolCategory.PROPOSAL_MANAGEMENT,
+        long_description=(
+            "Registers a new Proposal for a given Problem in the platform. "
+            "A Proposal represents a possible strategy to address the problem. "
+            "NOTE: this tool is not yet implemented — it will acknowledge the request "
+            "and inform the user that the feature is coming soon."
+        ),
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new proposal.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="problem_id",
+                description="ID of the problem this proposal addresses.",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="description",
+                description="Detailed description of the proposed strategy.",
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description="Acknowledgement that the feature is not yet implemented.",
+        tags=["write", "proposal", "not-implemented"],
+    )
+
+
+def create_new_scenario_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="create_new_scenario",
+        description="Create a new scenario linked to an existing proposal",
+        category=ToolCategory.SCENARIO_MANAGEMENT,
+        long_description=(
+            "Registers a new Scenario for a given Proposal in the platform. "
+            "A Scenario is a simulation run exploring a specific parameter configuration. "
+            "NOTE: this tool is not yet implemented — it will acknowledge the request "
+            "and inform the user that the feature is coming soon."
+        ),
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new scenario.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="proposal_id",
+                description="ID of the proposal this scenario belongs to.",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="description",
+                description="Description of the parameter configuration to simulate.",
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description="Acknowledgement that the feature is not yet implemented.",
+        tags=["write", "scenario", "not-implemented"],
+    )
+
+
+def create_lookup_glossary_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="lookup_glossary",
+        description=(
+            "Look up definitions, aliases, and relationships for domain terms "
+            "(e.g. 'problem', 'proposal', 'scenario', 'overtourism', 'digital twin'). "
+            "Use this to answer user questions about terminology OR to clarify ambiguous "
+            "intent before selecting another tool."
+        ),
+        category=ToolCategory.UTILITY,
+        long_description=(
+            "Searches the platform glossary for one or more terms. "
+            "Matching is fuzzy: it checks the query against term names, aliases, and "
+            "related_terms fields. "
+            "Returns definitions, aliases, and related concepts for all matching entries. "
+            "Call this whenever: (a) the user asks what a term means, "
+            "(b) the user uses unfamiliar vocabulary that might map to a platform concept, "
+            "or (c) you need to clarify whether the user is referring to a Problem, "
+            "Proposal, or Scenario before proceeding."
+        ),
+        parameters=[
+            ToolParameter(
+                name="query",
+                description=(
+                    "One or more space-separated keywords to look up in the glossary. "
+                    "Example: 'scenario simulation' or 'overtourism carrying capacity'."
+                ),
+                type="string",
+                required=True,
+            ),
+        ],
+        output_description=(
+            "List of matching glossary entries with their definitions, aliases, "
+            "related terms, and examples."
+        ),
+        tags=["data", "read-only", "glossary", "utility"],
+    )
+
+
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         create_get_system_capabilities_tool(),
@@ -158,4 +293,10 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_ids_tool(),
         create_get_context_tool(),
         create_interact_with_context_tool(),
+        # Creation stubs (not yet implemented)
+        create_new_problem_tool(),
+        create_new_proposal_tool(),
+        create_new_scenario_tool(),
+        # Utility
+        create_lookup_glossary_tool(),
     ]

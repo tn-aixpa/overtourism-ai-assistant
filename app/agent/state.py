@@ -77,7 +77,8 @@ class CognitiveState:
     messages_to_include: List[str] = field(default_factory=list)
     additional_output_information: List[str] = field(default_factory=list)
 
-    available_tools: List[str] = field(default_factory=list)
+    known_tools: List[str] = field(default_factory=list)
+    enabled_tools: List[str] = field(default_factory=list)
     selected_tool: Optional[str] = None
     tool_arguments: Dict[str, Any] = field(default_factory=dict)
 

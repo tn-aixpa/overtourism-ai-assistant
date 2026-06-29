@@ -26,7 +26,6 @@ def setup_tool_system():
 
     stats = registry.get_stats()
     print(f"Registered tools: {stats['total_tools']}")
-    print(f"Enabled tools: {stats['enabled_tools']}")
     print(f"Tools by category: {stats['tools_by_category']}")
 
     return registry
@@ -41,7 +40,7 @@ def demonstrate_tool_selection():
     registry = get_tool_registry()
 
     # Get all enabled tools
-    all_tools = registry.get_all_enabled_tools()
+    all_tools = registry.get_all_known_tools()
     print(f"\nAll available tools ({len(all_tools)}):")
     for tool_name, tool_def in sorted(all_tools.items()):
         print(f"  - {tool_name}: {tool_def.description}")
@@ -65,7 +64,7 @@ def demonstrate_state_setup():
     print(f"\nAdded user message: {state.get_last_user_message().content}")
 
     print(f"\nTool execution state:")
-    print(f"  Available tools: {state.cognitive.available_tools}")
+    print(f"  Available tools: {state.cognitive.known_tools}")
     print(f"  Selected tool: {state.cognitive.selected_tool}")
     print(f"  Tool confirmation needed: {state.cognitive.tool_confirmation_needed}")
 

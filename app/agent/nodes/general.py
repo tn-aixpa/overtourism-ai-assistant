@@ -133,5 +133,23 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "interact_with_context":
             return [output.get("message", "No answer could be generated.")]
 
+        case "create_new_problem" | "create_new_proposal" | "create_new_scenario":
+            return [output.get("message", "This feature is not yet implemented.")]
+
+        case "lookup_glossary":
+            matches = output.get("matches", [])
+            if not matches:
+                return [output.get("message", "No glossary entries found.")]
+            lines = []
+            for entry in matches:
+                lines.append(f"**{entry['term'].capitalize()}**: {entry['definition']}")
+                if entry.get("aliases"):
+                    lines.append(f"  Also known as: {', '.join(entry['aliases'])}")
+                if entry.get("related_terms"):
+                    lines.append(f"  Related: {', '.join(entry['related_terms'])}")
+                if entry.get("examples"):
+                    lines.append(f"  Examples: {'; '.join(entry['examples'])}")
+            return ["\n".join(lines)]
+
         case _:
             return [str(output)]

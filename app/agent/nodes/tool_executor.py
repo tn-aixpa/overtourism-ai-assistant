@@ -39,6 +39,7 @@ def execute_selected_tool(
         raise ValueError(f"Tool '{tool_name}' is disabled")
     
     # Get the executor function for this tool
+    # For now, this is a placeholder that we'll fill in with actual implementations
     executor = get_tool_executor(tool_name)
     
     if executor is None:
@@ -67,6 +68,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     
     This dispatcher maps tool names to their implementation functions.
     """
+    # Map tool names to executor functions
     executors: Dict[str, Callable] = {
         # System
         "get_system_capabilities": execute_get_system_capabilities,
@@ -80,6 +82,14 @@ def get_tool_executor(tool_name: str) -> Callable | None:
                
         # Interaction
         "interact_with_context": execute_interact_with_context,
+
+        # Creation stubs (not yet implemented)
+        "create_new_problem": execute_create_new_problem,
+        "create_new_proposal": execute_create_new_proposal,
+        "create_new_scenario": execute_create_new_scenario,
+
+        # Utility
+        "lookup_glossary": execute_lookup_glossary,
     }
     
     return executors.get(tool_name)
@@ -140,19 +150,10 @@ def execute_get_context_ids(
     """
     Execute get_context_ids tool.
 
-    Reads raw list data already collected by the list_available_* tools
-    (stored in state.cognitive.tool_results) and uses an LLM call to reason
-    over every field of every object, returning only the IDs relevant to the
-    user's intent.
-
-    Cross-entity relationships are handled automatically:
-      - The current_context (IDs already resolved in this turn) is injected
-        into the prompt so the LLM can follow relationship fields
-        (e.g. a proposal's `problem_ids` field) even when those IDs were
-        resolved from a *different* list tool.
-      - When source_tools includes multiple entity types the LLM can therefore
-        answer questions like "proposals for problem X" without requiring a
-        separate tool call.
+    Reads raw list data that was already collected by list_available_problems /
+    list_available_proposals / list_available_scenarios (stored in
+    state.cognitive.tool_results) and uses an LLM call to reason over every
+    field of every object, returning only the IDs that match the user's intent.
 
     Returns:
         {
@@ -177,6 +178,9 @@ def execute_get_context_ids(
     # ------------------------------------------------------------------ #
     tool_results = state.cognitive.tool_results
 
+    # Build a mapping  entity_type -> raw data, tolerating key variants
+    # (e.g. the selector might store them as "list_available_problems" or
+    #  with a collision suffix like "list_available_problems__1").
     def _find_result(key_prefix: str) -> Any:
         """Return the first tool_results value whose key starts with key_prefix."""
         for k, v in tool_results.items():
@@ -208,27 +212,7 @@ def execute_get_context_ids(
         }
 
     # ------------------------------------------------------------------ #
-    # 2. Build the prior-context block
-    #    Inject any IDs already resolved in this conversation turn so the
-    #    LLM can follow cross-entity relationship fields.
-    # ------------------------------------------------------------------ #
-    prior_context = state.cognitive.current_context
-    prior_context_block = ""
-    has_prior = any(
-        prior_context.get(k) for k in ("problems", "proposals", "scenarios")
-    )
-    if has_prior:
-        prior_context_block = f"""
-Previously resolved context IDs (from this conversation turn):
-{json.dumps(prior_context, indent=2)}
-
-Use these IDs to follow relationship fields in the data below
-(e.g. if a proposal has a `problem_ids` field that contains one of the
-resolved problem IDs, that proposal is relevant to the current context).
-"""
-
-    # ------------------------------------------------------------------ #
-    # 3. Build prompt
+    # 2. Build prompt
     # ------------------------------------------------------------------ #
     sections_block = json.dumps(sections, indent=2, default=str)
 
@@ -238,16 +222,9 @@ You are a semantic matching assistant for a digital twin platform about tourism 
 Your task: given a user intent and a set of object lists fetched from the backend,
 identify which objects (by their ID) are relevant to the intent.
 
-Consider ALL fields of each object (name, description, tags, location, relationships,
-foreign-key arrays such as `problem_ids`, `proposal_ids`, `scenario_ids`, etc.)
-when deciding relevance.
+Consider ALL fields of each object (name, description, tags, location, relationships, etc.)
+when deciding relevance. Be inclusive — if an object is plausibly related, include it.
 
-CROSS-ENTITY RELATIONSHIPS: If the user is asking about entities related to
-previously resolved ones (e.g. "proposals for these problems"), use the
-relationship fields in the data to find matching IDs even when those fields
-belong to a different entity type than the one being asked about.
-Be inclusive — if an object is plausibly related, include it.
-{prior_context_block}
 User intent:
 \"{user_intent}\"
 
@@ -265,7 +242,7 @@ Do not include any explanation or markdown. Return JSON only.
 """
 
     # ------------------------------------------------------------------ #
-    # 4. Call the LLM and parse
+    # 3. Call the LLM and parse
     # ------------------------------------------------------------------ #
     try:
         raw = llm_interaction(state, prompt).strip()
@@ -287,19 +264,10 @@ Do not include any explanation or markdown. Return JSON only.
 
     logger.info(f"get_context_ids resolved: {context_ids}")
 
-    # Merge with prior context rather than replacing it entirely, so that
-    # IDs resolved in a previous step of the same plan are not lost.
-    merged: Dict[str, list] = {}
-    for key in ("problems", "proposals", "scenarios"):
-        existing = prior_context.get(key, [])
-        new_ids = context_ids.get(key, [])
-        # Union, preserving order (existing first)
-        merged[key] = existing + [i for i in new_ids if i not in existing]
-
-    state.cognitive.current_context = merged
+    state.cognitive.current_context = context_ids
     return {
         "success": True,
-        "context_ids": merged,
+        "context_ids": context_ids,
     }
 
 
@@ -350,7 +318,141 @@ Answer:"""
 
     return {
         "success": True,
-        "message": answer,
+        "message": answer,   # ← "message" key is now always present
+    }
+
+
+
+
+# =============================================================================
+# NOT-YET-IMPLEMENTED CREATION STUBS
+# =============================================================================
+
+_NOT_IMPLEMENTED_MSG = (
+    "This feature is not yet available. "
+    "The ability to {action} is planned for a future release. "
+    "Please check back later or contact your system administrator."
+)
+
+
+def execute_create_new_problem(
+    state: AgentState,
+    name: str = "",
+    description: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Stub executor for create_new_problem — feature not yet implemented."""
+    logger.info(f"create_new_problem called (not implemented) | name='{name}'")
+    return {
+        "success": True,
+        "not_implemented": True,
+        "message": _NOT_IMPLEMENTED_MSG.format(action="create new problems"),
+        "received": {"name": name, "description": description},
+    }
+
+
+def execute_create_new_proposal(
+    state: AgentState,
+    name: str = "",
+    problem_id: str = "",
+    description: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Stub executor for create_new_proposal — feature not yet implemented."""
+    logger.info(f"create_new_proposal called (not implemented) | name='{name}'")
+    return {
+        "success": True,
+        "not_implemented": True,
+        "message": _NOT_IMPLEMENTED_MSG.format(action="create new proposals"),
+        "received": {"name": name, "problem_id": problem_id, "description": description},
+    }
+
+
+def execute_create_new_scenario(
+    state: AgentState,
+    name: str = "",
+    proposal_id: str = "",
+    description: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Stub executor for create_new_scenario — feature not yet implemented."""
+    logger.info(f"create_new_scenario called (not implemented) | name='{name}'")
+    return {
+        "success": True,
+        "not_implemented": True,
+        "message": _NOT_IMPLEMENTED_MSG.format(action="create new scenarios"),
+        "received": {"name": name, "proposal_id": proposal_id, "description": description},
+    }
+
+
+# =============================================================================
+# GLOSSARY LOOKUP
+# =============================================================================
+
+def execute_lookup_glossary(
+    state: AgentState,
+    query: str,
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Execute lookup_glossary tool.
+
+    Performs a case-insensitive fuzzy search over the GLOSSARY dict in config.
+    Matches the query tokens against: term name, aliases, and related_terms.
+    Returns all matching entries with their full detail.
+    """
+    from app.config import GLOSSARY
+
+    logger.info(f"Executing lookup_glossary | query='{query}'")
+
+    tokens = [t.strip().lower() for t in query.split() if t.strip()]
+    if not tokens:
+        return {
+            "success": False,
+            "error": "Empty query — please provide at least one search term.",
+            "matches": [],
+        }
+
+    matches = {}
+    for term, entry in GLOSSARY.items():
+        # Build a flat list of strings to match against
+        searchable = (
+            [term]
+            + entry.get("aliases", [])
+            + entry.get("related_terms", [])
+        )
+        searchable_lower = " ".join(s.lower() for s in searchable)
+
+        if any(tok in searchable_lower for tok in tokens):
+            matches[term] = entry
+
+    if not matches:
+        return {
+            "success": True,
+            "message": (
+                f"No glossary entries found for '{query}'. "
+                "Try broader keywords or ask about a specific platform concept."
+            ),
+            "matches": [],
+        }
+
+    # Format for readability in the output generator
+    formatted = []
+    for term, entry in matches.items():
+        formatted.append({
+            "term": term,
+            "definition": entry["definition"],
+            "aliases": entry.get("aliases", []),
+            "related_terms": entry.get("related_terms", []),
+            "examples": entry.get("examples", []),
+        })
+
+    logger.info(f"lookup_glossary found {len(formatted)} match(es) for '{query}'")
+
+    return {
+        "success": True,
+        "query": query,
+        "matches": formatted,
     }
 
 

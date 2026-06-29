@@ -32,11 +32,11 @@ def initialize_tools(state: AgentState) -> Command:
         logger.info("Registering default agent tools")
         registry.register_tools(get_all_agent_tools())
 
-    allowlist = state.cognitive.available_tools or None
-    available_tools = registry.get_context_tools(allowlist=allowlist)
-    state.cognitive.available_tools = list(available_tools.keys())
+    allowlist = state.cognitive.known_tools or None
+    known_tools = registry.get_context_tools(allowlist=allowlist)
+    state.cognitive.known_tools = list(known_tools.keys())
 
-    logger.info(f"Available tools: {state.cognitive.available_tools}")
+    logger.info(f"Available tools: {state.cognitive.known_tools}")
     return Command(update=state, goto="tool_selector")
 
 
@@ -44,8 +44,8 @@ def tool_selector_node(state: AgentState) -> Command:
     logger.info("Entering tool selector node")
 
     registry = get_tool_registry()
-    allowlist = state.cognitive.available_tools or None
-    tools_for_llm = registry.get_tools_for_llm(allowlist=allowlist)
+    tools_for_llm = registry.get_tools_for_llm(allowlist=None)
+    tools_for_llm_enabled = registry.get_tools_for_llm(allowlist=state.cognitive.enabled_tools)
 
     if not tools_for_llm:
         logger.warning("No tools available for this context")
@@ -63,6 +63,7 @@ def tool_selector_node(state: AgentState) -> Command:
     history = state.get_reasoning_context()
     history_block = format_messages(history) if history else "None"
     tools_json = json.dumps(tools_for_llm, indent=2)
+    available_tools_json = json.dumps(tools_for_llm_enabled, indent=2)
 
     prior_results_block = "None"
     if state.cognitive.tool_results:
@@ -99,6 +100,12 @@ Out of scope:
   "message": "..."
 }}
 
+Tool unavailable:
+{{
+  "action": "tool_unavailable",
+  "message": "..."
+}}
+
 No action needed (greetings, thanks, chitchat):
 {{
   "tool_name": null,
@@ -123,19 +130,6 @@ When the user asks for something that requires multiple steps (e.g. "list proble
 or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
 use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
 
-RULE 3b – CROSS-ENTITY RELATIONAL QUESTIONS:
-When the user asks about relationships between entity types (e.g. "which proposals are associated
-with this problem?", "what scenarios use these proposals?", "show me proposals for the problems
-we just discussed"), the plan MUST:
-  1. Fetch ALL entity lists that could contain the relationship field
-     (e.g. for "proposals for a problem": list_available_problems AND list_available_proposals,
-      because proposals store the problem_ids foreign key).
-  2. Call get_context_ids with source_tools set to ALL fetched list keys so the LLM
-     can follow the relationship fields across entity types.
-  3. Then call get_context_details and interact_with_context as needed.
-Do NOT call get_context_ids with only the list of the entity the user mentioned — always
-include the lists of ALL entity types involved in the relationship.
-
 RULE 4 – CONTEXT MUST BE FETCHED BEFORE QUERYING:
 If interact_with_context is in the plan AND get_context_details has NOT already produced
 results (check prior tool results), always prepend get_context_details to the plan.
@@ -144,6 +138,43 @@ RULE 5 – STAY ON TOPIC:
 This platform is about tourism management, overtourism, mobility, and related decision-support.
 If the user's request is unrelated to these topics, return:
   {{"action": "out_of_scope", "message": "..."}}
+
+RULE 6 – CREATION REQUESTS (not yet implemented):
+If the user wants to create, add, or register a new Problem, Proposal, or Scenario,
+map the intent to the corresponding tool:
+  - create_new_problem  → user wants to add/create a problem
+  - create_new_proposal → user wants to add/create a proposal or strategy
+  - create_new_scenario → user wants to add/create a scenario or simulation
+These tools are stubs: they will acknowledge the request and explain the feature is
+coming soon. Extract as much of name/description/parent-id from the user message as
+possible and pass them as arguments, so the response feels personal.
+
+RULE 7 – GLOSSARY / TERMINOLOGY QUESTIONS:
+If the user asks what a term means, asks for a definition, or uses vocabulary that is
+ambiguous and might map to a platform concept (e.g. "what is a scenario?",
+"what do you mean by proposal?", "cosa è un problema?"), call:
+  {{"tool_name": "lookup_glossary", "arguments": {{"query": "<the term(s) to look up>"}}}}
+You MAY also call lookup_glossary as a silent first step in a plan when the user intent
+is unclear and a terminology lookup would help you understand what entity type they mean.
+
+RULE 8 – TOOL AVAILABILITY
+
+The assistant knows about all tools listed under "Known tools", but may execute only the
+tools listed under "Tools available in the current execution mode".
+
+If the user's request would normally require a known tool that is not available in the
+current execution mode:
+
+- Do NOT choose another tool as a substitute.
+- Do NOT answer from memory.
+- Do NOT classify the request as out_of_scope.
+- Return
+
+{{
+  "action": "tool_unavailable",
+  "tool": "<tool_name>",
+  "message": "..."
+}}
 
 Previously collected tool results (available for argument resolution):
 {prior_results_block}
@@ -154,8 +185,11 @@ Conversation so far:
 New user message:
 "{message}"
 
-Available tools:
+Known tools:
 {tools_json}
+
+Tools available in the current execution mode:
+{available_tools_json}
 
 Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
 """
@@ -176,6 +210,12 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
             response_json.get("message", "Could you clarify your request?")
         ]
         return Command(update=state, goto="generate_output_message")
+    
+    if action == "tool_unavailable":
+        state.cognitive.messages_to_include = [
+            response_json.get("message", "The current request cannot be handle in the current context. Please change contex or use the standalone chat.")
+        ]
+        return Command(update=state, goto="generate_output_message")
 
     if action == "out_of_scope":
         state.cognitive.messages_to_include = [
@@ -183,10 +223,9 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
         ]
         return Command(update=state, goto="generate_output_message")
 
-    available_tool_names = {
-        t.get("function", {}).get("name")
-        for t in tools_for_llm
-        if t.get("function", {}).get("name")
+    enabled_tool_names = {
+        t["function"]["name"]
+        for t in tools_for_llm_enabled
     }
 
     if "tool_plan" in response_json:
@@ -199,11 +238,11 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
     tool_plan = [
         {"tool_name": step["tool_name"], "arguments": step.get("arguments", {})}
         for step in raw_plan
-        if step.get("tool_name") and step["tool_name"] in available_tool_names
+        if step.get("tool_name") and step["tool_name"] in enabled_tool_names
     ]
 
     for step in raw_plan:
-        if step.get("tool_name") and step["tool_name"] not in available_tool_names:
+        if step.get("tool_name") and step["tool_name"] not in enabled_tool_names:
             logger.warning(f"LLM planned unavailable tool '{step['tool_name']}', skipping")
 
     state.cognitive.tool_plan = tool_plan
@@ -219,7 +258,7 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
     state.add_trace(
         "tool_selection",
         "tool_selector",
-        {"tool_plan": tool_plan, "available_tools": list(available_tool_names)},
+        {"tool_plan": tool_plan, "known_tools": list(enabled_tool_names)},
     )
 
     logger.info(f"Tool plan: {tool_plan}")
