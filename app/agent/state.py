@@ -5,8 +5,8 @@ from datetime import datetime
 from enum import StrEnum, Enum
 import json
 
-from app.config import MAX_CONTEXT_WINDOW, DEFAULT_REASONING_CONTEXT_SIZE
-
+MAX_CONTEXT_WINDOW = 20
+DEFAULT_REASONING_CONTEXT_SIZE = 5
 
 @dataclass
 class ConversationMessage:

@@ -67,12 +67,17 @@ def create_get_context_ids_tool() -> ToolDefinition:
         name="get_context_ids",
         description=(
             "Resolve the user's intent into specific problem, proposal, and/or scenario IDs "
-            "by semantically matching the request against previously fetched list data."
+            "by semantically matching the request against previously fetched list data. "
+            "Also follows cross-entity relationships: if the user asks which proposals belong "
+            "to a problem (or vice versa), it will resolve the related IDs even when the "
+            "relationship field is stored on the other entity type."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Uses LLM reasoning to match the user's natural-language request against the full "
             "content of one or more already-fetched lists. "
+            "Accepts an optional 'prior_context' field that carries already-resolved IDs from "
+            "the current conversation turn so cross-entity relationships can be followed. "
             "Returns a structured dict {problems: [...], proposals: [...], scenarios: [...]} "
             "containing only the IDs that are relevant to the request. "
             "Always run the required list tools first, then call this tool to extract relevant IDs."
@@ -89,7 +94,9 @@ def create_get_context_ids_tool() -> ToolDefinition:
                 description=(
                     "List of tool result keys to search. "
                     "Valid values: 'list_available_problems', 'list_available_proposals', "
-                    "'list_available_scenarios'."
+                    "'list_available_scenarios'. "
+                    "For relational questions (e.g. 'proposals for this problem') include ALL "
+                    "relevant entity list keys so relationships can be followed."
                 ),
                 type="array",
                 required=True,

@@ -39,7 +39,6 @@ def execute_selected_tool(
         raise ValueError(f"Tool '{tool_name}' is disabled")
     
     # Get the executor function for this tool
-    # For now, this is a placeholder that we'll fill in with actual implementations
     executor = get_tool_executor(tool_name)
     
     if executor is None:
@@ -68,7 +67,6 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     
     This dispatcher maps tool names to their implementation functions.
     """
-    # Map tool names to executor functions
     executors: Dict[str, Callable] = {
         # System
         "get_system_capabilities": execute_get_system_capabilities,
@@ -142,10 +140,19 @@ def execute_get_context_ids(
     """
     Execute get_context_ids tool.
 
-    Reads raw list data that was already collected by list_available_problems /
-    list_available_proposals / list_available_scenarios (stored in
-    state.cognitive.tool_results) and uses an LLM call to reason over every
-    field of every object, returning only the IDs that match the user's intent.
+    Reads raw list data already collected by the list_available_* tools
+    (stored in state.cognitive.tool_results) and uses an LLM call to reason
+    over every field of every object, returning only the IDs relevant to the
+    user's intent.
+
+    Cross-entity relationships are handled automatically:
+      - The current_context (IDs already resolved in this turn) is injected
+        into the prompt so the LLM can follow relationship fields
+        (e.g. a proposal's `problem_ids` field) even when those IDs were
+        resolved from a *different* list tool.
+      - When source_tools includes multiple entity types the LLM can therefore
+        answer questions like "proposals for problem X" without requiring a
+        separate tool call.
 
     Returns:
         {
@@ -170,9 +177,6 @@ def execute_get_context_ids(
     # ------------------------------------------------------------------ #
     tool_results = state.cognitive.tool_results
 
-    # Build a mapping  entity_type -> raw data, tolerating key variants
-    # (e.g. the selector might store them as "list_available_problems" or
-    #  with a collision suffix like "list_available_problems__1").
     def _find_result(key_prefix: str) -> Any:
         """Return the first tool_results value whose key starts with key_prefix."""
         for k, v in tool_results.items():
@@ -204,7 +208,27 @@ def execute_get_context_ids(
         }
 
     # ------------------------------------------------------------------ #
-    # 2. Build prompt
+    # 2. Build the prior-context block
+    #    Inject any IDs already resolved in this conversation turn so the
+    #    LLM can follow cross-entity relationship fields.
+    # ------------------------------------------------------------------ #
+    prior_context = state.cognitive.current_context
+    prior_context_block = ""
+    has_prior = any(
+        prior_context.get(k) for k in ("problems", "proposals", "scenarios")
+    )
+    if has_prior:
+        prior_context_block = f"""
+Previously resolved context IDs (from this conversation turn):
+{json.dumps(prior_context, indent=2)}
+
+Use these IDs to follow relationship fields in the data below
+(e.g. if a proposal has a `problem_ids` field that contains one of the
+resolved problem IDs, that proposal is relevant to the current context).
+"""
+
+    # ------------------------------------------------------------------ #
+    # 3. Build prompt
     # ------------------------------------------------------------------ #
     sections_block = json.dumps(sections, indent=2, default=str)
 
@@ -214,9 +238,16 @@ You are a semantic matching assistant for a digital twin platform about tourism 
 Your task: given a user intent and a set of object lists fetched from the backend,
 identify which objects (by their ID) are relevant to the intent.
 
-Consider ALL fields of each object (name, description, tags, location, relationships, etc.)
-when deciding relevance. Be inclusive — if an object is plausibly related, include it.
+Consider ALL fields of each object (name, description, tags, location, relationships,
+foreign-key arrays such as `problem_ids`, `proposal_ids`, `scenario_ids`, etc.)
+when deciding relevance.
 
+CROSS-ENTITY RELATIONSHIPS: If the user is asking about entities related to
+previously resolved ones (e.g. "proposals for these problems"), use the
+relationship fields in the data to find matching IDs even when those fields
+belong to a different entity type than the one being asked about.
+Be inclusive — if an object is plausibly related, include it.
+{prior_context_block}
 User intent:
 \"{user_intent}\"
 
@@ -234,7 +265,7 @@ Do not include any explanation or markdown. Return JSON only.
 """
 
     # ------------------------------------------------------------------ #
-    # 3. Call the LLM and parse
+    # 4. Call the LLM and parse
     # ------------------------------------------------------------------ #
     try:
         raw = llm_interaction(state, prompt).strip()
@@ -256,10 +287,19 @@ Do not include any explanation or markdown. Return JSON only.
 
     logger.info(f"get_context_ids resolved: {context_ids}")
 
-    state.cognitive.current_context = context_ids
+    # Merge with prior context rather than replacing it entirely, so that
+    # IDs resolved in a previous step of the same plan are not lost.
+    merged: Dict[str, list] = {}
+    for key in ("problems", "proposals", "scenarios"):
+        existing = prior_context.get(key, [])
+        new_ids = context_ids.get(key, [])
+        # Union, preserving order (existing first)
+        merged[key] = existing + [i for i in new_ids if i not in existing]
+
+    state.cognitive.current_context = merged
     return {
         "success": True,
-        "context_ids": context_ids,
+        "context_ids": merged,
     }
 
 
@@ -310,7 +350,7 @@ Answer:"""
 
     return {
         "success": True,
-        "message": answer,   # ← "message" key is now always present
+        "message": answer,
     }
 
 

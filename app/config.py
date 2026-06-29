@@ -1,12 +1,3 @@
-ALLOWED_ROLES = {
-    "Data Analyst": "has knowledge of numerical or structured scenario data.",
-    "Environment Specialist": "can reason about environmental impacts and sustainability.",
-    "Urban Planner": "can reason about infrastructure, mobility, and land-use tradeoffs.",
-}
-
-MAX_CONTEXT_WINDOW = 20
-DEFAULT_REASONING_CONTEXT_SIZE = 5
-
 SYSTEM_DESCRIPTION = """
 # General description
 The system supports analysis and decision-making for overtourism and mobility problems,
@@ -28,5 +19,3 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
 
 """
-
-BASE_SCENARIO_ID = "scenario_base" #TODO place it somewhere else

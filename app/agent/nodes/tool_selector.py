@@ -123,6 +123,19 @@ When the user asks for something that requires multiple steps (e.g. "list proble
 or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
 use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
 
+RULE 3b – CROSS-ENTITY RELATIONAL QUESTIONS:
+When the user asks about relationships between entity types (e.g. "which proposals are associated
+with this problem?", "what scenarios use these proposals?", "show me proposals for the problems
+we just discussed"), the plan MUST:
+  1. Fetch ALL entity lists that could contain the relationship field
+     (e.g. for "proposals for a problem": list_available_problems AND list_available_proposals,
+      because proposals store the problem_ids foreign key).
+  2. Call get_context_ids with source_tools set to ALL fetched list keys so the LLM
+     can follow the relationship fields across entity types.
+  3. Then call get_context_details and interact_with_context as needed.
+Do NOT call get_context_ids with only the list of the entity the user mentioned — always
+include the lists of ALL entity types involved in the relationship.
+
 RULE 4 – CONTEXT MUST BE FETCHED BEFORE QUERYING:
 If interact_with_context is in the plan AND get_context_details has NOT already produced
 results (check prior tool results), always prepend get_context_details to the plan.
