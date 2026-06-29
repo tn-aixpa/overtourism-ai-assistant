@@ -66,3 +66,60 @@ def get_data_from_context(
     return {
         "retrieved": retrieved,
     }
+
+
+@tool
+def create_new_problem(
+    name: str,
+    description: str,
+    objectives: str | None = None,
+    additional_data: str | None = None,
+    tenant: str = "molveno",
+):
+    """
+    Create a new problem instance.
+
+    Args:
+        payload: Dictionary of other user defined data
+
+    Returns:
+        A dict with a confirmation message
+    """
+
+    logger.info("Entered tool create_problem_instance")
+
+    url = f"{BACKEND_URL}{tenant}/problems/"
+
+    headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+    body = {
+        "name": name,
+        "description": description,
+        "extras": {},
+    }
+
+    if objectives:
+        body["extras"]["objectives"] = objectives
+
+    if additional_data:
+        body["extras"]["additional_data"] = additional_data
+
+    #TODO: add other fields
+
+    # --- actual request ---
+    response = requests.post(url, headers=headers, json=body)
+
+    # Log response for comparison
+    logger.info(f"Response status: {response.status_code}")
+    try:
+        logger.info(f"Response body: {response.json()}")
+    except Exception:
+        logger.info(f"Response text: {response.text}")
+
+    response.raise_for_status()
+
+    return response.json()

@@ -5,7 +5,7 @@ Tool registry for the agentic system.
 from typing import Dict, List, Optional, Any
 import logging
 
-from app.tools.tool_schema import ToolDefinition, ToolCategory
+from app.tools.tool_schema import ToolDefinition
 
 logger = logging.getLogger(__name__)
 

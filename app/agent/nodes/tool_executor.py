@@ -11,6 +11,7 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.tools.tool_registry import get_tool_registry
+from app.tools.tool_schema import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ def execute_selected_tool(
     if not tool_def.enabled:
         raise ValueError(f"Tool '{tool_name}' is disabled")
     
+    validate_tool_arguments(tool_def, tool_arguments)
+    
     # Get the executor function for this tool
     # For now, this is a placeholder that we'll fill in with actual implementations
     executor = get_tool_executor(tool_name)
@@ -61,6 +64,25 @@ def execute_selected_tool(
             "error": str(e),
         }
 
+def validate_tool_arguments(tool_def: ToolDefinition, args: dict) -> None:
+
+    for param in tool_def.parameters:
+        if param.required:
+            if param.name not in args:
+                raise ValueError(
+                    f"Missing required parameter '{param.name}' for tool '{tool_def.name}'"
+                )
+
+            value = args[param.name]
+            if value is None:
+                raise ValueError(
+                    f"Parameter '{param.name}' cannot be null"
+                )
+
+            if isinstance(value, str) and not value.strip():
+                raise ValueError(
+                    f"Parameter '{param.name}' cannot be empty"
+                )
 
 def get_tool_executor(tool_name: str) -> Callable | None:
     """
@@ -337,19 +359,25 @@ _NOT_IMPLEMENTED_MSG = (
 
 def execute_create_new_problem(
     state: AgentState,
-    name: str = "",
-    description: str = "",
-    **kwargs,
+    name: str,
+    description: str,
+    objectives: str | None = None,
+    additional_data: str | None = None,
 ) -> Dict[str, Any]:
-    """Stub executor for create_new_problem — feature not yet implemented."""
-    logger.info(f"create_new_problem called (not implemented) | name='{name}'")
-    return {
-        "success": True,
-        "not_implemented": True,
-        "message": _NOT_IMPLEMENTED_MSG.format(action="create new problems"),
-        "received": {"name": name, "description": description},
-    }
 
+    from app.tools.backend_tools import create_new_problem
+
+    result = create_new_problem.invoke(
+        {
+            "name": name,
+            "description": description,
+            "objectives": objectives,
+            "additional_data": additional_data,
+        }
+    )
+
+    return result
+      
 
 def execute_create_new_proposal(
     state: AgentState,

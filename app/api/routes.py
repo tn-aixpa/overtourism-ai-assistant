@@ -99,7 +99,10 @@ async def run_agent_endpoint(
                 "lookup_glossary",
             ]
         else:
-            state.cognitive.enabled_tools = state.cognitive.known_tools
+            # Non-integrated mode: all tools are available.
+            # enabled_tools is intentionally left empty here; initialize_tools will
+            # populate it with the full known_tools list once the registry is ready.
+            state.cognitive.enabled_tools = []
 
         save_state(state)
 

@@ -36,7 +36,13 @@ def initialize_tools(state: AgentState) -> Command:
     known_tools = registry.get_context_tools(allowlist=allowlist)
     state.cognitive.known_tools = list(known_tools.keys())
 
-    logger.info(f"Available tools: {state.cognitive.known_tools}")
+    # In non-integrated mode enabled_tools is not pre-set by the route, so
+    # make all known tools available. In integrated mode the route already
+    # wrote the restricted allowlist and we must not overwrite it.
+    if not state.integrated_mode:
+        state.cognitive.enabled_tools = state.cognitive.known_tools
+
+    logger.info(f"Available tools: {state.cognitive.enabled_tools}")
     return Command(update=state, goto="tool_selector")
 
 

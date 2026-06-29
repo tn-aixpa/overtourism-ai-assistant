@@ -165,10 +165,22 @@ def create_new_problem_tool() -> ToolDefinition:
                 name="description",
                 description="Detailed description of the problem to be addressed.",
                 type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="objectives",
+                description="The objectives we want to achieve when addressing the problem.",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="additional_data",
+                description="Additional data or piece of information useful to understand the problem.",
+                type="string",
                 required=False,
             ),
         ],
-        output_description="Acknowledgement that the feature is not yet implemented.",
+        output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "problem", "not-implemented"],
     )
 
