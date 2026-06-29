@@ -30,5 +30,3 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 """
 
 BASE_SCENARIO_ID = "scenario_base" #TODO place it somewhere else
-
-VERBOSE = False

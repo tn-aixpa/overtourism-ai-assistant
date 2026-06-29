@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from fastapi import (APIRouter,
-                     HTTPException,
-                     UploadFile,
-                     BackgroundTasks,
-                     File, Form, Body)
+from fastapi import APIRouter, HTTPException, UploadFile, BackgroundTasks, File, Form
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
@@ -20,21 +16,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 def _run_agent(key: str, state: AgentState):
-    """
-    Runs synchronously inside a thread — never call from the event loop directly.
-    """
+    """Runs synchronously inside a thread — never call from the event loop directly."""
     try:
         logger.info(f"Message sent from conversation {key}")
 
-        # Integrated mode enters at inject_tools (tools already filtered by API layer).
-        # Standard mode enters at the default initialize_tools entry point.
-        invoke_config = (
-            {"configurable": {"__start__": "inject_tools"}}
-            if getattr(state, "integrated_mode", False)
-            else None
-        )
-        updated = agent_app.invoke(state, config=invoke_config)
+        updated = agent_app.invoke(state)
 
         state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
         final_state = AgentState(**state_dict)
@@ -75,7 +63,7 @@ async def run_agent_endpoint(
     session_id: str = Form(...),
     files: list[UploadFile] = File([]),
     integrated_mode: bool = Form(default=False),
-    context: list[str] = Form(default=[])
+    context: list[str] = Form(default=[]),
 ):
     key = session_id or generate_key()
     lock = _get_lock(key)
@@ -100,20 +88,16 @@ async def run_agent_endpoint(
         if integrated_mode:
             logger.info(f"Running in integrated mode with context: {context}")
             assert len(context) > 0, "Context is required in integrated mode"
-
-            #TODO: to extent in future
             state.cognitive.current_context = {
                 "problems": [],
                 "proposals": [],
-                "scenarios": context
+                "scenarios": context,
             }
-            state.cognitive.available_tools = ['get_context_details', 'interact_with_context']
-        
+            state.cognitive.available_tools = ["get_context_details", "interact_with_context"]
+
         save_state(state)
 
-    # Single graph handles both modes; no graph parameter needed
     background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
-
     return {"session_id": key}
 
 
@@ -140,33 +124,6 @@ async def stream_events(session_id: str):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@router.post("/agent/inject_sliders")
-async def inject_sliders_endpoint(
-    background_tasks: BackgroundTasks,
-    payload: dict = Body(...)
-):
-    logger.info(f"Received slider indexes {payload}")
-    session_id = payload.get("session_id")
-    index_diffs = payload.get("values", {})
-    lock = _get_lock(session_id)
-
-    async with lock:
-        state = load_state(session_id)
-        if not state:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        state.cognitive.scenario_validated_indexes = index_diffs
-        state.sliders_data = None
-        state.user_input = "Send index change via interface"
-        logger.info(f"Injected sliders for session: {index_diffs}")
-        save_state(state) 
-
-    # integrated_mode is already set on the persisted state, so the graph's
-    # resume_router will correctly route to inject_tools on next invocation
-    background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state)
-
-    return {"session_id": session_id}
-
 
 @router.get("/agent/feedback")
 async def submit_feedback_get(
@@ -190,8 +147,7 @@ async def submit_feedback_get(
     if msg.role != "assistant":
         raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
 
-    normalized_vote = vote if vote in {"up", "down"} else None
-    msg.vote = normalized_vote
+    msg.vote = vote if vote in {"up", "down"} else None
     msg.comment = comment
 
     save_state(state)

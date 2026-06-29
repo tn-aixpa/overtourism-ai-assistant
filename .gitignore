@@ -179,6 +179,3 @@ logs/*
 Output/
 testdata/
 *.parquet
-
-#Project
-secrets.txt

@@ -11,7 +11,6 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.tools.tool_registry import get_tool_registry
-from app.agent.events import publish
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +338,6 @@ def tool_executor_node(state: AgentState) -> Command:
     tool_arguments = current_step.get("arguments", {})
 
     logger.info(f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}")
-    publish(state.session_id, f"Executing: {tool_name}")
 
     # Keep legacy aliases in sync so existing executors that read
     # state.cognitive.selected_tool / tool_arguments continue to work.

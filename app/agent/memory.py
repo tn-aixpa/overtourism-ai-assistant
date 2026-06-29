@@ -27,9 +27,6 @@ def load_state(session_id: Optional[str]) -> Optional[AgentState]:
         return None
     return _STATE_STORE.get(session_id)
 
-def _save_conversation(state: AgentState):
-    state.save()
-    state.dump_to_file(f"logs/state_{state.session_id}.json")
 
 def save_state(state: AgentState) -> None:
     if not state.session_id:
@@ -37,7 +34,7 @@ def save_state(state: AgentState) -> None:
     _STATE_STORE[state.session_id] = state
     logger.debug(f"State saved for session {state.session_id}")
 
-    _save_conversation(state)
+    state.dump_to_file(f"logs/state_{state.session_id}.json")
 
 
 def delete_state(session_id: str) -> None:

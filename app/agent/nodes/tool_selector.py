@@ -2,7 +2,6 @@
 Tool selection node for the agentic system.
 
 Uses LLM reasoning to select which tool the agent should execute based on user input.
-This is the core of the agentic decision-making.
 """
 
 import logging
@@ -11,54 +10,40 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.tools.tool_registry import get_tool_registry
 from app.tools.agent_tools import get_all_agent_tools
-from app.agent.events import publish
 
 logger = logging.getLogger(__name__)
 
 
 def initialize_tools(state: AgentState) -> Command:
     """
-    Initialize available tools based on user context and access control.
+    Initialize available tools and route to tool_selector.
 
-    This node is the graph entry point for standard mode. If the session is
-    waiting for user input (e.g. a confirmation), route directly to
-    WAIT_USER_INPUT instead of re-running tool selection.
+    Entry point for both standard and integrated modes.
+    If a confirmation flow is in progress, resumes it directly.
     """
     logger.info("Initializing available tools")
-    publish(state.session_id, "Analyzing your request...")
 
-    # Resume a suspended confirmation flow without re-running tool selection.
     if state.waiting_for and state.user_input:
         logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
         return Command(update=state, goto="WAIT_USER_INPUT")
 
-    # Register tools once per process lifetime (idempotent guard).
     registry = get_tool_registry()
     if not registry.list_tool_names():
         logger.info("Registering default agent tools")
         registry.register_tools(get_all_agent_tools())
 
-    # Resolve the effective tool allowlist.
-    # state.cognitive.available_tools is populated by the API layer when a
-    # subset of tools should be exposed (e.g. integrated mode); otherwise it
-    # is empty and we expose every enabled tool.
     allowlist = state.cognitive.available_tools or None
-
     available_tools = registry.get_context_tools(allowlist=allowlist)
     state.cognitive.available_tools = list(available_tools.keys())
 
     logger.info(f"Available tools: {state.cognitive.available_tools}")
-
     return Command(update=state, goto="tool_selector")
 
 
 def tool_selector_node(state: AgentState) -> Command:
     logger.info("Entering tool selector node")
-    publish(state.session_id, "Determining next action...")
 
     registry = get_tool_registry()
-
-    # Use the allowlist already resolved by initialize_tools / inject_tools_node.
     allowlist = state.cognitive.available_tools or None
     tools_for_llm = registry.get_tools_for_llm(allowlist=allowlist)
 
@@ -79,7 +64,6 @@ def tool_selector_node(state: AgentState) -> Command:
     history_block = format_messages(history) if history else "None"
     tools_json = json.dumps(tools_for_llm, indent=2)
 
-    # Summarise previously collected tool results so the LLM can use them
     prior_results_block = "None"
     if state.cognitive.tool_results:
         prior_results_block = json.dumps(state.cognitive.tool_results, indent=2, default=str)
@@ -143,6 +127,11 @@ RULE 4 – CONTEXT MUST BE FETCHED BEFORE QUERYING:
 If interact_with_context is in the plan AND get_context_details has NOT already produced
 results (check prior tool results), always prepend get_context_details to the plan.
 
+RULE 5 – STAY ON TOPIC:
+This platform is about tourism management, overtourism, mobility, and related decision-support.
+If the user's request is unrelated to these topics, return:
+  {{"action": "out_of_scope", "message": "..."}}
+
 Previously collected tool results (available for argument resolution):
 {prior_results_block}
 
@@ -160,16 +149,8 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
 
     try:
         raw = llm_interaction(state, prompt).strip()
-
-        raw = re.sub(
-            r"^```(?:json)?\s*|\s*```$",
-            "",
-            raw,
-            flags=re.MULTILINE,
-        ).strip()
-
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
         response_json = json.loads(raw)
-
     except Exception as e:
         logger.exception("Error parsing tool selection response")
         state.cognitive.error_details = str(e)
@@ -195,7 +176,6 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
         if t.get("function", {}).get("name")
     }
 
-    # ---- Normalise response into a tool_plan list ----
     if "tool_plan" in response_json:
         raw_plan = response_json["tool_plan"]
     elif response_json.get("tool_name"):
@@ -203,18 +183,19 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
     else:
         raw_plan = []
 
-    # Validate each step against available tools
-    tool_plan = []
+    tool_plan = [
+        {"tool_name": step["tool_name"], "arguments": step.get("arguments", {})}
+        for step in raw_plan
+        if step.get("tool_name") and step["tool_name"] in available_tool_names
+    ]
+
     for step in raw_plan:
-        tool_name = step.get("tool_name")
-        if tool_name and tool_name in available_tool_names:
-            tool_plan.append({"tool_name": tool_name, "arguments": step.get("arguments", {})})
-        elif tool_name:
-            logger.warning(f"LLM planned unavailable tool '{tool_name}', skipping")
+        if step.get("tool_name") and step["tool_name"] not in available_tool_names:
+            logger.warning(f"LLM planned unavailable tool '{step['tool_name']}', skipping")
 
     state.cognitive.tool_plan = tool_plan
     state.cognitive.tool_plan_index = 0
-    # Convenience aliases kept in sync with first step for backwards compat
+
     if tool_plan:
         state.cognitive.selected_tool = tool_plan[0]["tool_name"]
         state.cognitive.tool_arguments = tool_plan[0]["arguments"]
@@ -225,50 +206,11 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
     state.add_trace(
         "tool_selection",
         "tool_selector",
-        {
-            "tool_plan": tool_plan,
-            "available_tools": list(available_tool_names),
-        },
+        {"tool_plan": tool_plan, "available_tools": list(available_tool_names)},
     )
 
     logger.info(f"Tool plan: {tool_plan}")
 
     if tool_plan:
         return Command(update=state, goto="tool_executor")
-
     return Command(update=state, goto="generate_output_message")
-    
-def inject_tools_node(state: AgentState) -> Command:
-    """
-    Integrated-mode fast path: inject tools filtered by the allowlist already
-    set on state.cognitive.available_tools by the API layer.
-
-    Falls back to all enabled tools when the allowlist is empty.
-    Also handles resuming a suspended confirmation flow in integrated mode.
-    """
-    logger.info(
-        "Injecting tools for integrated mode "
-    )
-    publish(state.session_id, "Analyzing your request...")
-
-    # Resume a suspended confirmation flow without re-running tool selection.
-    if state.waiting_for and state.user_input:
-        logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
-        return Command(update=state, goto="WAIT_USER_INPUT")
-
-    # Register tools once per process lifetime (idempotent guard).
-    registry = get_tool_registry()
-    if not registry.list_tool_names():
-        logger.info("Registering default agent tools")
-        registry.register_tools(get_all_agent_tools())
-
-    # Honour the allowlist set by the API layer (routes.py).
-    # state.cognitive.available_tools is populated there; if empty, expose all.
-    allowlist = state.cognitive.available_tools or None
-
-    available_tools = registry.get_context_tools(allowlist=allowlist)
-    state.cognitive.available_tools = list(available_tools.keys())
-
-    logger.info(f"Injected tools for integrated mode: {state.cognitive.available_tools}")
-
-    return Command(update=state, goto="tool_selector")
