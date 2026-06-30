@@ -152,10 +152,23 @@ map the intent to the corresponding tool:
   - create_new_proposal → user wants to add/create a proposal or strategy
   - create_new_scenario → user wants to add/create a scenario or simulation
 These tools are stubs: they will acknowledge the request and explain the feature is
-coming soon. Extract as much of name/description/parent-id from the user message as
-possible and pass them as arguments, so the response feels personal.
+coming soon. Extract as much of name/description from the user message as possible
+and pass them as arguments, so the response feels personal.
 Only extract data the user actually provided — never invent or suggest mitigation
 strategies, interventions, or action ideas of your own as part of the arguments.
+
+PARENT-ID RESOLUTION (problem_id for create_new_proposal, proposal_id for create_new_scenario):
+The user almost never knows or types the literal ID — they refer to the parent entity by
+name or description (e.g. "the second problem", "the parking problem"). You must NEVER
+invent, guess, or pattern-match an ID string yourself.
+  - If the user's message (or prior conversation) already contains an explicit ID string for
+    the parent entity, you may pass it directly.
+  - Otherwise, build a tool_plan that resolves it first: prepend list_available_problems
+    (for a proposal's problem_id) or list_available_proposals (for a scenario's proposal_id),
+    followed by get_context_ids with the user's intent and that source tool, and ONLY THEN
+    the creation tool — and in the creation tool's arguments, OMIT the id parameter entirely
+    (leave it out of "arguments") rather than filling it with a guess. The executor will
+    auto-resolve it from the get_context_ids result.
 
 RULE 7 – GLOSSARY / TERMINOLOGY QUESTIONS:
 If the user asks what a term means, asks for a definition, or uses vocabulary that is

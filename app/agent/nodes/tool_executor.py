@@ -24,6 +24,51 @@ CONFIRMATION_REQUIRED_TOOLS = {
 }
 
 
+# Tools whose creation depends on a parent entity that the user may have
+# referred to by name rather than by ID. Maps the tool to the (parameter,
+# current_context key) used to auto-resolve the ID once get_context_ids has
+# run earlier in the same plan.
+_PARENT_ID_RESOLUTION = {
+    "create_new_proposal": ("problem_id", "problems"),
+    "create_new_scenario": ("proposal_id", "proposals"),
+}
+
+
+def _resolve_parent_id(state: AgentState, tool_name: str, tool_arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """If the tool needs a parent id that wasn't explicitly provided, try to
+    fill it in from IDs already resolved by get_context_ids earlier in the
+    plan. Only auto-fills when exactly one candidate is available — multiple
+    or zero candidates are left for the missing-parameter check to surface,
+    rather than guessed."""
+    mapping = _PARENT_ID_RESOLUTION.get(tool_name)
+    if not mapping:
+        return tool_arguments
+
+    param_name, context_key = mapping
+    if tool_arguments.get(param_name):
+        return tool_arguments
+
+    candidates = (state.cognitive.current_context or {}).get(context_key, [])
+    if len(candidates) == 1:
+        tool_arguments = dict(tool_arguments)
+        tool_arguments[param_name] = candidates[0]
+        logger.info(f"Auto-resolved '{param_name}'={candidates[0]!r} from current_context for '{tool_name}'")
+
+    return tool_arguments
+
+
+def _missing_required_params(tool_def: ToolDefinition, args: Dict[str, Any]) -> list:
+    """Return the list of required parameter names that are missing or empty."""
+    missing = []
+    for param in tool_def.parameters:
+        if not param.required:
+            continue
+        value = args.get(param.name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(param.name)
+    return missing
+
+
 def execute_selected_tool(
     tool_name: str,
     tool_arguments: Dict[str, Any],
@@ -123,6 +168,124 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     }
     
     return executors.get(tool_name)
+
+
+def tool_executor_node(state: AgentState) -> Command:
+    """
+    Main tool executor node that iterates through the tool plan.
+
+    On each graph visit it executes the *current* tool (tool_plan[tool_plan_index]),
+    stores the result in cognitive.tool_results, advances the index, and either:
+      - loops back to itself (via tool_executor) for the next tool in the plan, or
+      - forwards to generate_output_message when the plan is exhausted.
+
+    Confirmation-requiring tools still pause the plan and route to WAIT_USER_INPUT;
+    when the user confirms, the waiting node resumes here.
+    """
+    plan = state.cognitive.tool_plan
+    idx = state.cognitive.tool_plan_index
+
+    if not plan or idx >= len(plan):
+        logger.warning("tool_executor reached with empty/exhausted plan")
+        return Command(update=state, goto="generate_output_message")
+
+    current_step = plan[idx]
+    tool_name = current_step["tool_name"]
+    tool_arguments = current_step.get("arguments", {})
+
+    logger.info(f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}")
+
+    # Try to fill in a parent id (problem_id / proposal_id) that the user
+    # referred to by name rather than by literal ID, using whatever
+    # get_context_ids already resolved earlier in this plan.
+    tool_arguments = _resolve_parent_id(state, tool_name, tool_arguments)
+
+    # Keep legacy aliases in sync so existing executors that read
+    # state.cognitive.selected_tool / tool_arguments continue to work.
+    state.cognitive.selected_tool = tool_name
+    state.cognitive.tool_arguments = tool_arguments
+
+    # ---- Required-parameter check ----
+    # Validate BEFORE asking for confirmation: confirming a recap that is
+    # missing required data (and only failing afterwards) is confusing and
+    # wastes a turn. If something required is still missing, ask for it
+    # directly instead of entering the confirmation flow.
+    registry = get_tool_registry()
+    tool_def = registry.get_tool(tool_name)
+    if tool_def:
+        missing = _missing_required_params(tool_def, tool_arguments)
+        if missing:
+            logger.info(f"'{tool_name}' missing required params: {missing}")
+            state.cognitive.tool_confirmed = False
+            state.cognitive.tool_confirmation_needed = False
+            readable = ", ".join(missing)
+            state.cognitive.messages_to_include = [
+                f"To proceed I still need the following: {readable}. Could you provide it?"
+            ]
+            return Command(update=state, goto="generate_output_message")
+
+    # ---- Confirmation gate ----
+    # Creation tools must never run silently: the first time we reach one of
+    # them, stop and ask the user to confirm a recap of the data that is
+    # about to be submitted. Only proceed once the user has explicitly
+    # confirmed (tool_confirmed is set by WAIT_USER_INPUT after a "yes").
+    if tool_name in CONFIRMATION_REQUIRED_TOOLS and not state.cognitive.tool_confirmed:
+        logger.info(f"Pausing '{tool_name}' for user confirmation")
+        state.cognitive.tool_confirmation_needed = True
+        return Command(update=state, goto="WAIT_USER_INPUT")
+
+    # Confirmation (if it was required) has been consumed for this step.
+    state.cognitive.tool_confirmed = False
+    state.cognitive.tool_confirmation_needed = False
+
+    try:
+        result = execute_selected_tool(tool_name, tool_arguments, state)
+
+        state.cognitive.tool_result = result
+
+        # ---- Persist result in tool_results dict ----
+        # Use a unique key: tool_name, or tool_name__N if already present.
+        result_key = tool_name
+        collision = 0
+        while result_key in state.cognitive.tool_results:
+            collision += 1
+            result_key = f"{tool_name}__{collision}"
+        state.cognitive.tool_results[result_key] = result
+
+        state.add_trace(
+            "tool_execution",
+            tool_name,
+            {"plan_index": idx, "result_key": result_key, "result": result},
+        )
+
+        logger.info(f"Tool '{tool_name}' result stored as '{result_key}'")
+
+        if not result["success"]:
+            state.cognitive.error_details = result.get("error", "Unknown error")
+            return Command(update=state, goto="error")
+
+        # Confirmation pause: halt the plan here until the user responds.
+        if state.cognitive.tool_confirmation_needed:
+            # tool_plan_index is NOT advanced — after confirmation the waiting
+            # node will route back here and we will advance then.
+            return Command(update=state, goto="WAIT_USER_INPUT")
+
+        # Advance to next tool
+        state.cognitive.tool_plan_index = idx + 1
+
+        # More tools in the plan?
+        if state.cognitive.tool_plan_index < len(plan):
+            next_tool = plan[state.cognitive.tool_plan_index]["tool_name"]
+            logger.info(f"Continuing to next tool in plan: {next_tool}")
+            return Command(update=state, goto="tool_executor")
+
+        # Plan exhausted — generate final response.
+        return Command(update=state, goto="generate_output_message")
+
+    except Exception as e:
+        logger.error(f"Exception in tool executor: {e}", exc_info=True)
+        state.cognitive.error_details = str(e)
+        return Command(update=state, goto="error")
 
 
 # =============================================================================
@@ -500,97 +663,3 @@ def execute_lookup_glossary(
         "query": query,
         "matches": formatted,
     }
-
-
-def tool_executor_node(state: AgentState) -> Command:
-    """
-    Main tool executor node that iterates through the tool plan.
-
-    On each graph visit it executes the *current* tool (tool_plan[tool_plan_index]),
-    stores the result in cognitive.tool_results, advances the index, and either:
-      - loops back to itself (via tool_executor) for the next tool in the plan, or
-      - forwards to generate_output_message when the plan is exhausted.
-
-    Confirmation-requiring tools still pause the plan and route to WAIT_USER_INPUT;
-    when the user confirms, the waiting node resumes here.
-    """
-    plan = state.cognitive.tool_plan
-    idx = state.cognitive.tool_plan_index
-
-    if not plan or idx >= len(plan):
-        logger.warning("tool_executor reached with empty/exhausted plan")
-        return Command(update=state, goto="generate_output_message")
-
-    current_step = plan[idx]
-    tool_name = current_step["tool_name"]
-    tool_arguments = current_step.get("arguments", {})
-
-    logger.info(f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}")
-
-    # Keep legacy aliases in sync so existing executors that read
-    # state.cognitive.selected_tool / tool_arguments continue to work.
-    state.cognitive.selected_tool = tool_name
-    state.cognitive.tool_arguments = tool_arguments
-
-    # ---- Confirmation gate ----
-    # Creation tools must never run silently: the first time we reach one of
-    # them, stop and ask the user to confirm a recap of the data that is
-    # about to be submitted. Only proceed once the user has explicitly
-    # confirmed (tool_confirmed is set by WAIT_USER_INPUT after a "yes").
-    if tool_name in CONFIRMATION_REQUIRED_TOOLS and not state.cognitive.tool_confirmed:
-        logger.info(f"Pausing '{tool_name}' for user confirmation")
-        state.cognitive.tool_confirmation_needed = True
-        return Command(update=state, goto="WAIT_USER_INPUT")
-
-    # Confirmation (if it was required) has been consumed for this step.
-    state.cognitive.tool_confirmed = False
-    state.cognitive.tool_confirmation_needed = False
-
-    try:
-        result = execute_selected_tool(tool_name, tool_arguments, state)
-
-        state.cognitive.tool_result = result
-
-        # ---- Persist result in tool_results dict ----
-        # Use a unique key: tool_name, or tool_name__N if already present.
-        result_key = tool_name
-        collision = 0
-        while result_key in state.cognitive.tool_results:
-            collision += 1
-            result_key = f"{tool_name}__{collision}"
-        state.cognitive.tool_results[result_key] = result
-
-        state.add_trace(
-            "tool_execution",
-            tool_name,
-            {"plan_index": idx, "result_key": result_key, "result": result},
-        )
-
-        logger.info(f"Tool '{tool_name}' result stored as '{result_key}'")
-
-        if not result["success"]:
-            state.cognitive.error_details = result.get("error", "Unknown error")
-            return Command(update=state, goto="error")
-
-        # Confirmation pause: halt the plan here until the user responds.
-        if state.cognitive.tool_confirmation_needed:
-            # tool_plan_index is NOT advanced — after confirmation the waiting
-            # node will route back here and we will advance then.
-            return Command(update=state, goto="WAIT_USER_INPUT")
-
-        # Advance to next tool
-        state.cognitive.tool_plan_index = idx + 1
-
-        # More tools in the plan?
-        if state.cognitive.tool_plan_index < len(plan):
-            next_tool = plan[state.cognitive.tool_plan_index]["tool_name"]
-            logger.info(f"Continuing to next tool in plan: {next_tool}")
-            return Command(update=state, goto="tool_executor")
-
-        # Plan exhausted — generate final response.
-        return Command(update=state, goto="generate_output_message")
-
-    except Exception as e:
-        logger.error(f"Exception in tool executor: {e}", exc_info=True)
-        state.cognitive.error_details = str(e)
-        return Command(update=state, goto="error")
