@@ -154,6 +154,8 @@ map the intent to the corresponding tool:
 These tools are stubs: they will acknowledge the request and explain the feature is
 coming soon. Extract as much of name/description/parent-id from the user message as
 possible and pass them as arguments, so the response feels personal.
+Only extract data the user actually provided — never invent or suggest mitigation
+strategies, interventions, or action ideas of your own as part of the arguments.
 
 RULE 7 – GLOSSARY / TERMINOLOGY QUESTIONS:
 If the user asks what a term means, asks for a definition, or uses vocabulary that is

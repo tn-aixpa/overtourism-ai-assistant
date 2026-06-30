@@ -30,7 +30,12 @@ def build_agentic_graph():
     add_safe_node(graph, "generate_output_message", generate_output_message_node)
 
     graph.set_entry_point("initialize_tools")
-    graph.add_edge("initialize_tools", "tool_selector")
+    # NOTE: initialize_tools always returns an explicit Command(goto=...) to
+    # either "tool_selector" or "WAIT_USER_INPUT". Do NOT also add a static
+    # edge from "initialize_tools" here: a static edge plus a Command-based
+    # goto fire in the same superstep and both write to the full state,
+    # which raises "Can receive only one value per step" once the
+    # WAIT_USER_INPUT resume path is taken.
     graph.add_edge("error", "generate_output_message")
     graph.add_edge("generate_output_message", END)
 

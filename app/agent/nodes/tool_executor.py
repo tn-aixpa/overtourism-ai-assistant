@@ -15,6 +15,14 @@ from app.tools.tool_schema import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
+# Tools that mutate platform data and therefore require an explicit user
+# confirmation (recap of the data about to be submitted) before they run.
+CONFIRMATION_REQUIRED_TOOLS = {
+    "create_new_problem",
+    "create_new_proposal",
+    "create_new_scenario",
+}
+
 
 def execute_selected_tool(
     tool_name: str,
@@ -513,6 +521,20 @@ def tool_executor_node(state: AgentState) -> Command:
     # state.cognitive.selected_tool / tool_arguments continue to work.
     state.cognitive.selected_tool = tool_name
     state.cognitive.tool_arguments = tool_arguments
+
+    # ---- Confirmation gate ----
+    # Creation tools must never run silently: the first time we reach one of
+    # them, stop and ask the user to confirm a recap of the data that is
+    # about to be submitted. Only proceed once the user has explicitly
+    # confirmed (tool_confirmed is set by WAIT_USER_INPUT after a "yes").
+    if tool_name in CONFIRMATION_REQUIRED_TOOLS and not state.cognitive.tool_confirmed:
+        logger.info(f"Pausing '{tool_name}' for user confirmation")
+        state.cognitive.tool_confirmation_needed = True
+        return Command(update=state, goto="WAIT_USER_INPUT")
+
+    # Confirmation (if it was required) has been consumed for this step.
+    state.cognitive.tool_confirmed = False
+    state.cognitive.tool_confirmation_needed = False
 
     try:
         result = execute_selected_tool(tool_name, tool_arguments, state)

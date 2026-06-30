@@ -62,3 +62,11 @@ Refer to chatbot-fronted README for more details.
 - stardard data format and language (to prevent errors in computations) + finetuning (both for computations and for synonims)
 - parallelize operations (different expers or simulations)
 - design token-budget-aware compression for context
+.
+
+# TODO
+
+1) Aggiungere conferma prima di creazione problema
+2) Evitare suggerimenti sulle proposte (a meno che non venga richiesto in modo specifico)
+3) Aggiungere creazione proposta
+4) Aggiungere altri tool vuoti (disegno)

@@ -88,6 +88,9 @@ class CognitiveState:
     tool_result: Optional[Dict[str, Any]] = None
     tool_results: Dict[str, Any] = field(default_factory=dict)
     tool_confirmation_needed: bool = False
+    # Set to True right after the user confirms a pending creation tool, so that
+    # tool_executor knows to actually run it instead of pausing again.
+    tool_confirmed: bool = False
 
     def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
@@ -232,6 +235,7 @@ class AgentState:
         self.cognitive.tool_arguments = {}
         self.cognitive.tool_result = None
         self.cognitive.tool_confirmation_needed = False
+        self.cognitive.tool_confirmed = False
 
         if reset_chart:
             self.chart_data = None

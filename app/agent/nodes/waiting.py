@@ -7,22 +7,37 @@ logger = logging.getLogger(__name__)
 
 
 def _wait_instructions(state: AgentState) -> str:
-    """Generate confirmation message for the pending tool."""
+    """Generate confirmation message for the pending tool, recapping every
+    piece of data that is about to be submitted."""
     pending_tool = state.cognitive.selected_tool
+    args = state.cognitive.tool_arguments or {}
 
-    if pending_tool == "create_problem":
-        formatted = state.cognitive.problem_info_extracted.format_fields()
-        return f"Do you want to proceed with the following problem?\n- {formatted}"
+    def _format_fields(fields: dict) -> str:
+        lines = []
+        for key, value in fields.items():
+            if value is None or value == "":
+                continue
+            label = key.replace("_", " ").capitalize()
+            lines.append(f"- {label}: {value}")
+        return "\n".join(lines) if lines else "- (no additional data provided)"
 
-    if pending_tool == "create_proposal":
-        formatted = state.cognitive.proposal_info_extracted.format_fields()
-        return f"Do you want to proceed with the following proposal?\n- {formatted}"
-
-    if pending_tool == "create_scenario":
-        items = "\n- ".join(
-            x.format_fields() for x in state.cognitive.scenarios_to_generate
+    if pending_tool == "create_new_problem":
+        return (
+            "Before I submit this, please confirm the problem details below are correct:\n"
+            f"{_format_fields(args)}\n\nShall I proceed?"
         )
-        return f"Do you want to proceed with the following scenarios?\n- {items}"
+
+    if pending_tool == "create_new_proposal":
+        return (
+            "Before I submit this, please confirm the proposal details below are correct:\n"
+            f"{_format_fields(args)}\n\nShall I proceed?"
+        )
+
+    if pending_tool == "create_new_scenario":
+        return (
+            "Before I submit this, please confirm the scenario details below are correct:\n"
+            f"{_format_fields(args)}\n\nShall I proceed?"
+        )
 
     return "Please confirm to proceed."
 
@@ -47,6 +62,13 @@ def _is_cancellation(user_input: str) -> bool:
     return user_input.strip().lower() in cancellation
 
 
+_CONFIRMATION_WAITING_FOR = {
+    "create_new_problem": AgentState.WaitingFor.PROBLEM_CONFIRMATION,
+    "create_new_proposal": AgentState.WaitingFor.PROPOSAL_CONFIRMATION,
+    "create_new_scenario": AgentState.WaitingFor.SCENARIO_CONFIRMATION,
+}
+
+
 def wait_user_input_node(state: AgentState):
     """
     Wait node for tool confirmation.
@@ -67,6 +89,9 @@ def wait_user_input_node(state: AgentState):
         # re-enters here with user_input populated.
         instructions = _wait_instructions(state)
         state.cognitive.messages_to_include = [instructions]
+        state.waiting_for = _CONFIRMATION_WAITING_FOR.get(
+            state.cognitive.selected_tool, AgentState.WaitingFor.CONTEXT_INPUT
+        )
 
         state.add_trace(
             "human_wait",
@@ -84,13 +109,20 @@ def wait_user_input_node(state: AgentState):
         state.cognitive.selected_tool = None
         state.cognitive.tool_arguments = {}
         state.cognitive.tool_confirmation_needed = False
+        state.cognitive.tool_confirmed = False
+        state.cognitive.tool_plan = []
+        state.cognitive.tool_plan_index = 0
         state.waiting_for = None
         state.user_input = None
+        state.cognitive.messages_to_include = [
+            "Okay, I won't submit this — let me know if you'd like to change anything or start over."
+        ]
         return Command(update=state, goto="generate_output_message")
 
     if _is_confirmation(user_input):
         logger.info("User confirmed — proceeding to tool_executor")
         state.cognitive.tool_confirmation_needed = False
+        state.cognitive.tool_confirmed = True
         state.waiting_for = None
         state.user_input = None
         return Command(update=state, goto="tool_executor")
