@@ -205,18 +205,37 @@ def create_new_proposal_tool() -> ToolDefinition:
             ),
             ToolParameter(
                 name="problem_id",
-                description="ID of the problem this proposal addresses.",
+                description="Problem that this proposal addresses.",
                 type="string",
-                required=False,
+                required=True,
             ),
             ToolParameter(
                 name="description",
                 description="Detailed description of the proposed strategy.",
                 type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="resources",
+                description="Links or references to documents, datasets or support material",
+                type="string",
                 required=False,
             ),
+            ToolParameter(
+                name="context",
+                description="Factors or elements that might impact the proposed solution (e.g. seasonality, weather conditions, events, etc.)",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="impact",
+                description="Expected impact of the proposal (e.g on the environment, economical return, ...). Possibly specify also the related indicators or metrics (e.g. reduce by 20% the air pollution).",
+                type="string",
+                required=False,
+            ),
+
         ],
-        output_description="Acknowledgement that the feature is not yet implemented.",
+        output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "proposal", "not-implemented"],
     )
 
@@ -305,10 +324,10 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_ids_tool(),
         create_get_context_tool(),
         create_interact_with_context_tool(),
-        # Creation stubs (not yet implemented)
+        # Creation 
         create_new_problem_tool(),
         create_new_proposal_tool(),
-        create_new_scenario_tool(),
+        create_new_scenario_tool(), # (not yet implemented)
         # Utility
         create_lookup_glossary_tool(),
     ]

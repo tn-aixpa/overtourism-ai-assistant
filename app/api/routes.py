@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
 def _run_agent(key: str, state: AgentState):
     """Runs synchronously inside a thread — never call from the event loop directly."""
     try:

@@ -123,3 +123,70 @@ def create_new_problem(
     response.raise_for_status()
 
     return response.json()
+
+
+@tool
+def create_new_proposal(
+    name: str,
+    problem_id: str,
+    description: str,
+    resources: str,
+    context: str,
+    impact: str,
+    tenant: str = "molveno",
+):
+    """
+    Create a new proposal instance.
+
+    Args:
+        payload: Dictionary of other user defined data
+
+    Returns:
+        A dict with a confirmation message
+    """
+
+    logger.info("Entered tool create_proposal_instance")
+
+    url = f"{BACKEND_URL}{tenant}/proposals/"
+
+    headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+    body = {
+        "name": name,
+        "description": description,
+        "extras": {},
+    }
+
+    if resources:
+        body["extras"]["resources"] = resources
+
+    if context:
+        body["extras"]["context"] = context
+
+    if impact:
+        body["extras"]["impact"] = impact
+
+    #TODO: add other fields
+
+    # --- actual request ---
+    response = requests.post(
+        url,
+        headers=headers,
+        params={"problem_id": problem_id},
+        json=body,
+    )
+
+    # Log response for comparison
+    logger.info(f"Response status: {response.status_code}")
+    try:
+        logger.info(f"Response body: {response.json()}")
+    except Exception:
+        logger.info(f"Response text: {response.text}")
+
+    response.raise_for_status()
+
+    return response.json()

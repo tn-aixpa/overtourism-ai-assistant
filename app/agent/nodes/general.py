@@ -133,12 +133,12 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "interact_with_context":
             return [output.get("message", "No answer could be generated.")]
         
-        case "create_new_problem":
+        case "create_new_problem" | "create_new_proposal":
             return [
-                f"Problem '{output['name']}' was created successfully."
+                f"'{output['name']}' was created successfully."
             ]
 
-        case "create_new_proposal" | "create_new_scenario":
+        case "create_new_scenario":
             return [output.get("message", "This feature is not yet implemented.")]
 
         case "lookup_glossary":

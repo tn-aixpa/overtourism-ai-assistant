@@ -21,21 +21,9 @@ def _wait_instructions(state: AgentState) -> str:
             lines.append(f"- {label}: {value}")
         return "\n".join(lines) if lines else "- (no additional data provided)"
 
-    if pending_tool == "create_new_problem":
+    if pending_tool in  ["create_new_problem", "create_new_proposal", "create_new_scenario"]:
         return (
-            "Before I submit this, please confirm the problem details below are correct:\n"
-            f"{_format_fields(args)}\n\nShall I proceed?"
-        )
-
-    if pending_tool == "create_new_proposal":
-        return (
-            "Before I submit this, please confirm the proposal details below are correct:\n"
-            f"{_format_fields(args)}\n\nShall I proceed?"
-        )
-
-    if pending_tool == "create_new_scenario":
-        return (
-            "Before I submit this, please confirm the scenario details below are correct:\n"
+            "Before I submit this, please confirm the details below are correct:\n"
             f"{_format_fields(args)}\n\nShall I proceed?"
         )
 

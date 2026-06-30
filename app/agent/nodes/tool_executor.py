@@ -392,16 +392,26 @@ def execute_create_new_proposal(
     name: str = "",
     problem_id: str = "",
     description: str = "",
+    resources: str = "",
+    context: str = "",
+    impact: str = "",
     **kwargs,
 ) -> Dict[str, Any]:
-    """Stub executor for create_new_proposal — feature not yet implemented."""
-    logger.info(f"create_new_proposal called (not implemented) | name='{name}'")
-    return {
-        "success": True,
-        "not_implemented": True,
-        "message": _NOT_IMPLEMENTED_MSG.format(action="create new proposals"),
-        "received": {"name": name, "problem_id": problem_id, "description": description},
-    }
+    
+    from app.tools.backend_tools import create_new_proposal
+
+    result = create_new_proposal.invoke(
+        {
+            "name": name,
+            "problem_id": problem_id,
+            "description": description,
+            "resources": resources,
+            "context": context,
+            "impact": impact,
+        }
+    )
+
+    return result
 
 
 def execute_create_new_scenario(

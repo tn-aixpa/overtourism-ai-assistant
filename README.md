@@ -6,16 +6,33 @@ This projects aims contains the first prototype of an Agentic AI for the Digital
 
 Model the system as a separate service exposing APIs that can be called both from a UX (e.g, webpage) or programmatically.
 
-The system is a context-aware, stateful, multi-node agent with explicit routing. In this way each node has clear boundaries and responsibilities.
-
 ## Usage
 
-### Requirements
+### Getting started
 
-In order to run this project you need first to active
+In order to run this project you need first to setup the working virtual environment doing
 
-1) ollama server
-2) overtourism backend
+```
+uv venv
+source .venv/bin/activate
+uv sync --dev
+```
+
+Then you can run the agentic system with the following command 
+
+You can run the agentic system as a service with the following command
+
+```
+uvicorn app.main:app --reload --port 9000
+```
+
+A different port can be used, just change it so that it does not conflic with other services.
+
+Additionally you will need
+
+1) [overtourism backend](https://github.com/fbk-most/overtourism)
+2) [overtourism-fronted](https://github.com/fbk-most/overtourism-frontend)
+2) ollama server (optional)
 
 To install the ollama server, please follow [this](https://github.com/ollama/ollama?tab=readme-ov-file) guide.
 Onece installed use 
@@ -26,47 +43,6 @@ ollama pull mistral
 
 To run the backend server please
 
-### Production
-You can run the agentic system as a service with the following command
-
-```
-uvicorn app.main:app --reload --port 9000
-```
-
-A different port can be used, just change it so that it does not conflic with overtourism, ollama or other services.
-
-### Demo
-
-A UX is implemented for demo proposal (later this can be expanded into a production front-end).
-To run it use the following:
-
-```
-cd chatbot-fronted
-npm start
-```
-
-On the first run, before ```npm start``` you need to use
-```
-npm install
-```
-
-Refer to chatbot-fronted README for more details.
-
-
-## Open points and future improvements
-
-- Dialog flexibility
-    - Fixed conversation structure (pro: stable and predictable, cons: might feel unnatural)
-    - Fixed messages (e.g. for confirmation). Addding variablity might increase latency.
-- Error recovery might be improved with retries logic, especially for scenario
-- stardard data format and language (to prevent errors in computations) + finetuning (both for computations and for synonims)
-- parallelize operations (different expers or simulations)
-- design token-budget-aware compression for context
-.
-
 # TODO
-
-1) Aggiungere conferma prima di creazione problema
-2) Evitare suggerimenti sulle proposte (a meno che non venga richiesto in modo specifico)
 3) Aggiungere creazione proposta
 4) Aggiungere altri tool vuoti (disegno)
