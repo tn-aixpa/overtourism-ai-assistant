@@ -1,3 +1,5 @@
+GENERAL_ERROR_MESSAGE = "Error: something went wrong while processing your request."
+
 SYSTEM_DESCRIPTION = """
 # General description
 The system supports analysis and decision-making for overtourism and mobility problems,

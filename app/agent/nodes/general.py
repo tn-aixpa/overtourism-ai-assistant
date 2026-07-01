@@ -4,7 +4,7 @@ from langgraph.graph import END
 
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
-from app.utils.error_codes import GraphError
+from app.utils.common import GraphError
 from app.utils.llm_text_generation import generate_answer
 
 
@@ -27,23 +27,10 @@ def safe(node_fn, node_name):
         except GraphInterrupt as gi:
             raise gi
 
-        except RequestHandlingException as rhe:
+        except (RequestHandlingException, GraphError, Exception) as e:
             # Custom behaviour: no errors.txt logging, just surface to user
-            logger.warning(f"Request handling error in node {node_name}: {rhe}")
-            state.cognitive.error_details = str(rhe)
-            state.cognitive.error_node = node_name
-            return Command(update=state, goto="error", graph=Command.PARENT)
-
-        except GraphError as ge:
-            logger.warning(f"GraphError in node {node_name}: {ge}")
-            state.cognitive.error_details = ge.details
-            state.cognitive.error_node = node_name
-            return Command(update=state, goto="error", graph=Command.PARENT)
-
-        except Exception as e:
-            logger.error(f"Unexpected error in node {node_name}: {str(e)}")
-            state.cognitive.error_details = str(e)
-            state.cognitive.error_node = node_name
+            logger.warning(f"Request handling error in node {node_name}: {e}")
+            state.cognitive.error_details = f"Error in {node_name}: {e}"
             return Command(update=state, goto="error", graph=Command.PARENT)
 
     return _safe
@@ -56,22 +43,12 @@ def error_recovery_node(state: AgentState) -> Command:
     logger.info("Entering error recovery node")
 
     if state.cognitive.error_details:
-        logger.error(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}")
+        logger.error(state.cognitive.error_details)
         
         with open("logs/errors.txt", "a+") as f:
-            f.write(f"Error in node {state.cognitive.error_node}: {state.cognitive.error_details}\n")
-
-        state.cognitive.additional_output_information = [
-            f"Error details: {state.cognitive.error_details}"
-        ]
+            f.write(f"{state.cognitive.error_details}\n")
 
     state.cognitive.messages_to_include = [state.cognitive.error_details] if state.cognitive.error_details else ["Something went wrong, please try again later."]
-    state.reset_state(
-            reset_new_problem=True,
-            reset_new_proposal=True,
-            reset_new_scenario=True,
-            reset_errors=True,
-        )
 
     return Command(update=state, goto="generate_output_message")
 
@@ -101,7 +78,6 @@ def generate_output_message_node(state: AgentState) -> Command:
     logger.info(f"Output message: {output_message}")
 
     state.cognitive.messages_to_include = []
-    state.cognitive.additional_output_information = []
     state.cognitive.tool_result = None
 
     return Command(update=state, goto=END)

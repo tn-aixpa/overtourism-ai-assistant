@@ -70,12 +70,9 @@ class CognitiveState:
 
     trace: TraceBuffer = field(default_factory=TraceBuffer)
 
-    error_code: str = ""
-    error_node: str = ""
     error_details: str = ""
 
     messages_to_include: List[str] = field(default_factory=list)
-    additional_output_information: List[str] = field(default_factory=list)
 
     known_tools: List[str] = field(default_factory=list)
     enabled_tools: List[str] = field(default_factory=list)
@@ -107,17 +104,6 @@ class AgentState:
     session_id: str = ""
     user_lang: str = "English"
     integrated_mode: bool = False
-
-    class Workflow(StrEnum):
-        INTENT = "intent"
-        PROBLEM_CREATION = "new_problem"
-        PROPOSAL_CREATION = "new_proposal"
-        SCENARIO_CREATION = "new_scenario"
-        INTERACTION = "interaction"
-
-    active_workflow: Optional["AgentState.Workflow"] = None
-    suspended_workflow: Optional["AgentState.Workflow"] = None
-    suspended_waiting_for: Optional["AgentState.WaitingFor"] = None
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"
@@ -214,47 +200,3 @@ class AgentState:
         serialized = self._serialize(self.__dict__)
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(serialized, f, indent=2, ensure_ascii=False)
-
-    def reset_state(
-        self,
-        reset_new_problem=False,
-        reset_new_proposal=False,
-        reset_new_scenario=False,
-        reset_errors=False,
-        reset_chart=True,
-    ):
-        self.waiting_for = None
-        self.user_input = None
-        self.sliders_data = None
-
-        self.cognitive.generation_pipeline = []
-        self.cognitive.tool_plan = []
-        self.cognitive.tool_plan_index = 0
-        self.cognitive.tool_results = {}
-        self.cognitive.selected_tool = None
-        self.cognitive.tool_arguments = {}
-        self.cognitive.tool_result = None
-        self.cognitive.tool_confirmation_needed = False
-        self.cognitive.tool_confirmed = False
-
-        if reset_chart:
-            self.chart_data = None
-
-        if reset_new_problem:
-            self.cognitive.problem_info_extracted = {}
-            self.cognitive.extracted_all_problem = False
-
-        if reset_new_proposal:
-            self.cognitive.proposal_info_extracted = {}
-            self.cognitive.extracted_all_proposal = False
-
-        if reset_new_scenario:
-            self.cognitive.extracted_all_scenario = False
-            self.cognitive.scenarios_to_generate = []
-            self.cognitive.scenario_validation_errors = ""
-
-        if reset_errors:
-            self.cognitive.error_code = ""
-            self.cognitive.error_node = ""
-            self.cognitive.error_details = ""
-            self.cognitive.messages_to_include = []

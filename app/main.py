@@ -1,11 +1,18 @@
+from pathlib import Path
 from dotenv import load_dotenv
-import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router
 
-load_dotenv()
+# Load environment variables from the project .env file if present
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path, override=False)
+else:
+    load_dotenv(override=False)
+
+
+from app.api.routes import router
 
 logging.basicConfig(
     level=logging.INFO,

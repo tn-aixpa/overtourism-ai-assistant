@@ -1,19 +1,13 @@
-import json
-
 from app.utils.llm import llm_interaction
 from app.agent. state import AgentState
 
 # ---------------------------------------------------------------------------
-# ANSWER QUESTION
+# ANSWER GENERATION
 # ---------------------------------------------------------------------------
 
 INSTRUCTIONS_FOR_INTEGRATED_MODE = """
 - Keep the answer as short as possible, NEVER include tables and reduce markdown as much as possible.
 """
-
-# ---------------------------------------------------------------------------
-# ANSWER GENERATION
-# ---------------------------------------------------------------------------
 
 def generate_answer(state: AgentState) -> str:
     """
@@ -23,24 +17,11 @@ def generate_answer(state: AgentState) -> str:
     question = state.get_last_user_message().content,
     language = state.user_lang,
     messages_to_include = state.cognitive.messages_to_include,
-    additional_data = state.cognitive.additional_output_information
     additional_instructions = INSTRUCTIONS_FOR_INTEGRATED_MODE if state.integrated_mode else ""
 
     formatted_messages = "\n".join(
         f"- {msg}" for msg in messages_to_include
     )
-
-    additional_context_section = ""
-    if additional_data:
-        formatted_additional = "\n".join(
-            f"- {json.dumps(item, default=str) if not isinstance(item, str) else item}"
-            for item in additional_data
-        )
-        additional_context_section = f"""
-## Additional Context
-The following supplementary data was collected from the agent state (may include conversation history, extracted problem info, scenarios, expert answers, etc.):
-{formatted_additional}
-"""
 
     prompt = f"""You are a helpful, proactive assistant synthesizing information from multiple agents into a clear final answer for the user.
 
@@ -55,7 +36,6 @@ The following messages represent the core findings of the answering process. The
 - Statements → rephrase as declarative sentences.
 - Questions or requests for user input → rephrase as direct questions, never collapse them into a statement.
 - Do not merge a question into a preceding statement. Keep them as separate, sequential sentences.
-{additional_context_section}
 ## Instructions
 - **Never suggest, propose, list, or hint at strategies, mitigation actions, interventions, or "next step" ideas of your own** (for example, do not suggest things like reinforcing public transport or creating temporary restricted zones), even if the user's own message talks about wanting strategies or ideas. Strategy generation is handled by a separate, dedicated tool that is not yet available. If proposing a strategy feels like the natural next step, you may mention that the user can define a proposal next, but never describe or imply what that proposal's content should be.
 - **Your answer must incorporate all Agent Messages**, each preserving its original intent (statement vs. question).
@@ -66,7 +46,7 @@ The following messages represent the core findings of the answering process. The
   - Never open with negative framing. Lead with what CAN be done.
 - **Agent Messages are your primary source.** Use Additional Context only when Agent Messages leave a gap that would make the answer incomplete or misleading AND the Additional Context directly fills that gap. Do not use it to rephrase or expand information already in Agent Messages.
 - Never say things like "I haven't found messages from agents to answer your question" even if there are no agent messages.
-- Never include system information like IDs, creation timestamps, or internal field names unless the user explicitly asked for them.
+- Never include system information like IDs, creation timestamps, or internal field names or identifiers unless the user explicitly asked for them.
 - Write your response in: **{language}**
 - Be concise and directly address the user's question.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar.

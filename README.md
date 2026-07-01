@@ -42,7 +42,3 @@ ollama pull mistral
 ```
 
 To run the backend server please
-
-# TODO
-3) Aggiungere creazione proposta
-4) Aggiungere altri tool vuoti (disegno)

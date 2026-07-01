@@ -314,20 +314,37 @@ def create_lookup_glossary_tool() -> ToolDefinition:
         tags=["data", "read-only", "glossary", "utility"],
     )
 
+def create_plot_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="create_plot_tool",
+        description="Provides a plotting tool to visualize data in various formats (e.g., line, bar, scatter, etc.)",
+        category=ToolCategory.INTERACTION,
+        long_description=(
+            "Creates a plot to visualize data in various formats (e.g., line, bar, scatter, etc.). "
+            "NOTE: this tool is not yet implemented — it will acknowledge the request "
+            "and inform the user that the feature is coming soon."
+        ),
+        parameters=[],
+        output_description="Acknowledgement that the feature is not yet implemented.",
+        tags=["write", "scenario", "not-implemented"],
+    )
 
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
+        # Utility
+        create_lookup_glossary_tool(),
         create_get_system_capabilities_tool(),
+        # Data retrieval
         create_list_available_problems_tool(),
         create_list_available_proposals_tool(),
         create_list_available_scenarios_tool(),
         create_get_context_ids_tool(),
         create_get_context_tool(),
+        # Interaction
         create_interact_with_context_tool(),
+        create_plot_tool(),
         # Creation 
         create_new_problem_tool(),
         create_new_proposal_tool(),
         create_new_scenario_tool(), # (not yet implemented)
-        # Utility
-        create_lookup_glossary_tool(),
     ]

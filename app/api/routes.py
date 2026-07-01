@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from fastapi import APIRouter, HTTPException, UploadFile, BackgroundTasks, File, Form
+from fastapi import APIRouter, HTTPException, Header, UploadFile, BackgroundTasks, File, Form
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
@@ -9,19 +9,25 @@ from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import generate_key, load_state, save_state, _get_lock
-from app.utils.error_codes import get_error_message, ErrorCode
+from app.config import GENERAL_ERROR_MESSAGE
 from app.agent.events import get_queue, publish_done, get_result
+from app.tools.backend_tools import check_authorization
+from app.utils.common import set_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-def _run_agent(key: str, state: AgentState):
+def _run_agent(key: str, state: AgentState, token: str):
     """Runs synchronously inside a thread — never call from the event loop directly."""
+    set_token(token)
     try:
         logger.info(f"Message sent from conversation {key}")
 
-        updated = agent_app.invoke(state)
+        updated = agent_app.invoke(
+            state,
+            config={"configurable": {"token": token, "thread_id": key}},
+        )
 
         state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
         final_state = AgentState(**state_dict)
@@ -30,7 +36,7 @@ def _run_agent(key: str, state: AgentState):
         response_text = (
             last_msg.content
             if last_msg and last_msg.role == "assistant"
-            else get_error_message(ErrorCode.REQUEST_ERROR)
+            else GENERAL_ERROR_MESSAGE
         )
         result = {
             "response": response_text,
@@ -44,7 +50,7 @@ def _run_agent(key: str, state: AgentState):
     except Exception as e:
         logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
         result = {
-            "response": get_error_message(ErrorCode.REQUEST_ERROR),
+            "response": GENERAL_ERROR_MESSAGE,
             "session_id": key,
             "chart_data": None,
             "sliders_data": None,
@@ -63,7 +69,17 @@ async def run_agent_endpoint(
     files: list[UploadFile] = File([]),
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
+    authorization: str | None = Header(default=None),
 ):
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+
+    token = authorization.removeprefix("Bearer ").strip()
+
+    if not check_authorization(token=token, tenant="molveno"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     key = session_id or generate_key()
     lock = _get_lock(key)
 
@@ -105,7 +121,7 @@ async def run_agent_endpoint(
 
         save_state(state)
 
-    background_tasks.add_task(asyncio.to_thread, _run_agent, key, state)
+    background_tasks.add_task(asyncio.to_thread, _run_agent, key, state, token)
     return {"session_id": key}
 
 
