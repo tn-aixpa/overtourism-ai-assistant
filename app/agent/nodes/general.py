@@ -7,17 +7,19 @@ from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
 from app.utils.llm_text_generation import generate_answer
 
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # SAFE NODE WRAPPERS
 # ---------------------------------------------------------------------------
 
+
 def add_safe_node(graph, name, fn):
     graph.add_node(name, safe(fn, name))
 
+
 from langgraph.errors import GraphInterrupt
+
 
 def safe(node_fn, node_name):
     def _safe(state):
@@ -35,26 +37,34 @@ def safe(node_fn, node_name):
 
     return _safe
 
+
 # ---------------------------------------------------------------------------
 # ERROR RECOVERY
 # ---------------------------------------------------------------------------
+
 
 def error_recovery_node(state: AgentState) -> Command:
     logger.info("Entering error recovery node")
 
     if state.cognitive.error_details:
         logger.error(state.cognitive.error_details)
-        
+
         with open("logs/errors.txt", "a+") as f:
             f.write(f"{state.cognitive.error_details}\n")
 
-    state.cognitive.messages_to_include = [state.cognitive.error_details] if state.cognitive.error_details else ["Something went wrong, please try again later."]
+    state.cognitive.messages_to_include = (
+        [state.cognitive.error_details]
+        if state.cognitive.error_details
+        else ["Something went wrong, please try again later."]
+    )
 
     return Command(update=state, goto="generate_output_message")
+
 
 # ---------------------------------------------------------------------------
 # OUTPUT GENERATION
 # ---------------------------------------------------------------------------
+
 
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
@@ -71,9 +81,7 @@ def generate_output_message_node(state: AgentState) -> Command:
     except Exception as e:
         logger.error(f"Error {e}")
         output_message = "System error"
-    state.add_assistant_message(
-        output_message
-    )
+    state.add_assistant_message(output_message)
 
     logger.info(f"Output message: {output_message}")
 
@@ -95,12 +103,16 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
     match tool_name:
 
-        #TODO: check if I need to insert also other tools. Some don't actually have output are meant to be in-betweens
+        # TODO: check if I need to insert also other tools. Some don't actually have output are meant to be in-betweens
 
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
-        case "list_available_problems" | "list_available_proposals" | "list_available_scenarios" :
+        case (
+            "list_available_problems"
+            | "list_available_proposals"
+            | "list_available_scenarios"
+        ):
             return [f"Here are the available items: {output}"]
 
         case "get_context_details":
@@ -108,14 +120,18 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
         case "interact_with_context":
             return [output.get("message", "No answer could be generated.")]
-        
+
         case "create_new_problem" | "create_new_proposal":
-            return [
-                f"'{output['name']}' was created successfully."
-            ]
+            return [f"'{output['name']}' was created successfully."]
 
         case "create_new_scenario":
             return [output.get("message", "This feature is not yet implemented.")]
+
+        case "edit_problem" | "edit_proposal":
+            return [f"'{output['name']}' was modfied successfully."]
+
+        case "delete_problem" | "delete_proposal" | "delete_scenario":
+            return [f"'{output['name']}' was deleted successfully."]
 
         case "lookup_glossary":
             matches = output.get("matches", [])

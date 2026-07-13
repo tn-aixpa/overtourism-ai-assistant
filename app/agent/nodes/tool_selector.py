@@ -24,7 +24,9 @@ def initialize_tools(state: AgentState) -> Command:
     logger.info("Initializing available tools")
 
     if state.waiting_for and state.user_input:
-        logger.info(f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT")
+        logger.info(
+            f"Resuming from waiting_for={state.waiting_for}, routing to WAIT_USER_INPUT"
+        )
         return Command(update=state, goto="WAIT_USER_INPUT")
 
     registry = get_tool_registry()
@@ -51,7 +53,9 @@ def tool_selector_node(state: AgentState) -> Command:
 
     registry = get_tool_registry()
     tools_for_llm = registry.get_tools_for_llm(allowlist=None)
-    tools_for_llm_enabled = registry.get_tools_for_llm(allowlist=state.cognitive.enabled_tools)
+    tools_for_llm_enabled = registry.get_tools_for_llm(
+        allowlist=state.cognitive.enabled_tools
+    )
 
     if not tools_for_llm:
         logger.warning("No tools available for this context")
@@ -73,131 +77,147 @@ def tool_selector_node(state: AgentState) -> Command:
 
     prior_results_block = "None"
     if state.cognitive.tool_results:
-        prior_results_block = json.dumps(state.cognitive.tool_results, indent=2, default=str)
+        prior_results_block = json.dumps(
+            state.cognitive.tool_results, indent=2, default=str
+        )
 
     prompt = f"""
 You are an assistant for a digital twin platform named AIxPA related to tourism management.
 
-You may return ONE of the following JSON objects:
+Follow the steps below IN ORDER. Stop at the first step that applies and return its JSON. Do not skip ahead.
 
-Tool plan (one OR more tools to run in sequence):
-{{
-  "tool_plan": [
-    {{"tool_name": "<tool name>", "arguments": {{}}}},
-    {{"tool_name": "<tool name>", "arguments": {{}}}}
-  ]
-}}
+============================================================
+STEP 1 — TOOL AVAILABILITY CHECK
+============================================================
+Look at "Tools available in the current execution mode" below.
+If answering this message would require a tool from "Known tools" that is NOT in that list,
+return exactly this and STOP:
+{{"action": "tool_unavailable", "tool": "<tool_name>", "message": "..."}}
 
-Single tool (shorthand, also valid):
-{{
-  "tool_name": "<tool name>",
-  "arguments": {{}}
-}}
+============================================================
+STEP 2 — IS THIS A GREETING OR GENERAL QUESTION?
+============================================================
+Check ONLY this: is the message a greeting ("Ciao", "Hello", "Hi"), a thank-you, small talk,
+or a question about what the system can do in general?
+If YES, return exactly this and STOP:
+{{"tool_name": "get_system_capabilities", "arguments": {{}}}}
+If NO, go to Step 3.
+(Do this check BEFORE the topic check in Step 3. A greeting is never "out of scope".)
+
+============================================================
+STEP 3 — IS THIS ON TOPIC?
+============================================================
+The platform covers: tourism management, overtourism, mobility, problems, proposals,
+scenarios, and related decision-support.
+If the message is clearly about something else, return exactly this and STOP:
+{{"action": "out_of_scope", "message": "..."}}
+If it is on topic (or you're unsure), go to Step 4.
+
+============================================================
+STEP 4 — IS THE USER ASKING FOR A DEFINITION?
+============================================================
+If the user asks what a term means, or uses ambiguous vocabulary that might be a platform
+concept (e.g. "what is a scenario?", "cosa è un problema?"), return:
+{{"tool_name": "lookup_glossary", "arguments": {{"query": "<term(s)>"}}}}
+You may also put lookup_glossary as the FIRST step of a tool_plan (see Step 6) if you are
+unsure which entity type (problem/proposal/scenario) the user means.
+
+============================================================
+STEP 5 — IS THE USER ASKING FOR DETAILS ABOUT SOMETHING SPECIFIC?
+============================================================
+Only use get_context_details or interact_with_context when the user explicitly refers to
+a specific existing problem, proposal, or scenario. Never use them for greetings or general
+questions (those were already handled in Step 2).
+
+If the entity is referred to by NAME/DESCRIPTION rather than an explicit ID, and it has not
+already been resolved into current_context by a get_context_ids call earlier in this plan or
+conversation, you MUST build a tool_plan that resolves it first:
+  list_available_problems / list_available_proposals / list_available_scenarios (whichever
+  is appropriate, skip if already run and present in "Previously collected tool results"),
+  then get_context_ids with the user's intent and that source tool,
+  and ONLY THEN get_context_details.
+
+Rule: if interact_with_context is used and get_context_details has not already produced
+results (check "Previously collected tool results"), put get_context_details BEFORE it in
+the tool_plan (after the resolution steps above, if needed).
+
+============================================================
+STEP 6 — IS THE USER ASKING TO CREATE, EDIT, OR DELETE SOMETHING?
+============================================================
+Map the request to ONE of these tools:
+  create_new_problem, create_new_proposal, create_new_scenario,
+  edit_problem, edit_proposal, edit_scenario,
+  delete_problem, delete_proposal, delete_scenario
+
+Extract only name/description details the user actually typed. Never invent details,
+never suggest your own mitigation ideas or strategies as arguments.
+
+--- ID CHECKLIST — do this every time before calling one of the 9 tools above ---
+Every one of these 9 tools needs an id. NEVER type/guess/pattern-match an id string yourself.
+
+Important: the user almost never knows or types the literal id. They refer to problems,
+proposals, and scenarios by name or description instead — e.g. "the second problem",
+"the parking problem", "the strategy about bike lanes". Expect Q1 below to usually be NO.
+
+Go through these questions in order:
+
+  Q1. Does the id needed by the tool already appear as an EXPLICIT id string (not a name
+      or description) in the user message or earlier in the conversation?
+      → YES: use it directly in "arguments".
+      → NO (most common case): go to Q2.
+
+  Q2. Which id does the tool need?
+      - create_new_proposal, edit_proposal, delete_proposal  → needs a PROBLEM id (the parent)
+      - create_new_scenario, edit_scenario, delete_scenario  → needs a PROPOSAL id (the parent)
+      - create_new_problem                                    → no parent id needed
+      - edit_problem, delete_problem                          → needs a PROBLEM id (the target itself)
+      - edit_proposal, delete_proposal                        → also needs the PROPOSAL id (the target itself)
+      - edit_scenario, delete_scenario                        → also needs the SCENARIO id (the target itself)
+
+      (Note: edit_proposal/delete_proposal only need the proposal's own id, not a problem id,
+       unless you are also changing which problem it belongs to. Same logic for scenario tools.)
+
+  Q3. Build a tool_plan that resolves the id BEFORE calling the creation/edit/delete tool:
+      - need a PROBLEM id  → list_available_problems, then get_context_ids
+      - need a PROPOSAL id → list_available_proposals, then get_context_ids
+      - need a SCENARIO id → list_available_scenarios, then get_context_ids
+      Then add the creation/edit/delete tool as the LAST step.
+      In that last step's "arguments", OMIT the id field entirely. Do not fill it with a
+      guess. The executor resolves it automatically from the get_context_ids result.
+
+============================================================
+STEP 7 — NOTHING ABOVE APPLIED
+============================================================
+If none of the steps above matched, return a clarification:
+{{"action": "clarify", "message": "..."}}
+
+============================================================
+OUTPUT FORMAT
+============================================================
+Return ONE of these JSON shapes only. No markdown, no explanation, no extra text.
+
+Multiple tools in sequence:
+{{"tool_plan": [{{"tool_name": "<name>", "arguments": {{}}}}, {{"tool_name": "<name>", "arguments": {{}}}}]}}
+
+Single tool:
+{{"tool_name": "<name>", "arguments": {{}}}}
 
 Clarification:
-{{
-  "action": "clarify",
-  "message": "..."
-}}
+{{"action": "clarify", "message": "..."}}
 
 Out of scope:
-{{
-  "action": "out_of_scope",
-  "message": "..."
-}}
+{{"action": "out_of_scope", "message": "..."}}
 
 Tool unavailable:
-{{
-  "action": "tool_unavailable",
-  "message": "..."
-}}
+{{"action": "tool_unavailable", "tool": "<name>", "message": "..."}}
 
-No action needed (greetings, thanks, chitchat):
-{{
-  "tool_name": null,
-  "arguments": {{}}
-}}
+No action needed:
+{{"tool_name": null, "arguments": {{}}}}
 
-## Tool selection rules — follow in order
-
-RULE 1 – GREETINGS AND GENERAL QUESTIONS:
-If the user message is a greeting (e.g. "Ciao", "Hello", "Hi"), a thank-you, or a general
-question about what the system can do, return:
-  {{"tool_name": "get_system_capabilities", "arguments": {{}}}}
-Do NOT call get_context_details or interact_with_context for greetings or general questions.
-
-RULE 2 – CONTEXT TOOLS REQUIRE ACTUAL DATA:
-Only use get_context_details or interact_with_context when the user is explicitly asking
-about specific problems, proposals, or scenarios that exist in the system.
-Do NOT use these tools for greetings, general questions, or small talk.
-
-RULE 3 – MULTI-STEP PLANS:
-When the user asks for something that requires multiple steps (e.g. "list problems AND proposals",
-or "show me details of a specific scenario" which first requires listing scenarios to find the right id),
-use a tool_plan with the full ordered sequence of tools needed to fulfil the request.
-
-RULE 4 – CONTEXT MUST BE FETCHED BEFORE QUERYING:
-If interact_with_context is in the plan AND get_context_details has NOT already produced
-results (check prior tool results), always prepend get_context_details to the plan.
-
-RULE 5 – STAY ON TOPIC:
-This platform is about tourism management, overtourism, mobility, and related decision-support.
-If the user's request is unrelated to these topics, return:
-  {{"action": "out_of_scope", "message": "..."}}
-
-RULE 6 – CREATION REQUESTS (not yet implemented):
-If the user wants to create, add, or register a new Problem, Proposal, or Scenario,
-map the intent to the corresponding tool:
-  - create_new_problem  → user wants to add/create a problem
-  - create_new_proposal → user wants to add/create a proposal or strategy
-  - create_new_scenario → user wants to add/create a scenario or simulation
-These tools are stubs: they will acknowledge the request and explain the feature is
-coming soon. Extract as much of name/description from the user message as possible
-and pass them as arguments, so the response feels personal.
-Only extract data the user actually provided — never invent or suggest mitigation
-strategies, interventions, or action ideas of your own as part of the arguments.
-
-PARENT-ID RESOLUTION (problem_id for create_new_proposal, proposal_id for create_new_scenario):
-The user almost never knows or types the literal ID — they refer to the parent entity by
-name or description (e.g. "the second problem", "the parking problem"). You must NEVER
-invent, guess, or pattern-match an ID string yourself.
-  - If the user's message (or prior conversation) already contains an explicit ID string for
-    the parent entity, you may pass it directly.
-  - Otherwise, build a tool_plan that resolves it first: prepend list_available_problems
-    (for a proposal's problem_id) or list_available_proposals (for a scenario's proposal_id),
-    followed by get_context_ids with the user's intent and that source tool, and ONLY THEN
-    the creation tool — and in the creation tool's arguments, OMIT the id parameter entirely
-    (leave it out of "arguments") rather than filling it with a guess. The executor will
-    auto-resolve it from the get_context_ids result.
-
-RULE 7 – GLOSSARY / TERMINOLOGY QUESTIONS:
-If the user asks what a term means, asks for a definition, or uses vocabulary that is
-ambiguous and might map to a platform concept (e.g. "what is a scenario?",
-"what do you mean by proposal?", "cosa è un problema?"), call:
-  {{"tool_name": "lookup_glossary", "arguments": {{"query": "<the term(s) to look up>"}}}}
-You MAY also call lookup_glossary as a silent first step in a plan when the user intent
-is unclear and a terminology lookup would help you understand what entity type they mean.
-
-RULE 8 – TOOL AVAILABILITY
-
-The assistant knows about all tools listed under "Known tools", but may execute only the
-tools listed under "Tools available in the current execution mode".
-
-If the user's request would normally require a known tool that is not available in the
-current execution mode:
-
-- Do NOT choose another tool as a substitute.
-- Do NOT answer from memory.
-- Do NOT classify the request as out_of_scope.
-- Return
-
-{{
-  "action": "tool_unavailable",
-  "tool": "<tool_name>",
-  "message": "..."
-}}
-
-Previously collected tool results (available for argument resolution):
+============================================================
+CONTEXT
+============================================================
+Previously collected tool results (use these for argument resolution):
 {prior_results_block}
 
 Conversation so far:
@@ -212,7 +232,7 @@ Known tools:
 Tools available in the current execution mode:
 {available_tools_json}
 
-Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
+Return ONLY valid JSON.
 """
 
     try:
@@ -231,10 +251,13 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
             response_json.get("message", "Could you clarify your request?")
         ]
         return Command(update=state, goto="generate_output_message")
-    
+
     if action == "tool_unavailable":
         state.cognitive.messages_to_include = [
-            response_json.get("message", "The current request cannot be handle in the current context. Please change contex or use the standalone chat.")
+            response_json.get(
+                "message",
+                "The current request cannot be handle in the current context. Please change contex or use the standalone chat.",
+            )
         ]
         return Command(update=state, goto="generate_output_message")
 
@@ -244,15 +267,17 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
         ]
         return Command(update=state, goto="generate_output_message")
 
-    enabled_tool_names = {
-        t["function"]["name"]
-        for t in tools_for_llm_enabled
-    }
+    enabled_tool_names = {t["function"]["name"] for t in tools_for_llm_enabled}
 
     if "tool_plan" in response_json:
         raw_plan = response_json["tool_plan"]
     elif response_json.get("tool_name"):
-        raw_plan = [{"tool_name": response_json["tool_name"], "arguments": response_json.get("arguments", {})}]
+        raw_plan = [
+            {
+                "tool_name": response_json["tool_name"],
+                "arguments": response_json.get("arguments", {}),
+            }
+        ]
     else:
         raw_plan = []
 
@@ -264,7 +289,9 @@ Return ONLY valid JSON, with no explanation, no markdown fences, no extra text.
 
     for step in raw_plan:
         if step.get("tool_name") and step["tool_name"] not in enabled_tool_names:
-            logger.warning(f"LLM planned unavailable tool '{step['tool_name']}', skipping")
+            logger.warning(
+                f"LLM planned unavailable tool '{step['tool_name']}', skipping"
+            )
 
     state.cognitive.tool_plan = tool_plan
     state.cognitive.tool_plan_index = 0

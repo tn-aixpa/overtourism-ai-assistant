@@ -1,6 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
-from fastapi import APIRouter, HTTPException, Header, UploadFile, BackgroundTasks, File, Form
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Header,
+    UploadFile,
+    BackgroundTasks,
+    File,
+    Form,
+)
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
@@ -17,6 +25,7 @@ from app.utils.common import set_token
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 def _run_agent(key: str, state: AgentState, token: str):
     """Runs synchronously inside a thread — never call from the event loop directly."""
@@ -73,7 +82,9 @@ async def run_agent_endpoint(
 ):
 
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed Authorization header")
+        raise HTTPException(
+            status_code=401, detail="Missing or malformed Authorization header"
+        )
 
     token = authorization.removeprefix("Bearer ").strip()
 
@@ -129,7 +140,9 @@ async def run_agent_endpoint(
 async def get_agent_result(session_id: str):
     result = get_result(session_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Result not ready or already consumed")
+        raise HTTPException(
+            status_code=404, detail="Result not ready or already consumed"
+        )
     return AgentResponse(**result)
 
 
@@ -169,7 +182,9 @@ async def submit_feedback_get(
 
     msg = messages[message_index]
     if msg.role != "assistant":
-        raise HTTPException(status_code=400, detail="Can only give feedback on assistant messages")
+        raise HTTPException(
+            status_code=400, detail="Can only give feedback on assistant messages"
+        )
 
     msg.vote = vote if vote in {"up", "down"} else None
     msg.comment = comment

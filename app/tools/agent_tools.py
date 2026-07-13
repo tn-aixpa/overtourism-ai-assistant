@@ -151,8 +151,6 @@ def create_new_problem_tool() -> ToolDefinition:
             "Registers a new Problem in the platform. "
             "A Problem represents a critical situation or phenomenon to be analyzed "
             "(e.g. overtourism, mobility congestion). "
-            "NOTE: this tool is not yet implemented — it will acknowledge the request "
-            "and inform the user that the feature is coming soon."
         ),
         parameters=[
             ToolParameter(
@@ -181,7 +179,56 @@ def create_new_problem_tool() -> ToolDefinition:
             ),
         ],
         output_description="Acknowledgement of successful creation or request for more details",
-        tags=["write", "problem", "not-implemented"],
+        tags=["write", "problem"],
+    )
+
+
+def edit_problem_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="edit_problem",
+        description="Edit a problem available in the system system",
+        category=ToolCategory.PROBLEM_MANAGEMENT,
+        long_description="Edit one or more attributes of a Problem in the platform.",
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new problem.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="description",
+                description="Detailed description of the problem to be addressed.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="objectives",
+                description="The objectives we want to achieve when addressing the problem.",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="additional_data",
+                description="Additional data or piece of information useful to understand the problem.",
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description="Acknowledgement of successful edit or request for more details",
+        tags=["write", "problem"],
+    )
+
+
+def delete_problem_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="delete_problem",
+        description="Delete a problem in the system",
+        category=ToolCategory.PROBLEM_MANAGEMENT,
+        long_description="Delete a Problem in the platform.",
+        parameters=[],
+        output_description="Acknowledgement of successful deletion or request for more details",
+        tags=["write", "problem"],
     )
 
 
@@ -193,8 +240,6 @@ def create_new_proposal_tool() -> ToolDefinition:
         long_description=(
             "Registers a new Proposal for a given Problem in the platform. "
             "A Proposal represents a possible strategy to address the problem. "
-            "NOTE: this tool is not yet implemented — it will acknowledge the request "
-            "and inform the user that the feature is coming soon."
         ),
         parameters=[
             ToolParameter(
@@ -233,10 +278,70 @@ def create_new_proposal_tool() -> ToolDefinition:
                 type="string",
                 required=False,
             ),
-
         ],
         output_description="Acknowledgement of successful creation or request for more details",
-        tags=["write", "proposal", "not-implemented"],
+        tags=["write", "proposal"],
+    )
+
+
+def edit_proposal_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="edit_proposal",
+        description="Edit an existing proposal",
+        category=ToolCategory.PROPOSAL_MANAGEMENT,
+        long_description="Edit a one or more attributes of a Proposal in the platform.",
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new proposal.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="problem_id",
+                description="Problem that this proposal addresses.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="description",
+                description="Detailed description of the proposed strategy.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="resources",
+                description="Links or references to documents, datasets or support material",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="context",
+                description="Factors or elements that might impact the proposed solution (e.g. seasonality, weather conditions, events, etc.)",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="impact",
+                description="Expected impact of the proposal (e.g on the environment, economical return, ...). Possibly specify also the related indicators or metrics (e.g. reduce by 20% the air pollution).",
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description="Acknowledgement of successful edit or request for more details",
+        tags=["write", "proposal"],
+    )
+
+
+def delete_proposal_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="delete_proposal",
+        description="Delete a proposal",
+        category=ToolCategory.PROPOSAL_MANAGEMENT,
+        long_description="Delete a Proposal in the platform.",
+        parameters=[],
+        output_description="Acknowledgement of successful deletetion or request for more details",
+        tags=["write", "proposal"],
     )
 
 
@@ -259,10 +364,34 @@ def create_new_scenario_tool() -> ToolDefinition:
                 required=True,
             ),
             ToolParameter(
-                name="proposal_id",
-                description="ID of the proposal this scenario belongs to.",
+                name="description",
+                description="Description of the parameter configuration to simulate.",
                 type="string",
                 required=False,
+            ),
+        ],
+        output_description="Acknowledgement that the feature is not yet implemented.",
+        tags=["write", "scenario", "not-implemented"],
+    )
+
+
+def edit_scenario_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="edit_scenario",
+        description="Edit an available scenario",
+        category=ToolCategory.SCENARIO_MANAGEMENT,
+        long_description=(
+            "Registers a new Scenario for a given Proposal in the platform. "
+            "A Scenario is a simulation run exploring a specific parameter configuration. "
+            "NOTE: this tool is not yet implemented — it will acknowledge the request "
+            "and inform the user that the feature is coming soon."
+        ),
+        parameters=[
+            ToolParameter(
+                name="name",
+                description="Short name or title for the new scenario.",
+                type="string",
+                required=True,
             ),
             ToolParameter(
                 name="description",
@@ -273,6 +402,18 @@ def create_new_scenario_tool() -> ToolDefinition:
         ],
         output_description="Acknowledgement that the feature is not yet implemented.",
         tags=["write", "scenario", "not-implemented"],
+    )
+
+
+def delete_scenario_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="delete_scenario",
+        description="Delete a scenario",
+        category=ToolCategory.PROPOSAL_MANAGEMENT,
+        long_description="Delete a Scenario in the platform.",
+        parameters=[],
+        output_description="Acknowledgement of successful deletetion or request for more details",
+        tags=["write", "proposal"],
     )
 
 
@@ -314,6 +455,7 @@ def create_lookup_glossary_tool() -> ToolDefinition:
         tags=["data", "read-only", "glossary", "utility"],
     )
 
+
 def create_plot_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_plot_tool",
@@ -329,6 +471,7 @@ def create_plot_tool() -> ToolDefinition:
         tags=["write", "scenario", "not-implemented"],
     )
 
+
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         # Utility
@@ -343,8 +486,16 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         # Interaction
         create_interact_with_context_tool(),
         create_plot_tool(),
-        # Creation 
+        # Creation
         create_new_problem_tool(),
         create_new_proposal_tool(),
-        create_new_scenario_tool(), # (not yet implemented)
+        create_new_scenario_tool(),  # (not yet implemented)
+        # Editing
+        edit_problem_tool(),
+        edit_proposal_tool(),
+        edit_scenario_tool(),
+        # Deletion
+        delete_problem_tool(),
+        delete_proposal_tool(),
+        delete_scenario_tool(),
     ]

@@ -4,7 +4,6 @@ from langchain.tools import tool
 import logging
 from app.utils.common import get_token
 
-
 BACKEND_URL = os.environ.get("BACKEND_URL")
 
 logger = logging.getLogger(__name__)
@@ -52,6 +51,29 @@ def check_authorization(token: str, tenant: str = "molveno") -> bool:
     headers = {"Authorization": f"Bearer {token}"}
     api_response = get_data(url, headers=headers)
     return api_response.get("authenticated", False)
+
+
+def put_data(url, json=None, headers=None, params=None):
+    logger.info(f"Putting data to URL: {url}")
+    merged_headers = {
+        "accept": "application/json",
+        "Content-Type": "application/json",
+        **_merge_auth_headers(headers),
+    }
+    response = requests.put(url, headers=merged_headers, params=params, json=json)
+    _log_response(response)
+    response.raise_for_status()
+    return response.json()
+
+
+def delete_data(url, headers=None, params=None):
+    logger.info(f"Deleting data at URL: {url}")
+    response = requests.delete(url, headers=_merge_auth_headers(headers), params=params)
+    _log_response(response)
+    response.raise_for_status()  # 500 (or 404) on missing entry propagates as an exception here
+    if not response.content:
+        return {"success": True}
+    return response.json()
 
 
 @tool
@@ -165,3 +187,116 @@ def create_new_proposal(
     # TODO: add other fields
 
     return post_data(url, json=body, params={"problem_id": problem_id})
+
+
+@tool
+def edit_problem(
+    problem_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    objectives: str | None = None,
+    additional_data: str | None = None,
+    tenant: str = "molveno",
+):
+    """
+    Edit an existing problem instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool edit_problem")
+
+    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+
+    body = {"extras": {}}
+    if name:
+        body["name"] = name
+    if description:
+        body["description"] = description
+    if objectives:
+        body["extras"]["objectives"] = objectives
+    if additional_data:
+        body["extras"]["additional_data"] = additional_data
+    # TODO: add other fields
+
+    return put_data(url, json=body)
+
+
+@tool
+def edit_proposal(
+    proposal_id: str,
+    name: str | None = None,
+    problem_id: str | None = None,
+    description: str | None = None,
+    resources: str | None = None,
+    context: str | None = None,
+    impact: str | None = None,
+    tenant: str = "molveno",
+):
+    """
+    Edit an existing proposal instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool edit_proposal")
+
+    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+
+    body = {"extras": {}}
+    if name:
+        body["name"] = name
+    if description:
+        body["description"] = description
+    if resources:
+        body["extras"]["resources"] = resources
+    if context:
+        body["extras"]["context"] = context
+    if impact:
+        body["extras"]["impact"] = impact
+    # TODO: add other fields
+
+    # problem_id here is only relevant if the proposal is being reassigned
+    # to a different parent problem; omit it otherwise.
+    params = {"problem_id": problem_id} if problem_id else None
+
+    return put_data(url, json=body, params=params)
+
+
+@tool
+def delete_problem(problem_id: str, tenant: str = "molveno"):
+    """
+    Delete an existing problem instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool delete_problem")
+    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+    return delete_data(url)
+
+
+@tool
+def delete_proposal(proposal_id: str, tenant: str = "molveno"):
+    """
+    Delete an existing proposal instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool delete_proposal")
+    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+    return delete_data(url)
+
+
+@tool
+def delete_scenario(scenario_id: str, tenant: str = "molveno"):
+    """
+    Delete an existing scenario instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool delete_scenario")
+    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+    return delete_data(url)

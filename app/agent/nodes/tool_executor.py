@@ -15,32 +15,57 @@ from app.tools.tool_schema import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
+_NOT_IMPLEMENTED_MSG = (
+    "This feature is not yet available. "
+    "The ability to {action} is planned for a future release. "
+    "Please check back later or contact your system administrator."
+)
+
 # Tools that mutate platform data and therefore require an explicit user
 # confirmation (recap of the data about to be submitted) before they run.
 CONFIRMATION_REQUIRED_TOOLS = {
     "create_new_problem",
     "create_new_proposal",
     "create_new_scenario",
+    "edit_problem",
+    "edit_proposal",
+    "edit_scenario",
+    "delete_problem",
+    "delete_proposal",
+    "delete_scenario",
 }
 
 
-# Tools whose creation depends on a parent entity that the user may have
-# referred to by name rather than by ID. Maps the tool to the (parameter,
-# current_context key) used to auto-resolve the ID once get_context_ids has
-# run earlier in the same plan.
-_PARENT_ID_RESOLUTION = {
+# Maps a tool to the (parameter, current_context key) used to auto-resolve
+# an ID once get_context_ids has run earlier in the same plan. Covers both
+# "parent" references (e.g. a new proposal's problem_id) and "target"
+# references (e.g. the problem_id of the problem being edited/deleted) —
+# resolution logic is identical in both cases: only fill in when exactly
+# one candidate exists in current_context, otherwise leave it for the
+# missing-parameter check to catch.
+_ID_RESOLUTION_MAP = {
+    # parent references (create)
     "create_new_proposal": ("problem_id", "problems"),
     "create_new_scenario": ("proposal_id", "proposals"),
+    # target references (edit / delete)
+    "edit_problem": ("problem_id", "problems"),
+    "delete_problem": ("problem_id", "problems"),
+    "edit_proposal": ("proposal_id", "proposals"),
+    "delete_proposal": ("proposal_id", "proposals"),
+    "edit_scenario": ("scenario_id", "scenarios"),
+    "delete_scenario": ("scenario_id", "scenarios"),
 }
 
 
-def _resolve_parent_id(state: AgentState, tool_name: str, tool_arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """If the tool needs a parent id that wasn't explicitly provided, try to
-    fill it in from IDs already resolved by get_context_ids earlier in the
-    plan. Only auto-fills when exactly one candidate is available — multiple
-    or zero candidates are left for the missing-parameter check to surface,
-    rather than guessed."""
-    mapping = _PARENT_ID_RESOLUTION.get(tool_name)
+def _resolve_referenced_id(
+    state: AgentState, tool_name: str, tool_arguments: Dict[str, Any]
+) -> Dict[str, Any]:
+    """If the tool needs an id (its own target id, or a parent id) that
+    wasn't explicitly provided, try to fill it in from IDs already resolved
+    by get_context_ids earlier in the plan. Only auto-fills when exactly one
+    candidate is available — multiple or zero candidates are left for the
+    missing-parameter check to surface, rather than guessed."""
+    mapping = _ID_RESOLUTION_MAP.get(tool_name)
     if not mapping:
         return tool_arguments
 
@@ -52,7 +77,9 @@ def _resolve_parent_id(state: AgentState, tool_name: str, tool_arguments: Dict[s
     if len(candidates) == 1:
         tool_arguments = dict(tool_arguments)
         tool_arguments[param_name] = candidates[0]
-        logger.info(f"Auto-resolved '{param_name}'={candidates[0]!r} from current_context for '{tool_name}'")
+        logger.info(
+            f"Auto-resolved '{param_name}'={candidates[0]!r} from current_context for '{tool_name}'"
+        )
 
     return tool_arguments
 
@@ -76,31 +103,31 @@ def execute_selected_tool(
 ) -> Dict[str, Any]:
     """
     Execute a tool with the given arguments.
-    
+
     Handles dispatching to tool-specific implementations.
     Returns the tool result.
     """
     logger.info(f"Executing tool: {tool_name} with args: {tool_arguments}")
-    
+
     # Get the tool definition
     registry = get_tool_registry()
     tool_def = registry.get_tool(tool_name)
-    
+
     if not tool_def:
         raise ValueError(f"Tool '{tool_name}' not found in registry")
-    
+
     if not tool_def.enabled:
         raise ValueError(f"Tool '{tool_name}' is disabled")
-    
+
     validate_tool_arguments(tool_def, tool_arguments)
-    
+
     # Get the executor function for this tool
     # For now, this is a placeholder that we'll fill in with actual implementations
     executor = get_tool_executor(tool_name)
-    
+
     if executor is None:
         raise NotImplementedError(f"Tool executor for '{tool_name}' not implemented")
-    
+
     # Execute the tool
     try:
         result = executor(state, **tool_arguments)
@@ -117,6 +144,7 @@ def execute_selected_tool(
             "error": str(e),
         }
 
+
 def validate_tool_arguments(tool_def: ToolDefinition, args: dict) -> None:
 
     for param in tool_def.parameters:
@@ -128,45 +156,46 @@ def validate_tool_arguments(tool_def: ToolDefinition, args: dict) -> None:
 
             value = args[param.name]
             if value is None:
-                raise ValueError(
-                    f"Parameter '{param.name}' cannot be null"
-                )
+                raise ValueError(f"Parameter '{param.name}' cannot be null")
 
             if isinstance(value, str) and not value.strip():
-                raise ValueError(
-                    f"Parameter '{param.name}' cannot be empty"
-                )
+                raise ValueError(f"Parameter '{param.name}' cannot be empty")
+
 
 def get_tool_executor(tool_name: str) -> Callable | None:
     """
     Get the executor function for a tool.
-    
+
     This dispatcher maps tool names to their implementation functions.
     """
     # Map tool names to executor functions
     executors: Dict[str, Callable] = {
         # System
         "get_system_capabilities": execute_get_system_capabilities,
-        
         # Data retrieval
         "list_available_problems": execute_list_available_problems,
         "list_available_proposals": execute_list_available_proposals,
         "list_available_scenarios": execute_list_available_scenarios,
         "get_context_ids": execute_get_context_ids,
         "get_context_details": execute_get_context_details,
-               
         # Interaction
         "interact_with_context": execute_interact_with_context,
-
-        # Creation stubs (not yet implemented)
+        # Creation stubs
         "create_new_problem": execute_create_new_problem,
         "create_new_proposal": execute_create_new_proposal,
-        "create_new_scenario": execute_create_new_scenario,
-
+        "create_new_scenario": execute_create_new_scenario,  # not yet implemented
+        # Editing stubs
+        "edit_problem": execute_edit_problem,
+        "edit_proposal": execute_edit_proposal,
+        "edit_scenario": execute_edit_scenario,  # not yet implemented
+        # Deletion stubs
+        "delete_problem": execute_delete_problem,
+        "delete_proposal": execute_delete_proposal,
+        "delete_scenario": execute_delete_scenario,
         # Utility
         "lookup_glossary": execute_lookup_glossary,
     }
-    
+
     return executors.get(tool_name)
 
 
@@ -193,12 +222,14 @@ def tool_executor_node(state: AgentState) -> Command:
     tool_name = current_step["tool_name"]
     tool_arguments = current_step.get("arguments", {})
 
-    logger.info(f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}")
+    logger.info(
+        f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}"
+    )
 
     # Try to fill in a parent id (problem_id / proposal_id) that the user
     # referred to by name rather than by literal ID, using whatever
     # get_context_ids already resolved earlier in this plan.
-    tool_arguments = _resolve_parent_id(state, tool_name, tool_arguments)
+    tool_arguments = _resolve_referenced_id(state, tool_name, tool_arguments)
 
     # Keep legacy aliases in sync so existing executors that read
     # state.cognitive.selected_tool / tool_arguments continue to work.
@@ -292,45 +323,46 @@ def tool_executor_node(state: AgentState) -> Command:
 # TOOL IMPLEMENTATIONS
 # =============================================================================
 
-def execute_get_system_capabilities(
-    state: AgentState,
-    **kwargs
-) -> Dict[str, Any]:
+
+def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute get_system_capabilities tool."""
     from app.config import SYSTEM_DESCRIPTION
-    
+
     logger.info("Executing get_system_capabilities tool")
-    
+
     return {
         "success": True,
         "system_description": SYSTEM_DESCRIPTION,
     }
 
+
 def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_problems tool."""
     from app.tools.backend_tools import get_all_problems
-    
+
     logger.info("Executing list_available_problems tool")
     result = get_all_problems.invoke({})
-       
+
     return result
+
 
 def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_proposals tool."""
     from app.tools.backend_tools import get_all_proposals
-    
+
     logger.info("Executing list_available_proposals tool")
     result = get_all_proposals.invoke({})
-       
+
     return result
+
 
 def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_scenarios tool."""
     from app.tools.backend_tools import get_all_scenarios
-    
+
     logger.info("Executing list_available_scenarios tool")
     result = get_all_scenarios.invoke({})
-       
+
     return result
 
 
@@ -469,21 +501,22 @@ def execute_get_context_details(
 ) -> Dict[str, Any]:
     """Execute get_context_details tool."""
     from app.tools.backend_tools import get_data_from_context
-    
-    logger.info(f"Executing get_context_details for context {state.cognitive.current_context}")
 
-    retrieved_context = get_data_from_context.invoke({
-        "current_context": state.cognitive.current_context
-    })
-    
+    logger.info(
+        f"Executing get_context_details for context {state.cognitive.current_context}"
+    )
+
+    retrieved_context = get_data_from_context.invoke(
+        {"current_context": state.cognitive.current_context}
+    )
+
     state.cognitive.retrieved_context = retrieved_context
-       
+
     return retrieved_context
 
+
 def execute_interact_with_context(
-    state: AgentState,
-    query: str,
-    **kwargs
+    state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
     """Execute interact_with_context tool."""
     import json
@@ -511,21 +544,13 @@ Answer:"""
 
     return {
         "success": True,
-        "message": answer,   # ← "message" key is now always present
+        "message": answer,  # ← "message" key is now always present
     }
 
 
-
-
 # =============================================================================
-# NOT-YET-IMPLEMENTED CREATION STUBS
+# CREATION STUBS
 # =============================================================================
-
-_NOT_IMPLEMENTED_MSG = (
-    "This feature is not yet available. "
-    "The ability to {action} is planned for a future release. "
-    "Please check back later or contact your system administrator."
-)
 
 
 def execute_create_new_problem(
@@ -548,7 +573,7 @@ def execute_create_new_problem(
     )
 
     return result
-      
+
 
 def execute_create_new_proposal(
     state: AgentState,
@@ -560,7 +585,7 @@ def execute_create_new_proposal(
     impact: str = "",
     **kwargs,
 ) -> Dict[str, Any]:
-    
+
     from app.tools.backend_tools import create_new_proposal
 
     result = create_new_proposal.invoke(
@@ -590,13 +615,142 @@ def execute_create_new_scenario(
         "success": True,
         "not_implemented": True,
         "message": _NOT_IMPLEMENTED_MSG.format(action="create new scenarios"),
-        "received": {"name": name, "proposal_id": proposal_id, "description": description},
+        "received": {
+            "name": name,
+            "proposal_id": proposal_id,
+            "description": description,
+        },
     }
+
+
+# =============================================================================
+# EDIT STUBS
+# =============================================================================
+
+
+def execute_edit_problem(
+    state: AgentState,
+    problem_id: str = "",
+    name: str = "",
+    description: str = "",
+    objectives: str | None = None,
+    additional_data: str | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
+
+    from app.tools.backend_tools import edit_problem
+
+    result = edit_problem.invoke(
+        {
+            "problem_id": problem_id,
+            "name": name,
+            "description": description,
+            "objectives": objectives,
+            "additional_data": additional_data,
+        }
+    )
+
+    return result
+
+
+def execute_edit_proposal(
+    state: AgentState,
+    proposal_id: str = "",
+    name: str = "",
+    problem_id: str = "",
+    description: str = "",
+    resources: str = "",
+    context: str = "",
+    impact: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+
+    from app.tools.backend_tools import edit_proposal
+
+    result = edit_proposal.invoke(
+        {
+            "proposal_id": proposal_id,
+            "name": name,
+            "problem_id": problem_id,
+            "description": description,
+            "resources": resources,
+            "context": context,
+            "impact": impact,
+        }
+    )
+
+    return result
+
+
+def execute_edit_scenario(
+    state: AgentState,
+    name: str = "",
+    proposal_id: str = "",
+    description: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Stub executor for edit_scenario — feature not yet implemented."""
+    logger.info(f"edit_scenario called (not implemented) | name='{name}'")
+    return {
+        "success": True,
+        "not_implemented": True,
+        "message": _NOT_IMPLEMENTED_MSG.format(action="create new scenarios"),
+        "received": {
+            "name": name,
+            "proposal_id": proposal_id,
+            "description": description,
+        },
+    }
+
+
+# =============================================================================
+# DELETE STUBS
+# =============================================================================
+
+
+def execute_delete_problem(
+    state: AgentState,
+    problem_id: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+
+    from app.tools.backend_tools import delete_problem
+
+    result = delete_problem.invoke({"problem_id": problem_id})
+
+    return result
+
+
+def execute_delete_proposal(
+    state: AgentState,
+    proposal_id: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+
+    from app.tools.backend_tools import delete_proposal
+
+    result = delete_proposal.invoke({"proposal_id": proposal_id})
+
+    return result
+
+
+def execute_delete_scenario(
+    state: AgentState,
+    scenario_id: str = "",
+    **kwargs,
+) -> Dict[str, Any]:
+
+    from app.tools.backend_tools import delete_scenario
+
+    result = delete_scenario.invoke({"scenario_id": scenario_id})
+
+    return result
 
 
 # =============================================================================
 # GLOSSARY LOOKUP
 # =============================================================================
+
 
 def execute_lookup_glossary(
     state: AgentState,
@@ -625,11 +779,7 @@ def execute_lookup_glossary(
     matches = {}
     for term, entry in GLOSSARY.items():
         # Build a flat list of strings to match against
-        searchable = (
-            [term]
-            + entry.get("aliases", [])
-            + entry.get("related_terms", [])
-        )
+        searchable = [term] + entry.get("aliases", []) + entry.get("related_terms", [])
         searchable_lower = " ".join(s.lower() for s in searchable)
 
         if any(tok in searchable_lower for tok in tokens):
@@ -648,13 +798,15 @@ def execute_lookup_glossary(
     # Format for readability in the output generator
     formatted = []
     for term, entry in matches.items():
-        formatted.append({
-            "term": term,
-            "definition": entry["definition"],
-            "aliases": entry.get("aliases", []),
-            "related_terms": entry.get("related_terms", []),
-            "examples": entry.get("examples", []),
-        })
+        formatted.append(
+            {
+                "term": term,
+                "definition": entry["definition"],
+                "aliases": entry.get("aliases", []),
+                "related_terms": entry.get("related_terms", []),
+                "examples": entry.get("examples", []),
+            }
+        )
 
     logger.info(f"lookup_glossary found {len(formatted)} match(es) for '{query}'")
 
