@@ -84,6 +84,11 @@ class CognitiveState:
 
     tool_result: Optional[Dict[str, Any]] = None
     tool_results: Dict[str, Any] = field(default_factory=dict)
+    # Ordered keys (into tool_results) produced by the *current* tool_plan only.
+    # tool_results itself is never cleared (tool_selector uses the full history
+    # as memory for planning), so this is what lets generate_output_message
+    # know exactly which results belong to this turn's plan.
+    current_plan_result_keys: List[str] = field(default_factory=list)
     tool_confirmation_needed: bool = False
     # Set to True right after the user confirms a pending creation tool, so that
     # tool_executor knows to actually run it instead of pausing again.

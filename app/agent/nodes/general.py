@@ -66,15 +66,36 @@ def error_recovery_node(state: AgentState) -> Command:
 # ---------------------------------------------------------------------------
 
 
+# Tools whose result is purely an internal resolution step (e.g. id lookups
+# used to fill in arguments for later tools in the same plan) and therefore
+# should never be surfaced to the user as part of the final answer.
+_INTERNAL_ONLY_TOOLS = {"get_context_ids"}
+
+
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
 
-    # If there's a tool result and no messages prepared yet, build them from the result
-    if state.cognitive.tool_result and not state.cognitive.messages_to_include:
-        state.cognitive.messages_to_include = _build_messages_from_tool_result(
-            state.cognitive.selected_tool,
-            state.cognitive.tool_result,
-        )
+    # If tools ran this turn and no messages have been prepared yet (e.g. by a
+    # clarification/confirmation/error path), build them from EVERY tool result
+    # produced by the current plan — not just the last one — so that e.g. a
+    # "list problems and proposals" request surfaces both lists.
+    if (
+        state.cognitive.current_plan_result_keys
+        and not state.cognitive.messages_to_include
+    ):
+        messages: list[str] = []
+        for result_key in state.cognitive.current_plan_result_keys:
+            tool_result = state.cognitive.tool_results.get(result_key)
+            if tool_result is None:
+                continue
+            # Strip a "__N" collision suffix to get back the real tool name.
+            base_tool_name = result_key.split("__", 1)[0]
+            if base_tool_name in _INTERNAL_ONLY_TOOLS:
+                continue
+            messages.extend(
+                _build_messages_from_tool_result(base_tool_name, tool_result)
+            )
+        state.cognitive.messages_to_include = messages
 
     try:
         output_message = generate_answer(state)
@@ -87,6 +108,7 @@ def generate_output_message_node(state: AgentState) -> Command:
 
     state.cognitive.messages_to_include = []
     state.cognitive.tool_result = None
+    state.cognitive.current_plan_result_keys = []
 
     return Command(update=state, goto=END)
 
@@ -98,8 +120,12 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         error = tool_result.get("error", "An unknown error occurred.")
         return [f"The operation failed: {error}"]
 
-    # Unwrap the inner output dict
+    # Unwrap the inner output dict. Guard against "output" being explicitly
+    # None (e.g. a backend DELETE call returning an empty/"null" body) so we
+    # never crash on output[...] below.
     output = tool_result.get("output", tool_result)
+    if output is None:
+        output = {}
 
     match tool_name:
 
@@ -122,16 +148,17 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             return [output.get("message", "No answer could be generated.")]
 
         case "create_new_problem" | "create_new_proposal":
-            return [f"'{output['name']}' was created successfully."]
+            return [f"'{output.get('name', 'The item')}' was created successfully."]
 
-        case "create_new_scenario":
+        case "create_new_scenario" | "edit_scenario":
+            # TODO
             return [output.get("message", "This feature is not yet implemented.")]
 
         case "edit_problem" | "edit_proposal":
-            return [f"'{output['name']}' was modfied successfully."]
+            return [f"'{output.get('name', 'The item')}' was modified successfully."]
 
         case "delete_problem" | "delete_proposal" | "delete_scenario":
-            return [f"'{output['name']}' was deleted successfully."]
+            return [f"'{output.get('name', 'The item')}' was deleted successfully."]
 
         case "lookup_glossary":
             matches = output.get("matches", [])

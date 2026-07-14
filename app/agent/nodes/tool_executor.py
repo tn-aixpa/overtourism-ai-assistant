@@ -282,6 +282,7 @@ def tool_executor_node(state: AgentState) -> Command:
             collision += 1
             result_key = f"{tool_name}__{collision}"
         state.cognitive.tool_results[result_key] = result
+        state.cognitive.current_plan_result_keys.append(result_key)
 
         state.add_trace(
             "tool_execution",

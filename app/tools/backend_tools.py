@@ -97,6 +97,24 @@ def get_all_scenarios(tenant="molveno"):
     return get_data(url)
 
 
+def get_single_problem(problem_id: str, tenant: str = "molveno") -> dict:
+    """Fetch a single problem instance (internal helper, not exposed as an agent tool)."""
+    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+    return get_data(url)
+
+
+def get_single_proposal(proposal_id: str, tenant: str = "molveno") -> dict:
+    """Fetch a single proposal instance (internal helper, not exposed as an agent tool)."""
+    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+    return get_data(url)
+
+
+def get_single_scenario(scenario_id: str, tenant: str = "molveno") -> dict:
+    """Fetch a single scenario instance (internal helper, not exposed as an agent tool)."""
+    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+    return get_data(url)
+
+
 @tool
 def get_data_from_context(current_context, tenant="molveno"):
     """Fetch data from the API."""
@@ -208,16 +226,24 @@ def edit_problem(
 
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
 
-    body = {"extras": {}}
-    if name:
-        body["name"] = name
-    if description:
-        body["description"] = description
+    # The backend expects the full instance on PUT (version, name, description,
+    # extras), not a partial patch. Fetch the current instance first so any
+    # field the user didn't mention is preserved instead of being wiped out.
+    existing = get_single_problem(problem_id, tenant=tenant)
+
+    extras = dict(existing.get("extras") or {})
     if objectives:
-        body["extras"]["objectives"] = objectives
+        extras["objectives"] = objectives
     if additional_data:
-        body["extras"]["additional_data"] = additional_data
+        extras["additional_data"] = additional_data
     # TODO: add other fields
+
+    body = {
+        "version": existing.get("version", 0),
+        "name": name if name else existing.get("name", ""),
+        "description": description if description else existing.get("description", ""),
+        "extras": extras,
+    }
 
     return put_data(url, json=body)
 
@@ -243,18 +269,29 @@ def edit_proposal(
 
     url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
 
-    body = {"extras": {}}
-    if name:
-        body["name"] = name
-    if description:
-        body["description"] = description
+    # The backend expects the full instance on PUT (version, name, description,
+    # status, extras, related_scenario_ids), not a partial patch. Fetch the
+    # current instance first so any field the user didn't mention (including
+    # status and related scenarios) is preserved instead of being wiped out.
+    existing = get_single_proposal(proposal_id, tenant=tenant)
+
+    extras = dict(existing.get("extras") or {})
     if resources:
-        body["extras"]["resources"] = resources
+        extras["resources"] = resources
     if context:
-        body["extras"]["context"] = context
+        extras["context"] = context
     if impact:
-        body["extras"]["impact"] = impact
+        extras["impact"] = impact
     # TODO: add other fields
+
+    body = {
+        "version": existing.get("version", 0),
+        "name": name if name else existing.get("name", ""),
+        "description": description if description else existing.get("description", ""),
+        "status": existing.get("status", "draft"),
+        "extras": extras,
+        "related_scenario_ids": existing.get("related_scenario_ids", []),
+    }
 
     # problem_id here is only relevant if the proposal is being reassigned
     # to a different parent problem; omit it otherwise.
@@ -273,7 +310,18 @@ def delete_problem(problem_id: str, tenant: str = "molveno"):
     """
     logger.info("Entered tool delete_problem")
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
-    return delete_data(url)
+
+    # DELETE responses are often empty (or just {"success": true}), which has
+    # no "name" for the confirmation message. Grab it beforehand.
+    name = problem_id
+    try:
+        existing = get_single_problem(problem_id, tenant=tenant)
+        name = existing.get("name", problem_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch problem '{problem_id}' before delete: {e}")
+
+    delete_data(url)
+    return {"success": True, "name": name}
 
 
 @tool
@@ -286,7 +334,16 @@ def delete_proposal(proposal_id: str, tenant: str = "molveno"):
     """
     logger.info("Entered tool delete_proposal")
     url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
-    return delete_data(url)
+
+    name = proposal_id
+    try:
+        existing = get_single_proposal(proposal_id, tenant=tenant)
+        name = existing.get("name", proposal_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch proposal '{proposal_id}' before delete: {e}")
+
+    delete_data(url)
+    return {"success": True, "name": name}
 
 
 @tool
@@ -299,4 +356,13 @@ def delete_scenario(scenario_id: str, tenant: str = "molveno"):
     """
     logger.info("Entered tool delete_scenario")
     url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
-    return delete_data(url)
+
+    name = scenario_id
+    try:
+        existing = get_single_scenario(scenario_id, tenant=tenant)
+        name = existing.get("name", scenario_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch scenario '{scenario_id}' before delete: {e}")
+
+    delete_data(url)
+    return {"success": True, "name": name}

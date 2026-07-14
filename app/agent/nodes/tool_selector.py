@@ -63,6 +63,7 @@ def tool_selector_node(state: AgentState) -> Command:
         state.cognitive.tool_arguments = {}
         state.cognitive.tool_plan = []
         state.cognitive.tool_plan_index = 0
+        state.cognitive.current_plan_result_keys = []
         return Command(update=state, goto="generate_output_message")
 
     import json
@@ -295,6 +296,7 @@ Return ONLY valid JSON.
 
     state.cognitive.tool_plan = tool_plan
     state.cognitive.tool_plan_index = 0
+    state.cognitive.current_plan_result_keys = []
 
     if tool_plan:
         state.cognitive.selected_tool = tool_plan[0]["tool_name"]

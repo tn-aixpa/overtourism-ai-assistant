@@ -100,6 +100,7 @@ def wait_user_input_node(state: AgentState):
         state.cognitive.tool_confirmed = False
         state.cognitive.tool_plan = []
         state.cognitive.tool_plan_index = 0
+        state.cognitive.current_plan_result_keys = []
         state.waiting_for = None
         state.user_input = None
         state.cognitive.messages_to_include = [
