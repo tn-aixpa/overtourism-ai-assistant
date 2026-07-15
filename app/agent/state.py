@@ -8,6 +8,7 @@ import json
 MAX_CONTEXT_WINDOW = 20
 DEFAULT_REASONING_CONTEXT_SIZE = 5
 
+
 @dataclass
 class ConversationMessage:
     role: str  # "user" | "assistant"
@@ -52,7 +53,7 @@ class TraceBuffer:
     def add_step(self, step: TraceStep):
         self.steps.append(step)
         if len(self.steps) > self.max_trace_size:
-            self.steps = self.steps[-self.max_trace_size:]
+            self.steps = self.steps[-self.max_trace_size :]
 
     def get_last_n(self, n: Optional[int] = None) -> List[TraceStep]:
         n = n or self.max_trace_size
@@ -94,7 +95,9 @@ class CognitiveState:
     # tool_executor knows to actually run it instead of pausing again.
     tool_confirmed: bool = False
 
-    def _add_trace(self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None):
+    def _add_trace(
+        self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None
+    ):
         self.trace.add_step(TraceStep(step_type=step_type, node=node, data=data))
 
 
@@ -106,6 +109,7 @@ class AgentState:
     sliders_data: Optional[dict[str, Any]] = None
 
     # Orchestration
+    token_used: int = 0
     session_id: str = ""
     user_lang: str = "English"
     integrated_mode: bool = False
@@ -131,24 +135,29 @@ class AgentState:
             return None
         return self.cognitive.trace.steps[-1].node
 
-    def add_trace(self, step_type: str, node: str | None = None, data: Optional[Dict[str, Any]] = None):
+    def add_trace(
+        self,
+        step_type: str,
+        node: str | None = None,
+        data: Optional[Dict[str, Any]] = None,
+    ):
         self.cognitive._add_trace(step_type=step_type, node=node, data=data)
 
     def add_user_message(self, content: str):
         self.conversation.add_message(ConversationMessage(role="user", content=content))
 
     def add_assistant_message(self, content: str):
-        from app.utils.llm import BACKUP_PROVIDER, LOCAL_MODEL, SMARTLAB_MODEL
+        from app.utils.llm import BACKUP_PROVIDER, LOCAL_MODELS, SMARTLAB_MODELS
 
         pipeline = self.cognitive.generation_pipeline
 
         def _provider_label(model_name: str) -> str:
             if model_name.startswith("claude"):
                 return "anthropic"
-            if model_name == SMARTLAB_MODEL:
-                return f"smartlab-{SMARTLAB_MODEL}"
-            if model_name == LOCAL_MODEL:
-                return f"ollama-{LOCAL_MODEL}"
+            if model_name in SMARTLAB_MODELS.values():
+                return f"smartlab-{model_name}"
+            if model_name in LOCAL_MODELS.values():
+                return f"ollama-{model_name}"
             return f"{BACKUP_PROVIDER}-{model_name}"
 
         labels = {_provider_label(m) for m in pipeline}
@@ -161,7 +170,9 @@ class AgentState:
             generated_by = "mixed"
 
         self.conversation.add_message(
-            ConversationMessage(role="assistant", content=content, generated_by=generated_by)
+            ConversationMessage(
+                role="assistant", content=content, generated_by=generated_by
+            )
         )
 
     def get_last_user_message(self):
@@ -192,7 +203,10 @@ class AgentState:
         if isinstance(obj, dict):
             return {k: self._serialize(v) for k, v in obj.items()}
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            return {f.name: self._serialize(getattr(obj, f.name)) for f in dataclasses.fields(obj)}
+            return {
+                f.name: self._serialize(getattr(obj, f.name))
+                for f in dataclasses.fields(obj)
+            }
         try:
             json.dumps(obj)
             return obj
@@ -201,6 +215,7 @@ class AgentState:
 
     def dump_to_file(self, filepath: str):
         import os
+
         os.makedirs("logs", exist_ok=True)
         serialized = self._serialize(self.__dict__)
         with open(filepath, "w", encoding="utf-8") as f:

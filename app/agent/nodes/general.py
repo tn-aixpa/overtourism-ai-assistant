@@ -5,7 +5,7 @@ from langgraph.graph import END
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
-from app.utils.llm_text_generation import generate_answer
+from app.prompts.answer_generation import generate_answer
 
 logger = logging.getLogger(__name__)
 

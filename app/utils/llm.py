@@ -17,26 +17,22 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-USE_ANTHROPIC = True
-
-# Backup LLM provider when USE_ANTHROPIC is False (or Anthropic fails)
+# Backup LLM provider when Anthropic fails
 # Options: "ollama" | "smartlab"
 BACKUP_PROVIDER = "smartlab"
 
-LOCAL_MODEL = "mistral"       # used when BACKUP_PROVIDER = "ollama"
-
+LOCAL_MODELS = {
+    "light": os.environ.get("OLLAMA_LIGHT_MODEL", "mistral"),
+    "heavy": os.environ.get("OLLAMA_HEAVY_MODEL", "llama3.1"),
+}
 SMARTLAB_BASE_URL = "https://owu.smartcommunitylab.it/api/chat/completions"
-SMARTLAB_MODEL = "llama31"    # used when BACKUP_PROVIDER = "smartlab"
-
+SMARTLAB_MODELS = {
+    "light": os.environ.get("SMARTLAB_LIGHT_MODEL", "llama31"),
+    "heavy": os.environ.get("SMARTLAB_HEAVY_MODEL", "llama31"),
+}
 ANTHROPIC_MODELS = {
     "light": "claude-haiku-4-5",
     "heavy": "claude-sonnet-4-5",
-}
-
-ANTHROPIC_PRICING = {
-    "claude-haiku-4-5": {"input": 0.80, "output": 4.00},
-    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
-    "claude-opus-4-5": {"input": 15.00, "output": 75.00},
 }
 
 # =========================
@@ -49,9 +45,9 @@ LLM_TIMEOUT = 20  # seconds
 # =========================
 # CLIENT INITIALIZATION
 # =========================
-def init_ollama_llm():
+def init_ollama_llm(model: str):
     return ChatOllama(
-        model=LOCAL_MODEL,
+        model=model,
         base_url="http://localhost:11434",
         temperature=0,
         keep_alive=-1,
@@ -68,50 +64,18 @@ def init_anthropic():
 def get_llm_client():
     global _llm_client
 
-    if USE_ANTHROPIC:
-        if _llm_client is None or not isinstance(_llm_client, anthropic.Anthropic):
-            _llm_client = init_anthropic()
-    else:
-        if BACKUP_PROVIDER == "ollama":
-            if _llm_client is None or not isinstance(_llm_client, ChatOllama):
-                _llm_client = init_ollama_llm()
-        else:
-            _llm_client = None
+    if _llm_client is None or not isinstance(_llm_client, anthropic.Anthropic):
+        _llm_client = init_anthropic()
 
     return _llm_client
 
 
 # =========================
-# HELPERS
-# =========================
-def _ensure_logs_dir():
-    os.makedirs("logs", exist_ok=True)
-
-
-def log_time(model_name: str, elapsed: float):
-    _ensure_logs_dir()
-    filename = f"logs/times_{re.sub(r'\\W+', '', model_name)}.txt"
-    with open(filename, "a+") as f:
-        f.write(f"{elapsed:.2f}\n")
-
-
-def log_cost(model_name: str, input_tokens: int, output_tokens: int):
-    _ensure_logs_dir()
-    pricing = ANTHROPIC_PRICING.get(model_name)
-    if not pricing:
-        return
-    cost = (
-        input_tokens / 1_000_000 * pricing["input"] +
-        output_tokens / 1_000_000 * pricing["output"]
-    )
-    with open("logs/costs.csv", "a+") as f:
-        f.write(f"{model_name};{input_tokens};{output_tokens};{cost}\n")
-
-
-# =========================
 # ANTHROPIC CALL WITH RETRY
 # =========================
-def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: int, max_retries: int = 5):
+def call_anthropic_with_retry(
+    llm_client, model: str, prompt: str, max_tokens: int, max_retries: int = 5
+):
     for attempt in range(max_retries):
         try:
             return llm_client.messages.create(
@@ -123,8 +87,10 @@ def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: i
             if e.status_code == 529:
                 if attempt == max_retries - 1:
                     raise
-                wait_time = 2 ** attempt + 1
-                logger.warning(f"Anthropic overloaded (attempt {attempt+1}), retrying in {wait_time}s")
+                wait_time = 2**attempt + 1
+                logger.warning(
+                    f"Anthropic overloaded (attempt {attempt+1}), retrying in {wait_time}s"
+                )
                 sleep(wait_time)
             else:
                 raise
@@ -133,17 +99,21 @@ def call_anthropic_with_retry(llm_client, model: str, prompt: str, max_tokens: i
 # =========================
 # BACKUP LLM CALLS
 # =========================
-def llm_local_interaction(prompt: str, llm_client: ChatOllama) -> tuple[str, str]:
-    logger.info(f"Using ollama ({LOCAL_MODEL})")
+def llm_local_interaction(
+    prompt: str, llm_client: ChatOllama, model: str
+) -> tuple[str, str]:
+    logger.info(f"Using ollama ({model})")
     response = llm_client.invoke([HumanMessage(content=prompt)])
-    return response.content.strip(), LOCAL_MODEL
+    return response.content.strip(), model
 
 
-def llm_smartlab_interaction(prompt: str) -> tuple[str, str]:
-    logger.info(f"Using smartlab ({SMARTLAB_MODEL})")
+def llm_smartlab_interaction(prompt: str, model: str) -> tuple[str, str]:
+    logger.info(f"Using smartlab ({model})")
     api_key = os.environ.get("SMARTLAB_API_KEY")
     if not api_key:
-        raise RequestHandlingException("SMARTLAB_API_KEY environment variable is not set")
+        raise RequestHandlingException(
+            "SMARTLAB_API_KEY environment variable is not set"
+        )
 
     response = requests.post(
         SMARTLAB_BASE_URL,
@@ -151,25 +121,34 @@ def llm_smartlab_interaction(prompt: str) -> tuple[str, str]:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={"model": SMARTLAB_MODEL, "messages": [{"role": "user", "content": prompt}]},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
         timeout=LLM_TIMEOUT,
     )
     response.raise_for_status()
     text = response.json()["choices"][0]["message"]["content"].strip()
-    return text, SMARTLAB_MODEL
+    return text, model
 
 
-def call_backup_llm(prompt: str) -> tuple[str, str]:
+def call_backup_llm(prompt: str, lightweight_llm: bool = True) -> tuple[str, str]:
+    """Fallback call. Now tier-aware: a light task still gets the backup
+    provider's light model, a heavy task gets its heavy model, instead of both
+    collapsing onto a single fixed backup model regardless of task weight."""
+    tier = "light" if lightweight_llm else "heavy"
+
     if BACKUP_PROVIDER == "ollama":
-        llm_client = init_ollama_llm()
-        future = EXECUTOR.submit(llm_local_interaction, prompt, llm_client)
+        model = LOCAL_MODELS[tier]
+        llm_client = init_ollama_llm(model)
+        future = EXECUTOR.submit(llm_local_interaction, prompt, llm_client, model)
         try:
             return future.result(timeout=LLM_TIMEOUT)
         except FuturesTimeoutError:
             future.cancel()
-            raise RequestHandlingException(f"Ollama LLM timed out after {LLM_TIMEOUT} seconds")
+            raise RequestHandlingException(
+                f"Ollama LLM ({model}) timed out after {LLM_TIMEOUT} seconds"
+            )
     elif BACKUP_PROVIDER == "smartlab":
-        return llm_smartlab_interaction(prompt)
+        model = SMARTLAB_MODELS[tier]
+        return llm_smartlab_interaction(prompt, model)
     else:
         raise RequestHandlingException(f"Unknown BACKUP_PROVIDER: '{BACKUP_PROVIDER}'")
 
@@ -177,29 +156,28 @@ def call_backup_llm(prompt: str) -> tuple[str, str]:
 # =========================
 # MAIN LLM INTERFACE
 # =========================
-def llm_interaction(state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True) -> str:
+def llm_interaction(
+    state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True
+) -> str:
     try:
-        start = time()
 
-        if USE_ANTHROPIC:
-            llm_client = get_llm_client()
-            try:
-                model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
-                response = call_anthropic_with_retry(
-                    llm_client=llm_client,
-                    model=model_name,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                )
-                result = response.content[0].text.strip()
-                log_cost(model_name, response.usage.input_tokens, response.usage.output_tokens)
-            except Exception as e:
-                logger.error(f"Anthropic error: {e}, falling back to {BACKUP_PROVIDER}")
-                result, model_name = call_backup_llm(prompt)
-        else:
+        llm_client = get_llm_client()
+        try:
+            model_name = ANTHROPIC_MODELS["light" if lightweight_llm else "heavy"]
+            response = call_anthropic_with_retry(
+                llm_client=llm_client,
+                model=model_name,
+                prompt=prompt,
+                max_tokens=max_tokens,
+            )
+            result = response.content[0].text.strip()
+            state.token_used += (
+                response.usage.input_tokens + response.usage.output_tokens
+            )
+        except Exception as e:
+            logger.error(f"Anthropic error: {e}, falling back to {BACKUP_PROVIDER}")
             result, model_name = call_backup_llm(prompt)
 
-        log_time(model_name, time() - start)
         state.cognitive.generation_pipeline.append(model_name)
         return result
 
