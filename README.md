@@ -32,13 +32,3 @@ Additionally you will need
 
 1) [overtourism backend](https://github.com/fbk-most/overtourism)
 2) [overtourism-fronted](https://github.com/fbk-most/overtourism-frontend)
-2) ollama server (optional)
-
-To install the ollama server, please follow [this](https://github.com/ollama/ollama?tab=readme-ov-file) guide.
-Onece installed use 
-
-```
-ollama pull mistral
-```
-
-To run the backend server please

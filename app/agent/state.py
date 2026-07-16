@@ -147,18 +147,12 @@ class AgentState:
         self.conversation.add_message(ConversationMessage(role="user", content=content))
 
     def add_assistant_message(self, content: str):
-        from app.utils.llm import BACKUP_PROVIDER, LOCAL_MODELS, SMARTLAB_MODELS
-
         pipeline = self.cognitive.generation_pipeline
 
         def _provider_label(model_name: str) -> str:
             if model_name.startswith("claude"):
                 return "anthropic"
-            if model_name in SMARTLAB_MODELS.values():
-                return f"smartlab-{model_name}"
-            if model_name in LOCAL_MODELS.values():
-                return f"ollama-{model_name}"
-            return f"{BACKUP_PROVIDER}-{model_name}"
+            return f"{model_name}"
 
         labels = {_provider_label(m) for m in pipeline}
 

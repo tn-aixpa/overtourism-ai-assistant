@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 
 from app.agent.state import AgentState
 from app.utils.llm import llm_interaction, format_messages
+from app.utils.common import build_prior_results_block
 
 
 def select_tools(
@@ -13,16 +14,28 @@ def select_tools(
 ):
 
     message = (state.get_last_user_message() or "").content
-    history = state.get_reasoning_context()
-    history_block = format_messages(history) if history else "None"
-    tools_json = json.dumps(tools_for_llm, indent=2)
-    available_tools_json = json.dumps(tools_for_llm_enabled, indent=2)
 
-    prior_results_block = "None"
-    if state.cognitive.tool_results:
-        prior_results_block = json.dumps(
-            state.cognitive.tool_results, indent=2, default=str
-        )
+    # The newest user message is already surfaced separately above as
+    # `message`; drop it from the history block if it's the tail entry so we
+    # don't pay for the same text twice in every prompt.
+    history = state.get_reasoning_context()
+    if history and history[-1].get("content") == message:
+        history = history[:-1]
+    history_block = format_messages(history) if history else "None"
+
+    # Only the tools actually usable in this context need their full
+    # schema (name/description/parameters) — the model needs that detail to
+    # build correct arguments. Tools that exist but aren't enabled here are
+    # only relevant for the Step 1 "tool_unavailable" check, so we pass just
+    # their names instead of a second full schema dump.
+    available_tools_json = json.dumps(tools_for_llm_enabled, indent=2)
+    enabled_names = {t["function"]["name"] for t in tools_for_llm_enabled}
+    unavailable_tool_names = [
+        t["function"]["name"] for t in tools_for_llm if t["function"]["name"] not in enabled_names
+    ]
+
+    # Bounded regardless of session length — see build_prior_results_block.
+    prior_results_block = build_prior_results_block(state.cognitive.tool_results)
 
     prompt = f"""
 You are an assistant for a digital twin platform named AIxPA related to tourism management.
@@ -33,8 +46,8 @@ Follow the steps below IN ORDER. Stop at the first step that applies and return 
 STEP 1 — TOOL AVAILABILITY CHECK
 ============================================================
 Look at "Tools available in the current execution mode" below.
-If answering this message would require a tool from "Known tools" that is NOT in that list,
-return exactly this and STOP:
+If answering this message would require one of the "Other tools that exist but are not
+available in this mode" (listed by name below), return exactly this and STOP:
 {{"action": "tool_unavailable", "tool": "<tool_name>", "message": "..."}}
 
 ============================================================
@@ -169,11 +182,12 @@ Conversation so far:
 New user message:
 "{message}"
 
-Known tools:
-{tools_json}
-
-Tools available in the current execution mode:
+Tools available in the current execution mode (full schemas — use these for arguments):
 {available_tools_json}
+
+Other tools that exist in the system but are NOT available in this mode (names only —
+if the request needs one of these, use the STEP 1 tool_unavailable response):
+{json.dumps(unavailable_tool_names, indent=2) if unavailable_tool_names else "None"}
 
 Return ONLY valid JSON.
 """

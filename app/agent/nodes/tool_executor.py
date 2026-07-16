@@ -22,6 +22,14 @@ _NOT_IMPLEMENTED_MSG = (
     "Please check back later or contact your system administrator."
 )
 
+# Hard cap on how many tool results we keep in memory per session. This is a
+# second line of defense on top of the prompt-side truncation in
+# build_prior_results_block: without it, state.cognitive.tool_results grows
+# forever for the lifetime of a session (it's kept intentionally across
+# turns so the tool_selector can see what already ran), which bloats both
+# the in-memory AgentState and the JSON dumped to logs/state_<id>.json.
+MAX_STORED_TOOL_RESULTS = 30
+
 # Tools that mutate platform data and therefore require an explicit user
 # confirmation (recap of the data about to be submitted) before they run.
 CONFIRMATION_REQUIRED_TOOLS = {
@@ -200,6 +208,26 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     return executors.get(tool_name)
 
 
+def _trim_tool_results(state: AgentState) -> None:
+    """Evict the oldest tool_results entries once we're over the cap.
+
+    Never evicts a key produced by the plan currently executing —
+    generate_output_message_node needs those to build the final answer.
+    """
+    results = state.cognitive.tool_results
+    protected = set(state.cognitive.current_plan_result_keys)
+
+    while len(results) > MAX_STORED_TOOL_RESULTS:
+        for key in results:  # dicts preserve insertion order -> oldest first
+            if key not in protected:
+                del results[key]
+                break
+        else:
+            # Everything remaining belongs to the current plan; stop rather
+            # than evict something generate_output_message_node still needs.
+            break
+
+
 def tool_executor_node(state: AgentState) -> Command:
     """
     Main tool executor node that iterates through the tool plan.
@@ -284,6 +312,7 @@ def tool_executor_node(state: AgentState) -> Command:
             result_key = f"{tool_name}__{collision}"
         state.cognitive.tool_results[result_key] = result
         state.cognitive.current_plan_result_keys.append(result_key)
+        _trim_tool_results(state)
 
         state.add_trace(
             "tool_execution",

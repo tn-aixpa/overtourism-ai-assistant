@@ -5,7 +5,6 @@ import requests
 from time import time, sleep
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import anthropic
-from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 
 from app.agent.state import AgentState
@@ -17,27 +16,18 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-# Backup LLM provider when Anthropic fails
-# Options: "ollama" | "smartlab"
-BACKUP_PROVIDER = "smartlab"
 
-LOCAL_MODELS = {
-    "light": os.environ.get("OLLAMA_LIGHT_MODEL", "mistral"),
-    "heavy": os.environ.get("OLLAMA_HEAVY_MODEL", "llama3.1"),
-}
 SMARTLAB_BASE_URL = "https://owu.smartcommunitylab.it/api/chat/completions"
 SMARTLAB_MODELS = {
     "light": os.environ.get("SMARTLAB_LIGHT_MODEL", "llama31"),
     "heavy": os.environ.get("SMARTLAB_HEAVY_MODEL", "llama31"),
 }
+
 ANTHROPIC_MODELS = {
     "light": "claude-haiku-4-5",
     "heavy": "claude-sonnet-4-5",
 }
 
-# =========================
-# TIMEOUT
-# =========================
 EXECUTOR = ThreadPoolExecutor(max_workers=4)
 LLM_TIMEOUT = 20  # seconds
 
@@ -45,15 +35,6 @@ LLM_TIMEOUT = 20  # seconds
 # =========================
 # CLIENT INITIALIZATION
 # =========================
-def init_ollama_llm(model: str):
-    return ChatOllama(
-        model=model,
-        base_url="http://localhost:11434",
-        temperature=0,
-        keep_alive=-1,
-    )
-
-
 def init_anthropic():
     return anthropic.Anthropic(
         api_key=os.environ.get("ANTHROPIC_API_KEY"),
@@ -99,14 +80,6 @@ def call_anthropic_with_retry(
 # =========================
 # BACKUP LLM CALLS
 # =========================
-def llm_local_interaction(
-    prompt: str, llm_client: ChatOllama, model: str
-) -> tuple[str, str]:
-    logger.info(f"Using ollama ({model})")
-    response = llm_client.invoke([HumanMessage(content=prompt)])
-    return response.content.strip(), model
-
-
 def llm_smartlab_interaction(prompt: str, model: str) -> tuple[str, str]:
     logger.info(f"Using smartlab ({model})")
     api_key = os.environ.get("SMARTLAB_API_KEY")
@@ -135,22 +108,8 @@ def call_backup_llm(prompt: str, lightweight_llm: bool = True) -> tuple[str, str
     collapsing onto a single fixed backup model regardless of task weight."""
     tier = "light" if lightweight_llm else "heavy"
 
-    if BACKUP_PROVIDER == "ollama":
-        model = LOCAL_MODELS[tier]
-        llm_client = init_ollama_llm(model)
-        future = EXECUTOR.submit(llm_local_interaction, prompt, llm_client, model)
-        try:
-            return future.result(timeout=LLM_TIMEOUT)
-        except FuturesTimeoutError:
-            future.cancel()
-            raise RequestHandlingException(
-                f"Ollama LLM ({model}) timed out after {LLM_TIMEOUT} seconds"
-            )
-    elif BACKUP_PROVIDER == "smartlab":
-        model = SMARTLAB_MODELS[tier]
-        return llm_smartlab_interaction(prompt, model)
-    else:
-        raise RequestHandlingException(f"Unknown BACKUP_PROVIDER: '{BACKUP_PROVIDER}'")
+    model = SMARTLAB_MODELS[tier]
+    return llm_smartlab_interaction(prompt, model)
 
 
 # =========================
@@ -175,7 +134,7 @@ def llm_interaction(
                 response.usage.input_tokens + response.usage.output_tokens
             )
         except Exception as e:
-            logger.error(f"Anthropic error: {e}, falling back to {BACKUP_PROVIDER}")
+            logger.error(f"Anthropic error: {e}, falling back to backup llm")
             result, model_name = call_backup_llm(prompt)
 
         state.cognitive.generation_pipeline.append(model_name)
