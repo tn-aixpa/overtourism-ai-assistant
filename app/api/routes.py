@@ -16,7 +16,7 @@ import asyncio
 from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
-from app.agent.memory import generate_key, load_state, save_state, _get_lock
+from app.agent.memory import load_state, save_state, _get_lock
 from app.config import GENERAL_ERROR_MESSAGE
 from app.agent.events import get_queue, publish_done, get_result
 from app.tools.backend_tools import check_authorization
@@ -79,8 +79,10 @@ async def run_agent_endpoint(
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
     authorization: str | None = Header(default=None),
+    tenant: str = Form(default="molveno"),  # TODO remove default
 ):
 
+    # Verify authorization
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401, detail="Missing or malformed Authorization header"
@@ -88,19 +90,24 @@ async def run_agent_endpoint(
 
     token = authorization.removeprefix("Bearer ").strip()
 
-    if not check_authorization(token=token, tenant="molveno"):
+    if not check_authorization(token=token, tenant=tenant):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    key = session_id or generate_key()
-    lock = _get_lock(key)
+    # Check session key
+    if not session_id or session_id == "":
+        raise HTTPException(status_code=400, detail="No session_id provided")
+
+    # Get status and proceed with the request
+    lock = _get_lock(session_id)
 
     async with lock:
-        state = load_state(key)
+        state = load_state(session_id)
         if state is None:
             state = AgentState(
-                session_id=key,
+                session_id=session_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
+                tenant=tenant,
             )
 
         assert message, "No message provided"
@@ -132,8 +139,8 @@ async def run_agent_endpoint(
 
         save_state(state)
 
-    background_tasks.add_task(asyncio.to_thread, _run_agent, key, state, token)
-    return {"session_id": key}
+    background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
+    return {"session_id": session_id}
 
 
 @router.get("/agent/result/{session_id}", response_model=AgentResponse)

@@ -113,6 +113,7 @@ class AgentState:
     session_id: str = ""
     user_lang: str = "English"
     integrated_mode: bool = False
+    tenant: str = ""
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"

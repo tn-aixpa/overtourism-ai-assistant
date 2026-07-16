@@ -372,7 +372,7 @@ def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, An
     from app.tools.backend_tools import get_all_problems
 
     logger.info("Executing list_available_problems tool")
-    result = get_all_problems.invoke({})
+    result = get_all_problems.invoke({"tenant": state.tenant})
 
     return result
 
@@ -382,7 +382,7 @@ def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, A
     from app.tools.backend_tools import get_all_proposals
 
     logger.info("Executing list_available_proposals tool")
-    result = get_all_proposals.invoke({})
+    result = get_all_proposals.invoke({"tenant": state.tenant})
 
     return result
 
@@ -392,7 +392,7 @@ def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, A
     from app.tools.backend_tools import get_all_scenarios
 
     logger.info("Executing list_available_scenarios tool")
-    result = get_all_scenarios.invoke({})
+    result = get_all_scenarios.invoke({"tenant": state.tenant})
 
     return result
 
@@ -469,7 +469,7 @@ def execute_get_context_details(
     )
 
     retrieved_context = get_data_from_context.invoke(
-        {"current_context": state.cognitive.current_context}
+        {"current_context": state.cognitive.current_context, "tenant": state.tenant}
     )
 
     state.cognitive.retrieved_context = retrieved_context
@@ -527,6 +527,7 @@ def execute_create_new_problem(
 
     result = create_new_problem.invoke(
         {
+            "tenant": state.tenant,
             "name": name,
             "description": description,
             "objectives": objectives,
@@ -552,6 +553,7 @@ def execute_create_new_proposal(
 
     result = create_new_proposal.invoke(
         {
+            "tenant": state.tenant,
             "name": name,
             "problem_id": problem_id,
             "description": description,
@@ -604,6 +606,7 @@ def execute_edit_problem(
 
     result = edit_problem.invoke(
         {
+            "tenant": state.tenant,
             "problem_id": problem_id,
             "name": name,
             "description": description,
@@ -631,6 +634,7 @@ def execute_edit_proposal(
 
     result = edit_proposal.invoke(
         {
+            "tenant": state.tenant,
             "proposal_id": proposal_id,
             "name": name,
             "problem_id": problem_id,
@@ -678,7 +682,7 @@ def execute_delete_problem(
 
     from app.tools.backend_tools import delete_problem
 
-    result = delete_problem.invoke({"problem_id": problem_id})
+    result = delete_problem.invoke({"problem_id": problem_id, "tenant": state.tenant})
 
     return result
 
@@ -691,7 +695,9 @@ def execute_delete_proposal(
 
     from app.tools.backend_tools import delete_proposal
 
-    result = delete_proposal.invoke({"proposal_id": proposal_id})
+    result = delete_proposal.invoke(
+        {"proposal_id": proposal_id, "tenant": state.tenant}
+    )
 
     return result
 
@@ -704,7 +710,9 @@ def execute_delete_scenario(
 
     from app.tools.backend_tools import delete_scenario
 
-    result = delete_scenario.invoke({"scenario_id": scenario_id})
+    result = delete_scenario.invoke(
+        {"scenario_id": scenario_id, "tenant": state.tenant}
+    )
 
     return result
 

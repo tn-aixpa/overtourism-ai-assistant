@@ -11,10 +11,6 @@ _LOCKS: Dict[str, asyncio.Lock] = {}
 _STATE_STORE: Dict[str, AgentState] = {}
 
 
-def generate_key() -> str:
-    return str(uuid.uuid4())
-
-
 def _get_lock(session_id: str) -> asyncio.Lock:
     """Get or create a per-session async lock."""
     if session_id not in _LOCKS:

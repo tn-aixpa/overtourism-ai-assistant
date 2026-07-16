@@ -45,7 +45,7 @@ def post_data(url, json=None, headers=None, params=None):
     return response.json()
 
 
-def check_authorization(token: str, tenant: str = "molveno") -> bool:
+def check_authorization(token: str, tenant: str) -> bool:
     """Check authorization against the backend."""
     url = f"{BACKEND_URL}{tenant}/auth/me"
     headers = {"Authorization": f"Bearer {token}"}
@@ -77,46 +77,46 @@ def delete_data(url, headers=None, params=None):
 
 
 @tool
-def get_all_problems(tenant="molveno"):
+def get_all_problems(tenant: str):
     """Fetch all problems from the API."""
     url = f"{BACKEND_URL}{tenant}/problems"
     return get_data(url)
 
 
 @tool
-def get_all_proposals(tenant="molveno"):
+def get_all_proposals(tenant: str):
     """Fetch all proposals from the API."""
     url = f"{BACKEND_URL}{tenant}/proposals"
     return get_data(url)
 
 
 @tool
-def get_all_scenarios(tenant="molveno"):
+def get_all_scenarios(tenant: str):
     """Fetch all scenarios from the API."""
     url = f"{BACKEND_URL}{tenant}/scenarios"
     return get_data(url)
 
 
-def get_single_problem(problem_id: str, tenant: str = "molveno") -> dict:
+def get_single_problem(problem_id: str, tenant: str) -> dict:
     """Fetch a single problem instance (internal helper, not exposed as an agent tool)."""
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
     return get_data(url)
 
 
-def get_single_proposal(proposal_id: str, tenant: str = "molveno") -> dict:
+def get_single_proposal(proposal_id: str, tenant) -> dict:
     """Fetch a single proposal instance (internal helper, not exposed as an agent tool)."""
     url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
     return get_data(url)
 
 
-def get_single_scenario(scenario_id: str, tenant: str = "molveno") -> dict:
+def get_single_scenario(scenario_id: str, tenant) -> dict:
     """Fetch a single scenario instance (internal helper, not exposed as an agent tool)."""
     url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
     return get_data(url)
 
 
 @tool
-def get_data_from_context(current_context, tenant="molveno"):
+def get_data_from_context(current_context, tenant):
     """Fetch data from the API."""
     retrieved = {}
 
@@ -149,11 +149,11 @@ def get_data_from_context(current_context, tenant="molveno"):
 
 @tool
 def create_new_problem(
+    tenant: str,
     name: str,
     description: str,
     objectives: str | None = None,
     additional_data: str | None = None,
-    tenant: str = "molveno",
 ):
     """
     Create a new problem instance.
@@ -177,13 +177,13 @@ def create_new_problem(
 
 @tool
 def create_new_proposal(
+    tenant: str,
     name: str,
     problem_id: str,
     description: str,
     resources: str,
     context: str,
     impact: str,
-    tenant: str = "molveno",
 ):
     """
     Create a new proposal instance.
@@ -209,12 +209,12 @@ def create_new_proposal(
 
 @tool
 def edit_problem(
+    tenant: str,
     problem_id: str,
     name: str | None = None,
     description: str | None = None,
     objectives: str | None = None,
     additional_data: str | None = None,
-    tenant: str = "molveno",
 ):
     """
     Edit an existing problem instance.
@@ -250,6 +250,7 @@ def edit_problem(
 
 @tool
 def edit_proposal(
+    tenant: str,
     proposal_id: str,
     name: str | None = None,
     problem_id: str | None = None,
@@ -257,7 +258,6 @@ def edit_proposal(
     resources: str | None = None,
     context: str | None = None,
     impact: str | None = None,
-    tenant: str = "molveno",
 ):
     """
     Edit an existing proposal instance.
@@ -301,7 +301,7 @@ def edit_proposal(
 
 
 @tool
-def delete_problem(problem_id: str, tenant: str = "molveno"):
+def delete_problem(problem_id: str, tenant: str):
     """
     Delete an existing problem instance.
 
@@ -325,7 +325,7 @@ def delete_problem(problem_id: str, tenant: str = "molveno"):
 
 
 @tool
-def delete_proposal(proposal_id: str, tenant: str = "molveno"):
+def delete_proposal(proposal_id: str, tenant: str):
     """
     Delete an existing proposal instance.
 
@@ -347,7 +347,7 @@ def delete_proposal(proposal_id: str, tenant: str = "molveno"):
 
 
 @tool
-def delete_scenario(scenario_id: str, tenant: str = "molveno"):
+def delete_scenario(scenario_id: str, tenant: str):
     """
     Delete an existing scenario instance.
 

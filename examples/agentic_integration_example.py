@@ -1,115 +1,98 @@
 """
-Integration example and validation for the agentic refactoring.
+Integration example for the tool registry.
 
-This module shows how to:
-1. Initialize the tool system
-2. Demonstrate available tools (all users have access)
-3. Use the new agentic graph
-4. Monitor tool selection and execution
+Demonstrates:
+1. Initializing the registry
+2. Registering tools
+3. Inspecting registered tools
+4. Producing the LLM tool schema
 """
 
-from app.agent.state import AgentState
 from app.tools.tool_registry import get_tool_registry
 from app.tools.agent_tools import get_all_agent_tools
 
 
 def setup_tool_system():
-    """Initialize and register the tool system."""
-    print("Setting up tool system...")
-
+    """Initialize the global tool registry."""
     registry = get_tool_registry()
 
-    # Register tools before inspecting stats
     if not registry.list_tool_names():
-        all_tools = get_all_agent_tools()
-        registry.register_tools(all_tools)
+        registry.register_tools(get_all_agent_tools())
 
-    stats = registry.get_stats()
-    print(f"Registered tools: {stats['total_tools']}")
-    print(f"Tools by category: {stats['tools_by_category']}")
-
+    print(f"Registered {len(registry.list_tool_names())} tools")
     return registry
 
 
-def demonstrate_tool_selection():
-    """Show available tools across different contexts."""
-    print("\n" + "="*60)
-    print("AVAILABLE TOOLS DEMONSTRATION")
-    print("="*60)
+def demonstrate_registered_tools():
+    """Print all registered tools."""
+    print("\n" + "=" * 60)
+    print("REGISTERED TOOLS")
+    print("=" * 60)
 
     registry = get_tool_registry()
 
-    # Get all enabled tools
-    all_tools = registry.get_all_known_tools()
-    print(f"\nAll available tools ({len(all_tools)}):")
-    for tool_name, tool_def in sorted(all_tools.items()):
-        print(f"  - {tool_name}: {tool_def.description}")
-
-def demonstrate_state_setup():
-    """Show how to setup agent state for tool usage."""
-    print("\n" + "="*60)
-    print("STATE SETUP DEMONSTRATION")
-    print("="*60)
-
-    state = AgentState(
-        session_id="demo_session_001",
-        user_lang="English",
-    )
-
-    print(f"\nCreated state:")
-    print(f"  Session ID: {state.session_id}")
-    print(f"  Language: {state.user_lang}")
-
-    state.add_user_message("I want to create a new problem about traffic congestion")
-    print(f"\nAdded user message: {state.get_last_user_message().content}")
-
-    print(f"\nTool execution state:")
-    print(f"  Available tools: {state.cognitive.known_tools}")
-    print(f"  Selected tool: {state.cognitive.selected_tool}")
-    print(f"  Tool confirmation needed: {state.cognitive.tool_confirmation_needed}")
-
-    return state
+    for tool in registry.get_all_known_tools().values():
+        print(f"\n{tool.name}")
+        print(f"  Description : {tool.description}")
+        print(f"  Category    : {tool.category.value}")
+        print(f"  Enabled     : {tool.enabled}")
+        print(f"  Confirmation: {tool.requires_confirmation}")
+        print(f"  Tags        : {tool.tags}")
 
 
-def demonstrate_tool_discovery():
-    """Show tool discovery and metadata."""
-    print("\n" + "="*60)
-    print("TOOL DISCOVERY DEMONSTRATION")
-    print("="*60)
+def demonstrate_tool_lookup():
+    """Show lookup of a single tool."""
+    print("\n" + "=" * 60)
+    print("TOOL LOOKUP")
+    print("=" * 60)
 
     registry = get_tool_registry()
 
-    # Get a specific tool
-    tool = registry.get_tool("list_available_problems")
-    print(f"\nTool: {tool.name}")
-    print(f"  Description: {tool.description}")
-    print(f"  Category: {tool.category.value}")
-    print(f"  Requires confirmation: {tool.requires_confirmation}")
-    print(f"  Version: {tool.version}")
-    print(f"  Tags: {tool.tags}")
+    tool_name = registry.list_tool_names()[0]
+    tool = registry.get_tool(tool_name)
 
-    # Get tools by category
-    from app.tools.tool_schema import ToolCategory
+    print(f"Name: {tool.name}")
+    print(f"Category: {tool.category.value}")
+    print(f"Parameters:")
 
-    problem_tools = registry.get_tools_by_category(ToolCategory.PROBLEM_MANAGEMENT)
-    print(f"\nProblem management tools: {list(problem_tools.keys())}")
+    if tool.parameters:
+        for param in tool.parameters:
+            print(
+                f"  - {param.name} ({param.type})"
+                f"{' [required]' if param.required else ''}"
+            )
+            print(f"      {param.description}")
+    else:
+        print("  None")
+
+
+def demonstrate_llm_schema():
+    """Show the schema passed to the LLM."""
+    print("\n" + "=" * 60)
+    print("LLM TOOL SCHEMA")
+    print("=" * 60)
+
+    registry = get_tool_registry()
+
+    llm_tools = registry.get_tools_for_llm()
+
+    print(f"Generated schemas: {len(llm_tools)}")
+
+    if llm_tools:
+        schema = llm_tools[0]
+        print("\nExample schema:")
+        print(schema)
 
 
 def run_all_demonstrations():
-    """Run all demonstrations."""
-    try:
-        setup_tool_system()
-        demonstrate_tool_selection()
-        demonstrate_state_setup()
-        demonstrate_tool_discovery()
+    setup_tool_system()
+    demonstrate_registered_tools()
+    demonstrate_tool_lookup()
+    demonstrate_llm_schema()
 
-        print("\n" + "="*60)
-        print("ALL DEMONSTRATIONS COMPLETED SUCCESSFULLY")
-        print("="*60)
-
-    except Exception as e:
-        print(f"Error in demonstrations: {e}")
-        raise
+    print("\n" + "=" * 60)
+    print("ALL DEMONSTRATIONS COMPLETED")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
