@@ -21,7 +21,11 @@ def _wait_instructions(state: AgentState) -> str:
             lines.append(f"- {label}: {value}")
         return "\n".join(lines) if lines else "- (no additional data provided)"
 
-    if pending_tool in  ["create_new_problem", "create_new_proposal", "create_new_scenario"]:
+    if pending_tool in [
+        "create_new_problem",
+        "create_new_proposal",
+        "create_new_scenario",
+    ]:
         return (
             "Before I submit this, please confirm the details below are correct:\n"
             f"{_format_fields(args)}\n\nShall I proceed?"
@@ -33,10 +37,28 @@ def _wait_instructions(state: AgentState) -> str:
 def _is_confirmation(user_input: str) -> bool:
     """Check if the user input is a confirmatory reply."""
     confirmatory = {
-        "ok", "yes", "sure", "proceed", "go ahead", "confirm", "correct",
-        "fine", "agreed", "sounds good", "sì", "va bene", "procedi",
-        "confermo", "esatto", "ja", "gut", "weiter", "oui", "d'accord",
-        "да", "si",
+        "ok",
+        "yes",
+        "sure",
+        "proceed",
+        "go ahead",
+        "confirm",
+        "correct",
+        "fine",
+        "agreed",
+        "sounds good",
+        "sì",
+        "va bene",
+        "procedi",
+        "confermo",
+        "esatto",
+        "ja",
+        "gut",
+        "weiter",
+        "oui",
+        "d'accord",
+        "да",
+        "si",
     }
     return user_input.strip().lower() in confirmatory
 
@@ -44,8 +66,16 @@ def _is_confirmation(user_input: str) -> bool:
 def _is_cancellation(user_input: str) -> bool:
     """Check if the user input is a cancellation."""
     cancellation = {
-        "no", "cancel", "stop", "abort", "nevermind", "never mind",
-        "no grazie", "annulla", "nein", "non",
+        "no",
+        "cancel",
+        "stop",
+        "abort",
+        "nevermind",
+        "never mind",
+        "no grazie",
+        "annulla",
+        "nein",
+        "non",
     }
     return user_input.strip().lower() in cancellation
 
@@ -61,14 +91,17 @@ def wait_user_input_node(state: AgentState):
     """
     Wait node for tool confirmation.
 
-    - If no user_input yet: set confirmation prompt in messages_to_include and route
-      to generate_output_message. The API layer detects waiting_for is set and persists
-      state; the next request will re-enter with user_input populated.
-    - If user confirms: route to tool_executor to run the pending create_* tool.
-    - If user cancels: clear pending tool and route to generate_output_message.
-    - Otherwise: route back to initialize_tools to re-interpret the new input.
+    - If no user_input yet: set confirmation prompt in messages_to_include, publish it live
+      via the event bus, and route to generate_output_message. The API layer detects
+      waiting_for is set and persists state; the next request will re-enter with user_input
+      populated.
+    - If user confirms: route to tool_executor to run the pending create/edit/delete tool.
+    - If user cancels: clear the pending action and route to generate_output_message.
+    - Otherwise: route back to initialize_tools to re-interpret the new input as a fresh turn.
     """
-    logger.info(f"Entered WAIT_USER_INPUT node. Pending tool: {state.cognitive.selected_tool}")
+    logger.info(
+        f"Entered WAIT_USER_INPUT node. Pending tool: {state.cognitive.selected_tool}"
+    )
 
     if not state.user_input:
         # First pass: populate messages_to_include with the confirmation prompt and
@@ -93,14 +126,12 @@ def wait_user_input_node(state: AgentState):
     logger.info(f"User replied while waiting: '{user_input}'")
 
     if _is_cancellation(user_input):
-        logger.info("User cancelled — clearing pending tool")
+        logger.info("User cancelled — clearing pending action")
         state.cognitive.selected_tool = None
         state.cognitive.tool_arguments = {}
+        state.cognitive.pending_thought = ""
         state.cognitive.tool_confirmation_needed = False
         state.cognitive.tool_confirmed = False
-        state.cognitive.tool_plan = []
-        state.cognitive.tool_plan_index = 0
-        state.cognitive.current_plan_result_keys = []
         state.waiting_for = None
         state.user_input = None
         state.cognitive.messages_to_include = [
@@ -116,10 +147,11 @@ def wait_user_input_node(state: AgentState):
         state.user_input = None
         return Command(update=state, goto="tool_executor")
 
-    # Ambiguous or new intent — let tool_selector re-interpret
-    logger.info("Ambiguous reply — routing back to tool_selector")
+    # Ambiguous or new intent — let the reasoner re-interpret from a fresh turn
+    logger.info("Ambiguous reply — routing back to initialize_tools")
     state.cognitive.tool_confirmation_needed = False
     state.cognitive.selected_tool = None
     state.cognitive.tool_arguments = {}
+    state.cognitive.pending_thought = ""
     state.waiting_for = None
     return Command(update=state, goto="initialize_tools")

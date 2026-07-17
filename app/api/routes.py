@@ -16,9 +16,9 @@ import asyncio
 from app.schemas import AgentResponse
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
-from app.agent.memory import load_state, save_state, _get_lock
+from app.agent.memory import load_state, save_state, delete_state, _get_lock
 from app.config import GENERAL_ERROR_MESSAGE
-from app.agent.events import get_queue, publish_done, get_result
+from app.agent.events import get_queue, publish_done, get_result, clear_session
 from app.tools.backend_tools import check_authorization
 from app.utils.common import set_token
 
@@ -141,6 +141,28 @@ async def run_agent_endpoint(
 
     background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
     return {"session_id": session_id}
+
+
+@router.post("/agent/reset")
+async def reset_session(session_id: str = Form(...)):
+    """
+    Start a fresh conversation for `session_id`.
+
+    Drops the persisted AgentState (conversation history, ReAct scratchpad,
+    long-term tool-result memory, any pending confirmation) and any
+    leftover SSE events/result for the session, so the next `/agent` call
+    for this session_id begins a brand new turn from scratch.
+    """
+    if not session_id or session_id == "":
+        raise HTTPException(status_code=400, detail="No session_id provided")
+
+    lock = _get_lock(session_id)
+    async with lock:
+        delete_state(session_id)
+        clear_session(session_id)
+
+    logger.info(f"Session {session_id} reset")
+    return {"session_id": session_id, "status": "reset"}
 
 
 @router.get("/agent/result/{session_id}", response_model=AgentResponse)

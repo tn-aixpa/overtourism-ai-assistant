@@ -67,7 +67,7 @@ def error_recovery_node(state: AgentState) -> Command:
 
 
 # Tools whose result is purely an internal resolution step (e.g. id lookups
-# used to fill in arguments for later tools in the same plan) and therefore
+# used to fill in arguments for later tools this turn) and therefore
 # should never be surfaced to the user as part of the final answer.
 _INTERNAL_ONLY_TOOLS = {"get_context_ids"}
 
@@ -75,16 +75,14 @@ _INTERNAL_ONLY_TOOLS = {"get_context_ids"}
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
 
-    # If tools ran this turn and no messages have been prepared yet (e.g. by a
-    # clarification/confirmation/error path), build them from EVERY tool result
-    # produced by the current plan — not just the last one — so that e.g. a
+    # If tool actions ran this turn and no messages have been prepared yet (e.g. by a
+    # clarification/confirmation/error path), build them from EVERY observation produced
+    # by this turn's ReAct scratchpad — not just the last one — so that e.g. a
     # "list problems and proposals" request surfaces both lists.
-    if (
-        state.cognitive.current_plan_result_keys
-        and not state.cognitive.messages_to_include
-    ):
+    current_turn_result_keys = state.cognitive.current_turn_result_keys()
+    if current_turn_result_keys and not state.cognitive.messages_to_include:
         messages: list[str] = []
-        for result_key in state.cognitive.current_plan_result_keys:
+        for result_key in current_turn_result_keys:
             tool_result = state.cognitive.tool_results.get(result_key)
             if tool_result is None:
                 continue
@@ -106,9 +104,16 @@ def generate_output_message_node(state: AgentState) -> Command:
 
     logger.info(f"Output message: {output_message}")
 
+    # Only publish a "final" event / reset the scratchpad when the turn
+    # actually concluded. If we're pausing for a confirmation (waiting_for
+    # is set), the ReAct loop will resume in this same turn once the user
+    # replies — clearing the scratchpad here would wipe out everything
+    # reasoned/observed so far and break continuity.
+    if not state.waiting_for:
+        state.cognitive.scratchpad = []
+        state.cognitive.tool_result = None
+
     state.cognitive.messages_to_include = []
-    state.cognitive.tool_result = None
-    state.cognitive.current_plan_result_keys = []
 
     return Command(update=state, goto=END)
 

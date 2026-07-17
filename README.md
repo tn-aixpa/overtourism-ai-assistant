@@ -5,8 +5,8 @@ This projects aims contains the first prototype of an Agentic AI for the Digital
 ## Core idea
 
 Model the system as a separate service exposing APIs that can be called both from a UX (e.g, webpage) or programmatically.
+The Agents expoits ReAct (Reasoning + Acting) — from the 2022 paper "ReAct: Synergizing Reasoning and Acting in Language Models" (Yao et al.) 
 
-## Usage
 
 ### Getting started
 
@@ -32,3 +32,4 @@ Additionally you will need
 
 1) [overtourism backend](https://github.com/fbk-most/overtourism)
 2) [overtourism-fronted](https://github.com/fbk-most/overtourism-frontend)
+

@@ -152,7 +152,7 @@ def create_new_problem(
     tenant: str,
     name: str,
     description: str,
-    objectives: str | None = None,
+    objective: str | None = None,
     additional_data: str | None = None,
 ):
     """
@@ -166,8 +166,8 @@ def create_new_problem(
     url = f"{BACKEND_URL}{tenant}/problems/"
 
     body = {"name": name, "description": description, "extras": {}}
-    if objectives:
-        body["extras"]["objectives"] = objectives
+    if objective:
+        body["extras"]["objective"] = objective
     if additional_data:
         body["extras"]["additional_data"] = additional_data
     # TODO: add other fields
@@ -213,7 +213,7 @@ def edit_problem(
     problem_id: str,
     name: str | None = None,
     description: str | None = None,
-    objectives: str | None = None,
+    objective: str | None = None,
     additional_data: str | None = None,
 ):
     """
@@ -232,8 +232,8 @@ def edit_problem(
     existing = get_single_problem(problem_id, tenant=tenant)
 
     extras = dict(existing.get("extras") or {})
-    if objectives:
-        extras["objectives"] = objectives
+    if objective:
+        extras["objective"] = objective
     if additional_data:
         extras["additional_data"] = additional_data
     # TODO: add other fields

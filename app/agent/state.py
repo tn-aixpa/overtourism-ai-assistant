@@ -7,6 +7,10 @@ import json
 
 MAX_CONTEXT_WINDOW = 20
 DEFAULT_REASONING_CONTEXT_SIZE = 5
+# Safety cap on Thought/Action/Observation cycles within a single turn, so a
+# reasoner that never emits "finish" (e.g. stuck bouncing between two tools)
+# cannot loop forever. See react_reasoner_node in nodes/reasoner.py.
+DEFAULT_MAX_REACT_STEPS = 8
 
 
 @dataclass
@@ -61,6 +65,30 @@ class TraceBuffer:
 
 
 @dataclass
+class ReActStep:
+    """One Thought -> Action -> Observation cycle produced by the ReAct
+    reasoner during a single turn.
+
+    The scratchpad (a list of these) is the working memory of the loop: it
+    is fed back into the reasoning prompt on every iteration so the model
+    can decide its next action based on what it has already seen, and it is
+    reset to empty at the start of every new user turn (see
+    `initialize_tools`). It is NOT the same as `tool_results`, which is kept
+    across the whole session as long-term memory.
+    """
+
+    thought: str = ""
+    tool_name: Optional[str] = None
+    tool_arguments: Dict[str, Any] = field(default_factory=dict)
+    observation: Optional[Dict[str, Any]] = None
+    # Key into cognitive.tool_results where the full observation is stored.
+    observation_key: Optional[str] = None
+    # Informational only (e.g. "awaiting_confirmation", "cancelled") — never
+    # used for routing, just for tracing/debugging.
+    status: Optional[str] = None
+
+
+@dataclass
 class CognitiveState:
     generation_pipeline: List[str] = field(default_factory=list)
 
@@ -77,23 +105,37 @@ class CognitiveState:
 
     known_tools: List[str] = field(default_factory=list)
     enabled_tools: List[str] = field(default_factory=list)
+
+    # "Pending action" slot: whichever tool the reasoner most recently
+    # decided to call. Populated by react_reasoner_node, consumed by
+    # tool_executor_node. Also doubles as the "tool awaiting confirmation"
+    # reference while waiting_for is set.
     selected_tool: Optional[str] = None
     tool_arguments: Dict[str, Any] = field(default_factory=dict)
+    # The reasoning text that justified `selected_tool`, staged here by
+    # react_reasoner_node until tool_executor_node turns it into a
+    # ReActStep on the scratchpad.
+    pending_thought: str = ""
 
-    tool_plan: List[Dict[str, Any]] = field(default_factory=list)
-    tool_plan_index: int = 0
+    # Thought/Action/Observation history for the turn currently in progress.
+    # Reset to [] at the start of every new user turn.
+    scratchpad: List[ReActStep] = field(default_factory=list)
+    max_react_steps: int = DEFAULT_MAX_REACT_STEPS
 
     tool_result: Optional[Dict[str, Any]] = None
+    # Long-term memory of every tool result produced this session (kept
+    # across turns so the reasoner can see what already ran and avoid
+    # redundant calls). Trimmed by tool_executor._trim_tool_results.
     tool_results: Dict[str, Any] = field(default_factory=dict)
-    # Ordered keys (into tool_results) produced by the *current* tool_plan only.
-    # tool_results itself is never cleared (tool_selector uses the full history
-    # as memory for planning), so this is what lets generate_output_message
-    # know exactly which results belong to this turn's plan.
-    current_plan_result_keys: List[str] = field(default_factory=list)
     tool_confirmation_needed: bool = False
     # Set to True right after the user confirms a pending creation tool, so that
     # tool_executor knows to actually run it instead of pausing again.
     tool_confirmed: bool = False
+
+    def current_turn_result_keys(self) -> List[str]:
+        """Ordered tool_results keys produced by the scratchpad of the turn
+        currently in progress (i.e. this turn's observations only)."""
+        return [step.observation_key for step in self.scratchpad if step.observation_key]
 
     def _add_trace(
         self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None

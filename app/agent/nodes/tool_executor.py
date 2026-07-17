@@ -1,15 +1,18 @@
 """
-Tool execution node for the agentic system.
+Tool execution node for the agentic system (Acting half of the ReAct loop).
 
-Executes the LLM-selected tool and handles its results.
-This node handles the actual tool invocation and error handling.
+Executes the single tool the reasoner just selected ("Action"), records the
+result on the scratchpad ("Observation"), and routes back to
+react_reasoner_node so it can decide the next step with that observation in
+hand. This node handles the actual tool invocation and error handling.
 """
 
 import logging
 from typing import Any, Dict, Callable
 from langgraph.types import Command
 
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ReActStep
+from app.agent.events import publish_action
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolDefinition
 from app.prompts.entity_parsing import get_relatet_context_ids
@@ -26,7 +29,7 @@ _NOT_IMPLEMENTED_MSG = (
 # second line of defense on top of the prompt-side truncation in
 # build_prior_results_block: without it, state.cognitive.tool_results grows
 # forever for the lifetime of a session (it's kept intentionally across
-# turns so the tool_selector can see what already ran), which bloats both
+# turns so the ReAct reasoner can see what already ran), which bloats both
 # the in-memory AgentState and the JSON dumped to logs/state_<id>.json.
 MAX_STORED_TOOL_RESULTS = 30
 
@@ -46,7 +49,7 @@ CONFIRMATION_REQUIRED_TOOLS = {
 
 
 # Maps a tool to the (parameter, current_context key) used to auto-resolve
-# an ID once get_context_ids has run earlier in the same plan. Covers both
+# an ID once get_context_ids has run earlier this turn. Covers both
 # "parent" references (e.g. a new proposal's problem_id) and "target"
 # references (e.g. the problem_id of the problem being edited/deleted) —
 # resolution logic is identical in both cases: only fill in when exactly
@@ -211,11 +214,11 @@ def get_tool_executor(tool_name: str) -> Callable | None:
 def _trim_tool_results(state: AgentState) -> None:
     """Evict the oldest tool_results entries once we're over the cap.
 
-    Never evicts a key produced by the plan currently executing —
+    Never evicts a key produced by the scratchpad currently in progress —
     generate_output_message_node needs those to build the final answer.
     """
     results = state.cognitive.tool_results
-    protected = set(state.cognitive.current_plan_result_keys)
+    protected = set(state.cognitive.current_turn_result_keys())
 
     while len(results) > MAX_STORED_TOOL_RESULTS:
         for key in results:  # dicts preserve insertion order -> oldest first
@@ -223,46 +226,39 @@ def _trim_tool_results(state: AgentState) -> None:
                 del results[key]
                 break
         else:
-            # Everything remaining belongs to the current plan; stop rather
+            # Everything remaining belongs to the current turn; stop rather
             # than evict something generate_output_message_node still needs.
             break
 
 
 def tool_executor_node(state: AgentState) -> Command:
     """
-    Main tool executor node that iterates through the tool plan.
+    Acting half of the ReAct loop: executes the single tool the reasoner
+    just selected (state.cognitive.selected_tool / tool_arguments), records
+    an Observation on the scratchpad, and routes back to react_reasoner so
+    it can decide the next Thought/Action with that observation in hand.
 
-    On each graph visit it executes the *current* tool (tool_plan[tool_plan_index]),
-    stores the result in cognitive.tool_results, advances the index, and either:
-      - loops back to itself (via tool_executor) for the next tool in the plan, or
-      - forwards to generate_output_message when the plan is exhausted.
-
-    Confirmation-requiring tools still pause the plan and route to WAIT_USER_INPUT;
-    when the user confirms, the waiting node resumes here.
+    Confirmation-requiring tools pause here and route to WAIT_USER_INPUT;
+    when the user confirms, the waiting node resumes here to actually run
+    the tool.
     """
-    plan = state.cognitive.tool_plan
-    idx = state.cognitive.tool_plan_index
+    tool_name = state.cognitive.selected_tool
+    tool_arguments = state.cognitive.tool_arguments or {}
+    thought = state.cognitive.pending_thought
 
-    if not plan or idx >= len(plan):
-        logger.warning("tool_executor reached with empty/exhausted plan")
+    if not tool_name:
+        logger.warning("tool_executor reached with no pending action")
         return Command(update=state, goto="generate_output_message")
 
-    current_step = plan[idx]
-    tool_name = current_step["tool_name"]
-    tool_arguments = current_step.get("arguments", {})
-
     logger.info(
-        f"Executing tool [{idx + 1}/{len(plan)}]: {tool_name} with args: {tool_arguments}"
+        f"Executing action [step {len(state.cognitive.scratchpad) + 1}]: "
+        f"{tool_name} with args: {tool_arguments}"
     )
 
     # Try to fill in a parent id (problem_id / proposal_id) that the user
     # referred to by name rather than by literal ID, using whatever
-    # get_context_ids already resolved earlier in this plan.
+    # get_context_ids already resolved earlier this turn.
     tool_arguments = _resolve_referenced_id(state, tool_name, tool_arguments)
-
-    # Keep legacy aliases in sync so existing executors that read
-    # state.cognitive.selected_tool / tool_arguments continue to work.
-    state.cognitive.selected_tool = tool_name
     state.cognitive.tool_arguments = tool_arguments
 
     # ---- Required-parameter check ----
@@ -285,10 +281,11 @@ def tool_executor_node(state: AgentState) -> Command:
             return Command(update=state, goto="generate_output_message")
 
     # ---- Confirmation gate ----
-    # Creation tools must never run silently: the first time we reach one of
-    # them, stop and ask the user to confirm a recap of the data that is
-    # about to be submitted. Only proceed once the user has explicitly
-    # confirmed (tool_confirmed is set by WAIT_USER_INPUT after a "yes").
+    # Creation/edit/delete tools must never run silently: the first time we
+    # reach one of them, stop and ask the user to confirm a recap of the
+    # data that is about to be submitted. Only proceed once the user has
+    # explicitly confirmed (tool_confirmed is set by WAIT_USER_INPUT after a
+    # "yes").
     if tool_name in CONFIRMATION_REQUIRED_TOOLS and not state.cognitive.tool_confirmed:
         logger.info(f"Pausing '{tool_name}' for user confirmation")
         state.cognitive.tool_confirmation_needed = True
@@ -298,12 +295,14 @@ def tool_executor_node(state: AgentState) -> Command:
     state.cognitive.tool_confirmed = False
     state.cognitive.tool_confirmation_needed = False
 
+    publish_action(state.session_id, tool_name)
+
     try:
         result = execute_selected_tool(tool_name, tool_arguments, state)
 
         state.cognitive.tool_result = result
 
-        # ---- Persist result in tool_results dict ----
+        # ---- Persist result in tool_results dict (long-term memory) ----
         # Use a unique key: tool_name, or tool_name__N if already present.
         result_key = tool_name
         collision = 0
@@ -311,13 +310,23 @@ def tool_executor_node(state: AgentState) -> Command:
             collision += 1
             result_key = f"{tool_name}__{collision}"
         state.cognitive.tool_results[result_key] = result
-        state.cognitive.current_plan_result_keys.append(result_key)
         _trim_tool_results(state)
+
+        # ---- Record the Observation on this turn's scratchpad ----
+        state.cognitive.scratchpad.append(
+            ReActStep(
+                thought=thought,
+                tool_name=tool_name,
+                tool_arguments=tool_arguments,
+                observation=result,
+                observation_key=result_key,
+            )
+        )
 
         state.add_trace(
             "tool_execution",
             tool_name,
-            {"plan_index": idx, "result_key": result_key, "result": result},
+            {"result_key": result_key, "result": result},
         )
 
         logger.info(f"Tool '{tool_name}' result stored as '{result_key}'")
@@ -326,23 +335,12 @@ def tool_executor_node(state: AgentState) -> Command:
             state.cognitive.error_details = result.get("error", "Unknown error")
             return Command(update=state, goto="error")
 
-        # Confirmation pause: halt the plan here until the user responds.
-        if state.cognitive.tool_confirmation_needed:
-            # tool_plan_index is NOT advanced — after confirmation the waiting
-            # node will route back here and we will advance then.
-            return Command(update=state, goto="WAIT_USER_INPUT")
-
-        # Advance to next tool
-        state.cognitive.tool_plan_index = idx + 1
-
-        # More tools in the plan?
-        if state.cognitive.tool_plan_index < len(plan):
-            next_tool = plan[state.cognitive.tool_plan_index]["tool_name"]
-            logger.info(f"Continuing to next tool in plan: {next_tool}")
-            return Command(update=state, goto="tool_executor")
-
-        # Plan exhausted — generate final response.
-        return Command(update=state, goto="generate_output_message")
+        # Clear the pending-action slot now that it has been executed, then
+        # hand back to the reasoner for the next Thought/Action decision.
+        state.cognitive.selected_tool = None
+        state.cognitive.tool_arguments = {}
+        state.cognitive.pending_thought = ""
+        return Command(update=state, goto="react_reasoner")
 
     except Exception as e:
         logger.error(f"Exception in tool executor: {e}", exc_info=True)
@@ -519,7 +517,7 @@ def execute_create_new_problem(
     state: AgentState,
     name: str,
     description: str,
-    objectives: str | None = None,
+    objective: str | None = None,
     additional_data: str | None = None,
 ) -> Dict[str, Any]:
 
@@ -530,7 +528,7 @@ def execute_create_new_problem(
             "tenant": state.tenant,
             "name": name,
             "description": description,
-            "objectives": objectives,
+            "objective": objective,
             "additional_data": additional_data,
         }
     )
@@ -597,7 +595,7 @@ def execute_edit_problem(
     problem_id: str = "",
     name: str = "",
     description: str = "",
-    objectives: str | None = None,
+    objective: str | None = None,
     additional_data: str | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
@@ -610,7 +608,7 @@ def execute_edit_problem(
             "problem_id": problem_id,
             "name": name,
             "description": description,
-            "objectives": objectives,
+            "objective": objective,
             "additional_data": additional_data,
         }
     )

@@ -166,7 +166,7 @@ def create_new_problem_tool() -> ToolDefinition:
                 required=True,
             ),
             ToolParameter(
-                name="objectives",
+                name="objective",
                 description="The objectives we want to achieve when addressing the problem.",
                 type="string",
                 required=False,
@@ -203,7 +203,7 @@ def edit_problem_tool() -> ToolDefinition:
                 required=True,
             ),
             ToolParameter(
-                name="objectives",
+                name="objective",
                 description="The objectives we want to achieve when addressing the problem.",
                 type="string",
                 required=False,
