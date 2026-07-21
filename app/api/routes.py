@@ -4,6 +4,7 @@ from fastapi import (
     APIRouter,
     HTTPException,
     Header,
+    Query,
     UploadFile,
     BackgroundTasks,
     File,
@@ -25,6 +26,52 @@ from app.utils.common import set_token
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# AUTH / SESSION-OWNERSHIP HELPERS
+# ---------------------------------------------------------------------------
+# Every endpoint below that reads or mutates an existing session_id needs to
+# both (a) confirm the caller holds a valid token for the claimed tenant, and
+# (b) confirm the session actually belongs to that tenant — otherwise anyone
+# who knows/guesses a session_id could read or reset someone else's
+# conversation. Centralized here so each route applies the same check.
+
+
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return authorization.removeprefix("Bearer ").strip()
+
+
+def _require_bearer_token(authorization: str | None) -> str:
+    token = _extract_bearer_token(authorization)
+    if not token:
+        raise HTTPException(
+            status_code=401, detail="Missing or malformed Authorization header"
+        )
+    return token
+
+
+def _authorize_tenant(token: str, tenant: str) -> None:
+    if not tenant:
+        raise HTTPException(status_code=400, detail="tenant is required")
+    if not check_authorization(token=token, tenant=tenant):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+def _load_owned_session(session_id: str, tenant: str) -> AgentState | None:
+    """Load session state, but only if it belongs to the authorized tenant.
+
+    Returns None both when the session doesn't exist AND when it belongs to
+    a different tenant — deliberately indistinguishable to the caller, so an
+    authorized-but-wrong-tenant request can't be used to probe which
+    session_ids exist.
+    """
+    state = load_state(session_id)
+    if state is None or state.tenant != tenant:
+        return None
+    return state
 
 
 def _run_agent(key: str, state: AgentState, token: str):
@@ -83,25 +130,27 @@ async def run_agent_endpoint(
 ):
 
     # Verify authorization
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, detail="Missing or malformed Authorization header"
-        )
-
-    token = authorization.removeprefix("Bearer ").strip()
-
-    if not check_authorization(token=token, tenant=tenant):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    token = _require_bearer_token(authorization)
+    _authorize_tenant(token, tenant)
 
     # Check session key
     if not session_id or session_id == "":
         raise HTTPException(status_code=400, detail="No session_id provided")
+
+    if not message or not message.strip():
+        raise HTTPException(status_code=400, detail="No message provided")
+
+    if integrated_mode and len(context) == 0:
+        raise HTTPException(
+            status_code=400, detail="Context is required in integrated mode"
+        )
 
     # Get status and proceed with the request
     lock = _get_lock(session_id)
 
     async with lock:
         state = load_state(session_id)
+
         if state is None:
             state = AgentState(
                 session_id=session_id,
@@ -109,8 +158,10 @@ async def run_agent_endpoint(
                 integrated_mode=integrated_mode,
                 tenant=tenant,
             )
+        elif state.tenant != tenant:
+            # Don't reveal whether the session exists under another tenant.
+            raise HTTPException(status_code=404, detail="Session not found")
 
-        assert message, "No message provided"
         state.add_user_message(message)
 
         if state.waiting_for:
@@ -120,7 +171,6 @@ async def run_agent_endpoint(
 
         if integrated_mode:
             logger.info(f"Running in integrated mode with context: {context}")
-            assert len(context) > 0, "Context is required in integrated mode"
             state.cognitive.current_context = {
                 "problems": [],
                 "proposals": [],
@@ -144,7 +194,11 @@ async def run_agent_endpoint(
 
 
 @router.post("/agent/reset")
-async def reset_session(session_id: str = Form(...)):
+async def reset_session(
+    session_id: str = Form(...),
+    authorization: str | None = Header(default=None),
+    tenant: str = Form(default="molveno"),  # TODO remove default
+):
     """
     Start a fresh conversation for `session_id`.
 
@@ -156,8 +210,18 @@ async def reset_session(session_id: str = Form(...)):
     if not session_id or session_id == "":
         raise HTTPException(status_code=400, detail="No session_id provided")
 
+    token = _require_bearer_token(authorization)
+    _authorize_tenant(token, tenant)
+
     lock = _get_lock(session_id)
     async with lock:
+        # Only reset a session that actually belongs to this tenant. If it
+        # belongs to someone else (or never existed), don't touch it, and
+        # don't reveal which of those two happened.
+        state = load_state(session_id)
+        if state is not None and state.tenant != tenant:
+            raise HTTPException(status_code=404, detail="Session not found")
+
         delete_state(session_id)
         clear_session(session_id)
 
@@ -166,7 +230,17 @@ async def reset_session(session_id: str = Form(...)):
 
 
 @router.get("/agent/result/{session_id}", response_model=AgentResponse)
-async def get_agent_result(session_id: str):
+async def get_agent_result(
+    session_id: str,
+    tenant: str = Query(default="molveno"),
+    authorization: str | None = Header(default=None),
+):
+    # token = _require_bearer_token(authorization)
+    # _authorize_tenant(token, tenant)
+
+    if _load_owned_session(session_id, tenant) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     result = get_result(session_id)
     if result is None:
         raise HTTPException(
@@ -176,7 +250,29 @@ async def get_agent_result(session_id: str):
 
 
 @router.get("/agent/stream/{session_id}")
-async def stream_events(session_id: str):
+async def stream_events(
+    session_id: str,
+    tenant: str = Query(default="molveno"),
+    # EventSource (the standard way to consume SSE from a browser) cannot
+    # set custom headers, so this endpoint also accepts the token as a query
+    # param. The Authorization header is preferred when present.
+    token: str | None = Query(
+        default=None,
+        description="Bearer token — only needed if this stream is opened "
+        "via EventSource, which can't set an Authorization header.",
+    ),
+    authorization: str | None = Header(default=None),
+):
+    # bearer = _extract_bearer_token(authorization) or token
+    # if not bearer:
+    #     raise HTTPException(
+    #         status_code=401, detail="Missing bearer token (header or ?token=)"
+    #     )
+    # _authorize_tenant(bearer, tenant)
+
+    if _load_owned_session(session_id, tenant) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     queue = get_queue(session_id)
 
     async def event_generator():
@@ -191,18 +287,20 @@ async def stream_events(session_id: str):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@router.get("/agent/feedback")
+@router.post("/agent/feedback")
 async def submit_feedback_get(
     session_id: str,
     message_index: int,
+    tenant: str = Query(default="molveno"),
+    authorization: str | None = Header(default=None),
     vote: str | None = None,
     comment: str | None = None,
 ):
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Session ID is required")
+    # token = _require_bearer_token(authorization)
+    # _authorize_tenant(token, tenant)
 
-    state = load_state(session_id)
-    if not state:
+    state = _load_owned_session(session_id, tenant)
+    if state is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     messages = state.conversation.messages

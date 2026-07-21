@@ -135,7 +135,9 @@ class CognitiveState:
     def current_turn_result_keys(self) -> List[str]:
         """Ordered tool_results keys produced by the scratchpad of the turn
         currently in progress (i.e. this turn's observations only)."""
-        return [step.observation_key for step in self.scratchpad if step.observation_key]
+        return [
+            step.observation_key for step in self.scratchpad if step.observation_key
+        ]
 
     def _add_trace(
         self, step_type: str, node: str, data: Optional[Dict[str, Any]] = None

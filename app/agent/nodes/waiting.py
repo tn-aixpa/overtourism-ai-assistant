@@ -1,5 +1,6 @@
 from langgraph.types import Command
 import logging
+import re
 
 from app.agent.state import AgentState
 
@@ -34,50 +35,97 @@ def _wait_instructions(state: AgentState) -> str:
     return "Please confirm to proceed."
 
 
+def _normalize(text: str) -> str:
+    """Lowercase and strip punctuation so 'Yes, go ahead!' and 'yes' match
+    the same way — the confirmation/cancellation sets below are otherwise
+    exact-string-only, which misses almost any natural phrasing."""
+    return re.sub(r"[^\w\s]", " ", text.strip().lower()).strip()
+
+
+def _contains_any_phrase(normalized_text: str, phrases: set[str]) -> bool:
+    """Whole-word/phrase containment check (not a bare substring check, so
+    e.g. 'nostalgic' doesn't accidentally match 'no')."""
+    return any(
+        re.search(rf"\b{re.escape(phrase)}\b", normalized_text) for phrase in phrases
+    )
+
+
 def _is_confirmation(user_input: str) -> bool:
-    """Check if the user input is a confirmatory reply."""
-    confirmatory = {
-        "ok",
-        "yes",
-        "sure",
-        "proceed",
-        "go ahead",
-        "confirm",
-        "correct",
-        "fine",
-        "agreed",
-        "sounds good",
-        "sì",
-        "va bene",
-        "procedi",
-        "confermo",
-        "esatto",
-        "ja",
-        "gut",
-        "weiter",
-        "oui",
-        "d'accord",
-        "да",
-        "si",
-    }
-    return user_input.strip().lower() in confirmatory
+    """Check if the user input is a confirmatory reply.
+
+    Matches the whole normalized input against the confirmatory set (as
+    before) OR checks whether a confirmatory phrase appears anywhere in a
+    longer natural reply (e.g. "yes, go ahead", "sure, sounds good").
+    If a cancellation phrase is also present, cancellation wins — treating
+    an ambiguous/negated reply ("no, not sure") as anything other than "not
+    confirmed" would be the unsafe direction for a create/edit/delete gate.
+    """
+    normalized = _normalize(user_input)
+    if not normalized:
+        return False
+    if _contains_any_phrase(normalized, _CANCELLATION_PHRASES):
+        return False
+    return normalized in _CONFIRMATORY_PHRASES or _contains_any_phrase(
+        normalized, _CONFIRMATORY_PHRASES
+    )
 
 
 def _is_cancellation(user_input: str) -> bool:
-    """Check if the user input is a cancellation."""
-    cancellation = {
-        "no",
-        "cancel",
-        "stop",
-        "abort",
-        "nevermind",
-        "never mind",
-        "no grazie",
-        "annulla",
-        "nein",
-        "non",
-    }
-    return user_input.strip().lower() in cancellation
+    """Check if the user input is a cancellation (see _is_confirmation)."""
+    normalized = _normalize(user_input)
+    if not normalized:
+        return False
+    return normalized in _CANCELLATION_PHRASES or _contains_any_phrase(
+        normalized, _CANCELLATION_PHRASES
+    )
+
+
+_CONFIRMATORY_PHRASES = {
+    "ok",
+    "okay",
+    "yes",
+    "yeah",
+    "yep",
+    "sure",
+    "proceed",
+    "go ahead",
+    "confirm",
+    "correct",
+    "fine",
+    "agreed",
+    "sounds good",
+    "sì",
+    "si",
+    "va bene",
+    "procedi",
+    "confermo",
+    "esatto",
+    "ja",
+    "gut",
+    "weiter",
+    "oui",
+    "d'accord",
+    "да",
+}
+
+_CANCELLATION_PHRASES = {
+    "no",
+    "cancel",
+    "stop",
+    "abort",
+    "nevermind",
+    "never mind",
+    "no grazie",
+    "annulla",
+    "nein",
+    "non",
+}
+
+# Normalize the phrase sets themselves through the same function used on
+# user input (e.g. "d'accord" -> "d accord"), so punctuation inside a phrase
+# doesn't cause a mismatch against the punctuation-stripped input.
+_CONFIRMATORY_PHRASES = {_normalize(p) for p in _CONFIRMATORY_PHRASES}
+_CANCELLATION_PHRASES = {_normalize(p) for p in _CANCELLATION_PHRASES}
 
 
 _CONFIRMATION_WAITING_FOR = {

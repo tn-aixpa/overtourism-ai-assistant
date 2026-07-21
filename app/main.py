@@ -12,6 +12,13 @@ else:
     load_dotenv(override=False)
 
 
+from app.config import validate_environment
+
+# Fail fast: if required config (BACKEND_URL, ANTHROPIC_API_KEY, ...) is
+# missing, stop here with a clear error instead of booting successfully and
+# failing deep inside the first request that needs it.
+validate_environment()
+
 from app.api.routes import router
 
 logging.basicConfig(

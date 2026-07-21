@@ -3,12 +3,10 @@ import re
 import logging
 import requests
 from time import time, sleep
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import anthropic
-from langchain_core.messages import HumanMessage
 
 from app.agent.state import AgentState
-from app.utils.common import RequestHandlingException
+from app.utils.common import RequestHandlingException, enforce_prompt_budget
 
 _llm_client = None
 logger = logging.getLogger(__name__)
@@ -28,7 +26,6 @@ ANTHROPIC_MODELS = {
     "heavy": "claude-sonnet-4-5",
 }
 
-EXECUTOR = ThreadPoolExecutor(max_workers=4)
 LLM_TIMEOUT = 20  # seconds
 
 
@@ -118,6 +115,13 @@ def call_backup_llm(prompt: str, lightweight_llm: bool = True) -> tuple[str, str
 def llm_interaction(
     state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True
 ) -> str:
+    # Last line of defense: every individual injection point (tool results,
+    # matching data, retrieved context, ...) is already truncated at the
+    # source, but if something new slips through uncapped, shrink the
+    # assembled prompt here rather than letting the call fail against the
+    # provider's request-size limit. See app.utils.common.enforce_prompt_budget.
+    prompt = enforce_prompt_budget(prompt)
+
     try:
 
         llm_client = get_llm_client()

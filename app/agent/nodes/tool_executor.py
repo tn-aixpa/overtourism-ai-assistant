@@ -479,8 +479,8 @@ def execute_interact_with_context(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
     """Execute interact_with_context tool."""
-    import json
     from app.utils.llm import llm_interaction
+    from app.utils.common import truncate_for_prompt
 
     logger.info(f"Executing interact_with_context tool with query: {query}")
 
@@ -488,15 +488,24 @@ def execute_interact_with_context(
     if not retrieved:
         raise ValueError("No context data available — run get_context_details first")
 
+    # get_context_details is normally scoped to a handful of specific
+    # objects (not "everything"), but a single object can still carry a
+    # large nested payload (e.g. scenario evaluation_data), so this is still
+    # hard-capped rather than dumped raw. If the answer needs data beyond
+    # what's shown, the model should say so rather than guess — the caller
+    # can narrow current_context and re-run get_context_details.
+    context_block = truncate_for_prompt(retrieved, max_chars=8000)
+
     prompt = f"""You are an analyst for a tourism digital twin platform.
 Answer the following question using ONLY the data provided below.
-If the data does not contain enough information to answer, say so explicitly — do not infer or speculate.
+If the data does not contain enough information to answer (including if it was
+truncated for length), say so explicitly — do not infer or speculate.
 Be concise and factual. Use a neutral, professional tone.
 
 Question: {query}
 
 Context data:
-{json.dumps(retrieved, indent=2, default=str)}
+{context_block}
 
 Answer:"""
 

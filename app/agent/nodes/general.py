@@ -5,6 +5,8 @@ from langgraph.graph import END
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
+from app.utils.common import truncate_for_prompt
+from app.config import GENERAL_ERROR_MESSAGE
 from app.prompts.answer_generation import generate_answer
 
 logger = logging.getLogger(__name__)
@@ -47,16 +49,15 @@ def error_recovery_node(state: AgentState) -> Command:
     logger.info("Entering error recovery node")
 
     if state.cognitive.error_details:
+        # Full detail (may include internal exception text, backend URLs,
+        # etc.) stays in the logs for debugging — it must never be the
+        # thing shown to the user.
         logger.error(state.cognitive.error_details)
 
         with open("logs/errors.txt", "a+") as f:
             f.write(f"{state.cognitive.error_details}\n")
 
-    state.cognitive.messages_to_include = (
-        [state.cognitive.error_details]
-        if state.cognitive.error_details
-        else ["Something went wrong, please try again later."]
-    )
+    state.cognitive.messages_to_include = [GENERAL_ERROR_MESSAGE]
 
     return Command(update=state, goto="generate_output_message")
 
@@ -144,10 +145,15 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             | "list_available_proposals"
             | "list_available_scenarios"
         ):
-            return [f"Here are the available items: {output}"]
+            # Raw backend payloads grow with tenant data (no bound), so this
+            # is hard-capped rather than embedded in full — see
+            # app.utils.common.truncate_for_prompt. If the answer needs more
+            # than what's shown, the model should say so instead of a call
+            # here silently blowing the prompt budget.
+            return [f"Here are the available items: {truncate_for_prompt(output, max_chars=4000)}"]
 
         case "get_context_details":
-            return [f"Here are the requested details: {output}"]
+            return [f"Here are the requested details: {truncate_for_prompt(output, max_chars=4000)}"]
 
         case "interact_with_context":
             return [output.get("message", "No answer could be generated.")]

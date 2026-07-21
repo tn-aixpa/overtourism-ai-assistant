@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 
 from app.agent.state import AgentState
 from app.utils.llm import llm_interaction, format_messages
+from app.utils.common import condense_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,15 @@ def get_relatet_context_ids(
             "context_ids": {"problems": [], "proposals": [], "scenarios": []},
         }
 
-    sections_block = json.dumps(sections, indent=2, default=str)
+    # Condense before injecting: matching only needs id/name/description-type
+    # fields, not the full raw payload (which can carry large nested extras
+    # like scenario evaluation_data). This keeps the prompt bounded
+    # regardless of how much data the tenant has, instead of growing with
+    # the dataset. See app.utils.common.condense_for_matching.
+    condensed_sections = {
+        source: condense_for_matching(data) for source, data in sections.items()
+    }
+    sections_block = json.dumps(condensed_sections, indent=2, default=str)
 
     # ------------------------------------------------------------------ #
     # 2. Build prompt
@@ -65,8 +74,12 @@ You are a semantic matching assistant for a digital twin platform about tourism 
 Your task: given a user intent and a set of object lists fetched from the backend,
 identify which objects (by their ID) are relevant to the intent.
 
-Consider ALL fields of each object (name, description, tags, location, relationships, etc.)
-when deciding relevance. Be inclusive — if an object is plausibly related, include it.
+Consider the available fields of each object (name, description, tags, location,
+relationships, etc.) when deciding relevance — note that bulky/nested fields (e.g.
+extended metadata, simulation data) have been stripped out below since they aren't
+needed for matching. Be inclusive — if an object is plausibly related, include it.
+If the data below mentions additional items not shown in full, and none of the shown
+items are a good match, say so in your reasoning rather than guessing.
 
 User intent:
 \"{user_intent}\"
