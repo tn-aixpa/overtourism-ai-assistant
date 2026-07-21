@@ -39,7 +39,7 @@ through a structured hierarchy of Problems, Proposals, and Scenarios.
 
 # Typical workflows
 
-1. **Explore**: call list_available_scenarios → get_context_details → interact_with_context
+1. **Explore**: call list_available_scenarios → get_context_details → analyze_scenario_results
 2. **Create a proposal**: set a problem context → extract_proposal_details → confirm → create_proposal
 3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
 
@@ -60,7 +60,10 @@ GLOSSARY: dict = {
         ),
         "aliases": ["issue", "challenge", "problematic", "problema"],
         "related_terms": ["proposal", "scenario"],
-        "examples": ["Overtourism in the historic centre", "Mobility congestion during peak season"],
+        "examples": [
+            "Overtourism in the historic centre",
+            "Mobility congestion during peak season",
+        ],
     },
     "proposal": {
         "definition": (
@@ -80,7 +83,10 @@ GLOSSARY: dict = {
         ),
         "aliases": ["simulation", "run", "configuration", "scenario"],
         "related_terms": ["proposal", "problem", "evaluation"],
-        "examples": ["Visitor cap at 500/day", "Visitor cap at 1000/day with shuttle service"],
+        "examples": [
+            "Visitor cap at 500/day",
+            "Visitor cap at 1000/day with shuttle service",
+        ],
     },
     "evaluation": {
         "definition": (

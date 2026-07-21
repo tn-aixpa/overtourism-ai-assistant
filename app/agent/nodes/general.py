@@ -150,12 +150,16 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             # app.utils.common.truncate_for_prompt. If the answer needs more
             # than what's shown, the model should say so instead of a call
             # here silently blowing the prompt budget.
-            return [f"Here are the available items: {truncate_for_prompt(output, max_chars=4000)}"]
+            return [
+                f"Here are the available items: {truncate_for_prompt(output, max_chars=4000)}"
+            ]
 
         case "get_context_details":
-            return [f"Here are the requested details: {truncate_for_prompt(output, max_chars=4000)}"]
+            return [
+                f"Here are the requested details: {truncate_for_prompt(output, max_chars=4000)}"
+            ]
 
-        case "interact_with_context":
+        case "analyze_scenario_results":
             return [output.get("message", "No answer could be generated.")]
 
         case "create_new_problem" | "create_new_proposal":

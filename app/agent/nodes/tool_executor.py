@@ -191,7 +191,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_context_ids": execute_get_context_ids,
         "get_context_details": execute_get_context_details,
         # Interaction
-        "interact_with_context": execute_interact_with_context,
+        "analyze_scenario_results": execute_analyze_scenario_results,
         # Creation stubs
         "create_new_problem": execute_create_new_problem,
         "create_new_proposal": execute_create_new_proposal,
@@ -475,14 +475,14 @@ def execute_get_context_details(
     return retrieved_context
 
 
-def execute_interact_with_context(
+def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
-    """Execute interact_with_context tool."""
+    """Execute analyze_scenario_results tool."""
     from app.utils.llm import llm_interaction
     from app.utils.common import truncate_for_prompt
 
-    logger.info(f"Executing interact_with_context tool with query: {query}")
+    logger.info(f"Executing analyze_scenario_results tool with query: {query}")
 
     retrieved = state.cognitive.retrieved_context
     if not retrieved:

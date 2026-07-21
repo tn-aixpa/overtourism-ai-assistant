@@ -105,14 +105,13 @@ def create_get_context_tool() -> ToolDefinition:
     return ToolDefinition(
         name="get_context_details",
         description=(
-            "Get full details about the current context, including all related problems, "
-            "proposals, and scenarios. MUST be called before interact_with_context if context "
-            "details have not yet been retrieved in this conversation."
+            "Retrieve the stored information for the current problem, proposal, or scenario, "
+            "including descriptions, metadata, relationships, and other textual attributes."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
-            "Retrieves full details for the current context, fetching all associated "
-            "problems, proposals, and scenarios with their properties and relationships."
+            "Retrieve the stored information for the current problem, proposal, or scenario, "
+            "including descriptions, metadata, relationships, and other textual attributes."
         ),
         parameters=[],
         output_description="Dictionary with retrieved details for all items in the current context",
@@ -120,14 +119,20 @@ def create_get_context_tool() -> ToolDefinition:
     )
 
 
-def create_interact_with_context_tool() -> ToolDefinition:
+def create_analyze_scenario_results_tool() -> ToolDefinition:
     return ToolDefinition(
-        name="interact_with_context",
-        description="Answer questions about the current problem, proposal, or scenario data",
+        name="analyze_scenario_results",
+        description=(
+            "Interpret or compare scenario evaluation results, such as metrics, "
+            "graphs, indicators, and simulation outputs."
+        ),
         category=ToolCategory.INTERACTION,
         long_description=(
-            "Allows the agent to view and analyze the active context data. "
-            "Must be preceded by get_context_details at some point in the conversation."
+            "Uses the data previously retrieved by get_context_details to explain "
+            "scenario evaluation results. This tool should only be used for requests "
+            "about numerical indicators, charts, KPIs, simulation outputs, or "
+            "comparisons between scenarios. It is not intended for simply describing "
+            "a problem, proposal, or scenario."
         ),
         parameters=[
             ToolParameter(
@@ -484,7 +489,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_ids_tool(),
         create_get_context_tool(),
         # Interaction
-        create_interact_with_context_tool(),
+        create_analyze_scenario_results_tool(),
         create_plot_tool(),
         # Creation
         create_new_problem_tool(),

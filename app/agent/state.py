@@ -149,8 +149,7 @@ class CognitiveState:
 class AgentState:
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
-    chart_data: Optional[dict[str, Any]] = None
-    sliders_data: Optional[dict[str, Any]] = None
+    assistant_action_data: Optional[dict[str, Any]] = None
 
     # Orchestration
     token_used: int = 0

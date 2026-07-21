@@ -97,8 +97,9 @@ def _run_agent(key: str, state: AgentState, token: str):
         result = {
             "response": response_text,
             "session_id": key,
-            "chart_data": getattr(final_state, "chart_data", None),
-            "sliders_data": getattr(final_state, "sliders_data", None),
+            "assistant_action_data": getattr(
+                final_state, "assistant_action_data", None
+            ),
         }
 
         save_state(final_state)
@@ -108,8 +109,7 @@ def _run_agent(key: str, state: AgentState, token: str):
         result = {
             "response": GENERAL_ERROR_MESSAGE,
             "session_id": key,
-            "chart_data": None,
-            "sliders_data": None,
+            "assistant_action_data": None,
         }
 
     finally:
@@ -178,7 +178,7 @@ async def run_agent_endpoint(
             }
             state.cognitive.enabled_tools = [
                 "get_context_details",
-                "interact_with_context",
+                "analyze_scenario_results",
                 "lookup_glossary",
             ]
         else:
