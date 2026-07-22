@@ -165,11 +165,11 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "create_new_problem" | "create_new_proposal":
             return [f"'{output.get('name', 'The item')}' was created successfully."]
 
-        case "create_new_scenario" | "edit_scenario":
+        case "create_new_scenario":
             # TODO
             return [output.get("message", "This feature is not yet implemented.")]
 
-        case "edit_problem" | "edit_proposal":
+        case "edit_problem" | "edit_proposal" | "edit_scenario":
             return [f"'{output.get('name', 'The item')}' was modified successfully."]
 
         case "delete_problem" | "delete_proposal" | "delete_scenario":

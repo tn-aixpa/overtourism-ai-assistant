@@ -55,6 +55,21 @@ CONFIRMATION_REQUIRED_TOOLS = {
 # resolution logic is identical in both cases: only fill in when exactly
 # one candidate exists in current_context, otherwise leave it for the
 # missing-parameter check to catch.
+# Maps a mutating tool to the (parameter, context_cache kind) of the object
+# it just changed, so tool_executor_node can evict that object's stale
+# cache entry right after a successful run (see
+# CognitiveState.invalidate_cached_object). Only covers edit/delete: a
+# create_* tool produces a brand-new id that can't already be cached.
+_CACHE_INVALIDATION_MAP = {
+    "edit_problem": ("problem_id", "problems"),
+    "delete_problem": ("problem_id", "problems"),
+    "edit_proposal": ("proposal_id", "proposals"),
+    "delete_proposal": ("proposal_id", "proposals"),
+    "edit_scenario": ("scenario_id", "scenarios"),
+    "delete_scenario": ("scenario_id", "scenarios"),
+}
+
+
 _ID_RESOLUTION_MAP = {
     # parent references (create)
     "create_new_proposal": ("problem_id", "problems"),
@@ -335,6 +350,16 @@ def tool_executor_node(state: AgentState) -> Command:
             state.cognitive.error_details = result.get("error", "Unknown error")
             return Command(update=state, goto="error")
 
+        # The object this tool just edited/deleted may still be cached from
+        # an earlier get_context_details — evict it so any later lookup
+        # re-fetches fresh data instead of serving the stale copy.
+        invalidation = _CACHE_INVALIDATION_MAP.get(tool_name)
+        if invalidation:
+            param_name, kind = invalidation
+            obj_id = tool_arguments.get(param_name)
+            if obj_id:
+                state.cognitive.invalidate_cached_object(kind, obj_id)
+
         # Clear the pending-action slot now that it has been executed, then
         # hand back to the reasoner for the next Thought/Action decision.
         state.cognitive.selected_tool = None
@@ -450,6 +475,9 @@ def execute_get_context_ids(
     logger.info(f"get_context_ids resolved: {context_ids}")
 
     state.cognitive.current_context = context_ids
+    # New topic resolved: drop any cached objects that aren't part of it
+    # anymore (see CognitiveState.prune_context_cache).
+    state.cognitive.prune_context_cache()
     return {
         "success": True,
         "context_ids": context_ids,
@@ -459,16 +487,46 @@ def execute_get_context_ids(
 def execute_get_context_details(
     state: AgentState,
 ) -> Dict[str, Any]:
-    """Execute get_context_details tool."""
+    """Execute get_context_details tool.
+
+    Cache-aware: only fetches objects not already in context_cache (see
+    CognitiveState.context_cache). Cache is scoped to the current topic and
+    kept up to date by prune_context_cache (on topic change) and
+    invalidate_cached_object (on edit/delete) — see tool_executor_node.
+    """
     from app.tools.backend_tools import get_data_from_context
 
+    current_context = state.cognitive.current_context
+    cache = state.cognitive.context_cache
+
+    to_fetch = {
+        kind: [
+            obj_id
+            for obj_id in current_context.get(kind, [])
+            if f"{kind} {obj_id}" not in cache
+        ]
+        for kind in ("problems", "proposals", "scenarios")
+    }
+
     logger.info(
-        f"Executing get_context_details for context {state.cognitive.current_context}"
+        f"Executing get_context_details for context {current_context} "
+        f"(already cached, skipping fetch for those; fetching only {to_fetch})"
     )
 
-    retrieved_context = get_data_from_context.invoke(
-        {"current_context": state.cognitive.current_context, "tenant": state.tenant}
-    )
+    if any(to_fetch.values()):
+        fetched = get_data_from_context.invoke(
+            {"current_context": to_fetch, "tenant": state.tenant}
+        )
+        cache.update(fetched.get("retrieved", {}))
+
+    retrieved_context = {
+        "retrieved": {
+            f"{kind} {obj_id}": cache[f"{kind} {obj_id}"]
+            for kind in ("problems", "proposals", "scenarios")
+            for obj_id in current_context.get(kind, [])
+            if f"{kind} {obj_id}" in cache
+        }
+    }
 
     state.cognitive.retrieved_context = retrieved_context
 
@@ -479,8 +537,10 @@ def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
     """Execute analyze_scenario_results tool."""
+    from app.tools.backend_tools import get_evaluation_data
     from app.utils.llm import llm_interaction
     from app.utils.common import truncate_for_prompt
+    import copy
 
     logger.info(f"Executing analyze_scenario_results tool with query: {query}")
 
@@ -488,13 +548,49 @@ def execute_analyze_scenario_results(
     if not retrieved:
         raise ValueError("No context data available — run get_context_details first")
 
-    # get_context_details is normally scoped to a handful of specific
-    # objects (not "everything"), but a single object can still carry a
-    # large nested payload (e.g. scenario evaluation_data), so this is still
-    # hard-capped rather than dumped raw. If the answer needs data beyond
-    # what's shown, the model should say so rather than guess — the caller
-    # can narrow current_context and re-run get_context_details.
-    context_block = truncate_for_prompt(retrieved, max_chars=8000)
+    cache = state.cognitive.context_cache
+    scenario_ids = state.cognitive.current_context.get("scenarios", [])
+    missing_eval_ids = [
+        scenario_id
+        for scenario_id in scenario_ids
+        if "evaluation_data" not in cache.get(f"scenarios {scenario_id}", {})
+    ]
+
+    if missing_eval_ids:
+        fetched_evals = get_evaluation_data.invoke(
+            {
+                "current_context": {"scenarios": missing_eval_ids},
+                "tenant": state.tenant,
+            }
+        )
+        for key, eval_data in fetched_evals.items():
+            # Only merge into an object we actually have cached; if it's
+            # not cached, get_context_details hasn't retrieved it yet and
+            # we shouldn't create a partial cache entry for it here.
+            if key in cache:
+                cache[key]["evaluation_data"] = eval_data
+
+    enriched = copy.deepcopy(retrieved)
+    for key in enriched.get("retrieved", {}):
+        if key in cache and "evaluation_data" in cache[key]:
+
+            evaluation_data = cache[key]["evaluation_data"]
+
+            enriched["retrieved"][key]["evaluation_data"] = {
+                "scenario_id": evaluation_data["scenario_id"],
+                "evaluation_id": evaluation_data["evaluation_id"],
+                "data": {
+                    "sustainable_area": evaluation_data["data"]["sustainable_area"],
+                    "sustainability_index": evaluation_data["data"][
+                        "sustainability_index"
+                    ],
+                    "sustainability_by_constraint": evaluation_data["data"][
+                        "sustainability_by_constraint"
+                    ],
+                },
+            }
+
+    context_block = truncate_for_prompt(enriched, max_chars=8000)
 
     prompt = f"""You are an analyst for a tourism digital twin platform.
 Answer the following question using ONLY the data provided below.
@@ -513,7 +609,7 @@ Answer:"""
 
     return {
         "success": True,
-        "message": answer,  # ← "message" key is now always present
+        "message": answer,
     }
 
 
@@ -657,23 +753,25 @@ def execute_edit_proposal(
 
 def execute_edit_scenario(
     state: AgentState,
+    scenario_id: str = "",
     name: str = "",
-    proposal_id: str = "",
     description: str = "",
     **kwargs,
 ) -> Dict[str, Any]:
     """Stub executor for edit_scenario — feature not yet implemented."""
-    logger.info(f"edit_scenario called (not implemented) | name='{name}'")
-    return {
-        "success": True,
-        "not_implemented": True,
-        "message": _NOT_IMPLEMENTED_MSG.format(action="create new scenarios"),
-        "received": {
+
+    from app.tools.backend_tools import edit_scenario
+
+    result = edit_scenario.invoke(
+        {
+            "tenant": state.tenant,
+            "scenario_id": scenario_id,
             "name": name,
-            "proposal_id": proposal_id,
             "description": description,
-        },
-    }
+        }
+    )
+
+    return result
 
 
 # =============================================================================

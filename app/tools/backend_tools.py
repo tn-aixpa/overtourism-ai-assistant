@@ -5,15 +5,19 @@ import logging
 from app.utils.common import get_token
 
 BACKEND_URL = os.environ.get("BACKEND_URL")
+AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true")
 
 logger = logging.getLogger(__name__)
 
 
 def _merge_auth_headers(headers: dict | None) -> dict:
     """Ensure Authorization is present, without overriding an explicitly-provided one."""
+
     merged = dict(headers) if headers else {}
-    if "Authorization" not in merged:
+
+    if AUTH_ENABLED and "Authorization" not in merged:
         merged["Authorization"] = f"Bearer {get_token()}"
+
     return merged
 
 
@@ -117,34 +121,47 @@ def get_single_scenario(scenario_id: str, tenant) -> dict:
 
 @tool
 def get_data_from_context(current_context, tenant):
-    """Fetch data from the API."""
+    """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}
-
     for key in ["problems", "proposals", "scenarios"]:
         for id in current_context[key]:
             url = f"{BACKEND_URL}{tenant}/{key}/{id}"
-            api_response = get_data(url)
-
-            if key == "scenarios":
-                try:
-                    # TODO: now I get the first (latest)
-                    evals_url = f"{BACKEND_URL}{tenant}/evaluations/"
-                    scenarios_to_evals = get_data(evals_url)
-                    item = next(
-                        (e for e in scenarios_to_evals if e["scenario_id"] == id),
-                        None,
-                    )
-
-                    if item is not None:
-                        eval_id = item["evaluation_id"]
-                        eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
-                        api_response["evaluation_data"] = get_data(eval_url)
-                except Exception as e:
-                    logger.warning(f"Unable to get scenario data due to error: {e}")
-
-            retrieved[f"{key} {id}"] = api_response
-
+            retrieved[f"{key} {id}"] = get_data(url)
     return {"retrieved": retrieved}
+
+
+@tool
+def get_evaluation_data(current_context, tenant):
+    """Fetch evaluation data for each scenario in the current context.
+
+    Returns a dict keyed the same way as get_data_from_context's "retrieved"
+    entries (e.g. "scenarios <id>") so the two can be merged easily.
+    """
+    # TODO: split data according to need (fe action, useful info)
+    evaluations = {}
+    scenario_ids = current_context.get("scenarios", [])
+    if not scenario_ids:
+        return evaluations
+
+    try:
+        evals_url = f"{BACKEND_URL}{tenant}/evaluations/"
+        scenarios_to_evals = get_data(evals_url)
+    except Exception as e:
+        logger.warning(f"Unable to fetch evaluations list due to error: {e}")
+        return evaluations
+
+    for id in scenario_ids:
+        item = next((e for e in scenarios_to_evals if e["scenario_id"] == id), None)
+        if item is None:
+            continue
+        try:
+            eval_id = item["evaluation_id"]
+            eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
+            evaluations[f"scenarios {id}"] = get_data(eval_url)
+        except Exception as e:
+            logger.warning(f"Unable to get evaluation data for scenario {id}: {e}")
+
+    return evaluations
 
 
 @tool
@@ -298,6 +315,42 @@ def edit_proposal(
     params = {"problem_id": problem_id} if problem_id else None
 
     return put_data(url, json=body, params=params)
+
+
+@tool
+def edit_scenario(
+    tenant: str,
+    scenario_id: str,
+    name: str | None = None,
+    description: str | None = None,
+):
+    """
+    Edit an existing scenario instance.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool edit_scenario")
+
+    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+
+    # The backend expects the full instance on PUT (version, name, description,
+    # status, extras, related_scenario_ids), not a partial patch. Fetch the
+    # current instance first so any field the user didn't mention (including
+    # status and related scenarios) is preserved instead of being wiped out.
+    existing = get_single_scenario(scenario_id, tenant=tenant)
+
+    body = {
+        "version": existing.get("version", 0),
+        "name": name if name else existing.get("name", ""),
+        "description": description if description else existing.get("description", ""),
+        "values": existing.get("values", {"additionalProp1": {}}),
+        "extras": existing.get("extras", {"additionalProp1": {}}),
+    }
+
+    logger.info(body)
+
+    return put_data(url, json=body)
 
 
 @tool

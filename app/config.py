@@ -58,7 +58,7 @@ GLOSSARY: dict = {
             "(e.g., overtourism, extreme weather events, unregistered tourism). "
             "A Problem is the top-level concept: it owns one or more Proposals."
         ),
-        "aliases": ["issue", "challenge", "problematic", "problema"],
+        "aliases": ["issue", "challenge", "problematic", "problema", "ambit", "ambito"],
         "related_terms": ["proposal", "scenario"],
         "examples": [
             "Overtourism in the historic centre",
@@ -126,13 +126,75 @@ GLOSSARY: dict = {
         "related_terms": ["problem", "proposal", "scenario"],
         "examples": ["molveno"],
     },
-    "carrying capacity": {
+    "constraint capacity": {
         "definition": (
-            "The maximum number of visitors a destination can accommodate without degrading the "
-            "experience for tourists or residents, or causing environmental damage."
+            "The maximum acceptable value for a specific constraint before it is considered "
+            "violated. A constraint capacity may refer to the number of visitors, parked cars, "
+            "accommodation occupancy, restaurant demand, beach attendance, or any other resource "
+            "or indicator used in the simulation."
         ),
-        "aliases": ["visitor capacity", "max visitors", "capacità di carico"],
-        "related_terms": ["overtourism", "visitor cap"],
+        "aliases": [
+            "capacity",
+            "constraint threshold",
+            "limit",
+            "maximum capacity",
+            "capacità di carico",
+        ],
+        "related_terms": ["constraint", "sustainability", "overtourism"],
+        "examples": [
+            "Maximum number of visitors in the historic centre.",
+            "Maximum parking occupancy.",
+            "Maximum beach attendance.",
+        ],
+    },
+    "sustainability": {
+        "definition": (
+            "A measure of how often one or more constraints remain within their respective "
+            "capacity limits during a simulation. It is expressed as the proportion of time "
+            "or simulation outcomes in which the selected constraint (or all selected constraints) "
+            "are not exceeded. A higher sustainability value indicates that capacity limits are "
+            "respected more consistently."
+        ),
+        "aliases": [
+            "sustainability index",
+            "constraint compliance",
+            "capacity compliance",
+            "sustainability score",
+            "sostenibilità",
+        ],
+        "related_terms": [
+            "constraint capacity",
+            "evaluation",
+            "scenario",
+            "uncertainty",
+        ],
+        "examples": [
+            "A parking sustainability of 0.92 means the parking capacity is respected in 92% of the simulation.",
+            "An overall sustainability of 0.81 means all considered constraints are simultaneously respected in 81% of the simulation.",
+        ],
+    },
+    "uncertainty": {
+        "definition": (
+            "A measure of the confidence associated with a prediction or simulation result. "
+            "Uncertainty reflects the expected reliability of the model output and arises from "
+            "(i) assumptions about people behaviour and other tourism-related processes, and "
+            "(ii) approximations introduced by the statistical and computational models. "
+        ),
+        "aliases": [
+            "confidence",
+            "confidence level",
+            "prediction uncertainty",
+            "model uncertainty",
+            "forecast uncertainty",
+            "uncertainty band",
+            "incertezza",
+        ],
+        "related_terms": [
+            "evaluation",
+            "scenario",
+            "prediction",
+            "simulation",
+        ],
         "examples": [],
     },
 }

@@ -97,6 +97,22 @@ class CognitiveState:
     )
     retrieved_context: Dict[str, Any] = field(default_factory=dict)
 
+    # Object-level cache for get_context_details / analyze_scenario_results,
+    # keyed like the "retrieved" dict (e.g. "scenarios <id>") so entries can
+    # be looked up, merged, and evicted by the same key across both tools.
+    # A scenario's cached entry may carry an "evaluation_data" field once
+    # analyze_scenario_results has fetched it.
+    #
+    # Scope is deliberately "current topic", not "whole session": entries
+    # are dropped as soon as the topic moves on (see prune_context_cache,
+    # called whenever current_context is re-resolved by get_context_ids) and
+    # as soon as the underlying object is edited/deleted (see
+    # invalidate_cached_object). This avoids both the staleness risk of a
+    # cache that outlives the topic and the near-zero benefit of a cache
+    # that resets every turn (a single turn already only fetches each
+    # object once).
+    context_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
     trace: TraceBuffer = field(default_factory=TraceBuffer)
 
     error_details: str = ""
@@ -131,6 +147,34 @@ class CognitiveState:
     # Set to True right after the user confirms a pending creation tool, so that
     # tool_executor knows to actually run it instead of pausing again.
     tool_confirmed: bool = False
+
+    def prune_context_cache(self) -> None:
+        """Drop cached objects that are no longer part of current_context.
+
+        Call this right after current_context is (re)resolved (i.e. in
+        execute_get_context_ids). Keeps context_cache scoped to "what the
+        user is currently talking about": an object stays cached across
+        turns as long as the user keeps referring to it, but is evicted as
+        soon as they move on to a different problem/proposal/scenario.
+        """
+        valid_keys = {
+            f"{kind} {obj_id}"
+            for kind in ("problems", "proposals", "scenarios")
+            for obj_id in self.current_context.get(kind, [])
+        }
+        for key in list(self.context_cache):
+            if key not in valid_keys:
+                del self.context_cache[key]
+
+    def invalidate_cached_object(self, kind: str, obj_id: str) -> None:
+        """Evict a single cached object, e.g. right after it was edited or
+        deleted, so a later get_context_details doesn't serve stale data."""
+        self.context_cache.pop(f"{kind} {obj_id}", None)
+        # The current turn's already-retrieved snapshot may also hold the
+        # now-stale copy — drop it there too if present.
+        retrieved = self.retrieved_context.get("retrieved") if self.retrieved_context else None
+        if retrieved is not None:
+            retrieved.pop(f"{kind} {obj_id}", None)
 
     def current_turn_result_keys(self) -> List[str]:
         """Ordered tool_results keys produced by the scratchpad of the turn

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -24,6 +25,8 @@ from app.tools.backend_tools import check_authorization
 from app.utils.common import set_token
 
 logger = logging.getLogger(__name__)
+
+AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true")
 
 router = APIRouter()
 
@@ -130,8 +133,11 @@ async def run_agent_endpoint(
 ):
 
     # Verify authorization
-    token = _require_bearer_token(authorization)
-    _authorize_tenant(token, tenant)
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
+    else:
+        token = None
 
     # Check session key
     if not session_id or session_id == "":
@@ -210,8 +216,9 @@ async def reset_session(
     if not session_id or session_id == "":
         raise HTTPException(status_code=400, detail="No session_id provided")
 
-    token = _require_bearer_token(authorization)
-    _authorize_tenant(token, tenant)
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
 
     lock = _get_lock(session_id)
     async with lock:
@@ -235,6 +242,7 @@ async def get_agent_result(
     tenant: str = Query(default="molveno"),
     authorization: str | None = Header(default=None),
 ):
+    # if AUTH_ENABLED:
     # token = _require_bearer_token(authorization)
     # _authorize_tenant(token, tenant)
 
@@ -263,6 +271,7 @@ async def stream_events(
     ),
     authorization: str | None = Header(default=None),
 ):
+    # if AUTH_ENABLED:
     # bearer = _extract_bearer_token(authorization) or token
     # if not bearer:
     #     raise HTTPException(
@@ -296,6 +305,7 @@ async def submit_feedback_get(
     vote: str | None = None,
     comment: str | None = None,
 ):
+    # if AUTH_ENABLED:
     # token = _require_bearer_token(authorization)
     # _authorize_tenant(token, tenant)
 

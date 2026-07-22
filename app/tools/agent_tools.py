@@ -385,12 +385,7 @@ def edit_scenario_tool() -> ToolDefinition:
         name="edit_scenario",
         description="Edit an available scenario",
         category=ToolCategory.SCENARIO_MANAGEMENT,
-        long_description=(
-            "Registers a new Scenario for a given Proposal in the platform. "
-            "A Scenario is a simulation run exploring a specific parameter configuration. "
-            "NOTE: this tool is not yet implemented — it will acknowledge the request "
-            "and inform the user that the feature is coming soon."
-        ),
+        long_description="Modify one or more attributes of a scenario that was already defined",
         parameters=[
             ToolParameter(
                 name="name",
@@ -405,8 +400,8 @@ def edit_scenario_tool() -> ToolDefinition:
                 required=False,
             ),
         ],
-        output_description="Acknowledgement that the feature is not yet implemented.",
-        tags=["write", "scenario", "not-implemented"],
+        output_description="Acknowledgement of successful edit or request for more details",
+        tags=["write", "scenario"],
     )
 
 
@@ -461,22 +456,6 @@ def create_lookup_glossary_tool() -> ToolDefinition:
     )
 
 
-def create_plot_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="create_plot_tool",
-        description="Provides a plotting tool to visualize data in various formats (e.g., line, bar, scatter, etc.)",
-        category=ToolCategory.INTERACTION,
-        long_description=(
-            "Creates a plot to visualize data in various formats (e.g., line, bar, scatter, etc.). "
-            "NOTE: this tool is not yet implemented — it will acknowledge the request "
-            "and inform the user that the feature is coming soon."
-        ),
-        parameters=[],
-        output_description="Acknowledgement that the feature is not yet implemented.",
-        tags=["write", "scenario", "not-implemented"],
-    )
-
-
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         # Utility
@@ -490,7 +469,6 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_tool(),
         # Interaction
         create_analyze_scenario_results_tool(),
-        create_plot_tool(),
         # Creation
         create_new_problem_tool(),
         create_new_proposal_tool(),

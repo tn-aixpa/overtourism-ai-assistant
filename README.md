@@ -115,6 +115,7 @@ Also, dump_to_file writes the entire state to disk on every single turn (logs/st
 5) No /health or /ready endpoint for orchestration probes.
 
 ## TODO:
+- retry after error, "auto-correction" - e.g if something is missing
 - pass tenant and token to all endpoints
 - feedback as post
 - passare dati più strutturati per l'analisi delle differenze, parlare degli scenari
