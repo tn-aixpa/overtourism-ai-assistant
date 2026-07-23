@@ -157,7 +157,16 @@ def build_prior_results_block(
         )
 
     for key in shown_keys:
-        lines.append(f"### {key}\n{_truncate_json(tool_results[key], max_chars_per_entry)}")
+        # Condense (item-aware) BEFORE the char-level safety cut below. Doing
+        # this the other way around — as this used to — truncates the raw
+        # JSON string blindly, which can slice a list mid-object and drop
+        # trailing items (e.g. the 2nd of 2 problems) with no indication
+        # anything was cut. The model then treats the partial list as
+        # complete and undercounts/hallucinates. condense_for_matching keeps
+        # items whole and, if it does need to drop any, says so explicitly
+        # via a "note" field instead of silently truncating mid-structure.
+        condensed = condense_for_matching(tool_results[key])
+        lines.append(f"### {key}\n{_truncate_json(condensed, max_chars_per_entry)}")
 
     return "\n\n".join(lines)
 

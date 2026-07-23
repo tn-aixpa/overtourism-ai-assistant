@@ -99,8 +99,8 @@ GLOSSARY: dict = {
     },
     "overtourism": {
         "definition": (
-            "A phenomenon where the number of tourists visiting a destination exceeds its carrying "
-            "capacity, causing negative impacts on residents, infrastructure, and the environment."
+            "A phenomenon where the number of tourists visiting a destination exceeds one or more of it's "
+            "constraint capacities, causing negative impacts on residents, infrastructure, or the environment."
         ),
         "aliases": ["over-tourism", "mass tourism", "turismo eccessivo"],
         "related_terms": ["problem", "mobility", "visitor cap"],

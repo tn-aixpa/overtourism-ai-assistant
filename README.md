@@ -36,7 +36,7 @@ Additionally you will need
 
 ## Tests
 
-There are 298 unit tests covering the pure-logic parts of the codebase — no live
+There are 297 unit tests covering the pure-logic parts of the codebase — no live
 Anthropic/backend calls are made; HTTP and LLM calls are mocked.
 Other 9 unit test cover Anthropic calls - these are skipped by default.
 
@@ -115,9 +115,7 @@ Also, dump_to_file writes the entire state to disk on every single turn (logs/st
 5) No /health or /ready endpoint for orchestration probes.
 
 ## TODO:
-- retry after error, "auto-correction" - e.g if something is missing
 - pass tenant and token to all endpoints
 - feedback as post
-- passare dati più strutturati per l'analisi delle differenze, parlare degli scenari
 - evitare allucinazioni su numero istanze (sandbox ignorato o scenario base ignorato)
 - spiegare meglio come effettuare confronto

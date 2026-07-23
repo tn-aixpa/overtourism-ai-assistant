@@ -3,7 +3,7 @@ from typing import Dict, Any, List
 
 from app.agent.state import AgentState, ReActStep
 from app.utils.llm import llm_interaction, format_messages
-from app.utils.common import build_prior_results_block
+from app.utils.common import build_prior_results_block, condense_for_matching
 
 
 def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
@@ -21,7 +21,18 @@ def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
                 f"Action {i}: {step.tool_name}({json.dumps(step.tool_arguments, default=str)})"
             )
         if step.observation is not None:
-            obs = json.dumps(step.observation, indent=2, default=str)
+            # Condense (item-aware) first, THEN cap by characters as a last
+            # resort. Dumping the raw observation and cutting the resulting
+            # string at a fixed character count can slice a list mid-object
+            # (e.g. show 1.5 of 2 problems), and the model reads that partial
+            # list as the complete answer — a direct source of undercounting
+            # / hallucinated "there is only 1" type answers. condense_for_
+            # matching keeps every item's core fields intact and only drops
+            # items past a generous cap, always saying so explicitly via a
+            # "note" field, so the model knows more exist instead of
+            # silently seeing less than what's really there.
+            condensed = condense_for_matching(step.observation)
+            obs = json.dumps(condensed, indent=2, default=str)
             if len(obs) > 1200:
                 obs = (
                     obs[:1200]

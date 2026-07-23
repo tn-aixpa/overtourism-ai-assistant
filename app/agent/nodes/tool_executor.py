@@ -546,7 +546,38 @@ def execute_analyze_scenario_results(
 
     retrieved = state.cognitive.retrieved_context
     if not retrieved:
-        raise ValueError("No context data available — run get_context_details first")
+        # Don't fail immediately just because get_context_details hasn't run
+        # yet this turn (or its result was never stored) — if we already
+        # know WHICH problem/proposal/scenario is in play (current_context
+        # was resolved by an earlier get_context_ids call), go fetch the
+        # data ourselves rather than bouncing the request back as an error.
+        current_context = state.cognitive.current_context or {}
+        if not any(
+            current_context.get(kind) for kind in ("problems", "proposals", "scenarios")
+        ):
+            # Nothing to fetch — we don't know which object this is about,
+            # so there's no data to retry for. This is a real error: the
+            # caller needs to resolve context first (get_context_ids), not
+            # something a retry can fix.
+            raise ValueError(
+                "No context has been resolved yet (no problem/proposal/scenario "
+                "selected) — run get_context_ids and get_context_details first."
+            )
+
+        logger.info(
+            "analyze_scenario_results: retrieved_context was empty but "
+            f"current_context={current_context} is known — fetching it now "
+            "via get_context_details instead of failing outright."
+        )
+        retrieved = execute_get_context_details(state)
+
+        if not retrieved.get("retrieved"):
+            # We tried; the backend genuinely has nothing for these ids.
+            raise ValueError(
+                "Unable to retrieve context data for the current context "
+                f"({current_context}) even after fetching — the backend "
+                "returned nothing for these ids."
+            )
 
     cache = state.cognitive.context_cache
     scenario_ids = state.cognitive.current_context.get("scenarios", [])

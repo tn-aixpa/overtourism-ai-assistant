@@ -73,13 +73,9 @@ class TestBuildMessagesFromToolResult:
         msgs = gn._build_messages_from_tool_result("create_new_problem", result)
         assert msgs == ["'The item' was created successfully."]
 
-    @pytest.mark.parametrize("tool_name", ["create_new_scenario", "edit_scenario"])
-    def test_not_implemented_stubs_use_message_field(self, tool_name):
-        result = {"success": True, "output": {"message": "Not yet implemented."}}
-        msgs = gn._build_messages_from_tool_result(tool_name, result)
-        assert msgs == ["Not yet implemented."]
-
-    @pytest.mark.parametrize("tool_name", ["edit_problem", "edit_proposal"])
+    @pytest.mark.parametrize(
+        "tool_name", ["edit_problem", "edit_proposal", "edit_scenario"]
+    )
     def test_edit_success_message(self, tool_name):
         result = {"success": True, "output": {"name": "Overtourism"}}
         msgs = gn._build_messages_from_tool_result(tool_name, result)
