@@ -97,4 +97,4 @@ Return ONLY a valid JSON object with exactly these three keys (lists may be empt
 Do not include any explanation or markdown. Return JSON only.
 """
 
-    return llm_interaction(state, prompt).strip()
+    return llm_interaction(state, prompt, lightweight_llm=True).strip()

@@ -117,5 +117,3 @@ Also, dump_to_file writes the entire state to disk on every single turn (logs/st
 ## TODO:
 - pass tenant and token to all endpoints
 - feedback as post
-- evitare allucinazioni su numero istanze (sandbox ignorato o scenario base ignorato)
-- spiegare meglio come effettuare confronto

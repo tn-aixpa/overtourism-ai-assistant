@@ -636,7 +636,7 @@ Context data:
 
 Answer:"""
 
-    answer = llm_interaction(state, prompt)
+    answer = llm_interaction(state, prompt, lightweight_llm=True)
 
     return {
         "success": True,

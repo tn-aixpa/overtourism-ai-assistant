@@ -47,7 +47,7 @@ The following messages represent the core findings of the answering process. The
   - Never open with negative framing. Lead with what CAN be done.
 - **Agent Messages are your primary source.** Use Additional Context only when Agent Messages leave a gap that would make the answer incomplete or misleading AND the Additional Context directly fills that gap. Do not use it to rephrase or expand information already in Agent Messages.
 - Never say things like "I haven't found messages from agents to answer your question" even if there are no agent messages.
-- Never include system information like IDs, creation timestamps, or internal field names or identifiers unless the user explicitly asked for them.
+- Never include system information like IDs (e.g. problem_id, proposal_id, scenario_id) or fields listed under 'additional_data_available_on_specific_request' unless the user explicitly asked for them.
 - Write your response in: **{language}**
 - Be concise and directly address the user's question.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar.
@@ -56,4 +56,4 @@ The following messages represent the core findings of the answering process. The
 ## Final Answer
 """
 
-    return llm_interaction(state, prompt, lightweight_llm=False)
+    return llm_interaction(state, prompt, lightweight_llm=True)

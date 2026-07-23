@@ -84,49 +84,163 @@ def delete_data(url, headers=None, params=None):
 def get_all_problems(tenant: str):
     """Fetch all problems from the API."""
     url = f"{BACKEND_URL}{tenant}/problems"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "problem_id": item["problem_id"],
+            "name": item["name"],
+        }
+        for item in extracted_data
+    ]
+
+    return cleaned_data
 
 
 @tool
 def get_all_proposals(tenant: str):
     """Fetch all proposals from the API."""
     url = f"{BACKEND_URL}{tenant}/proposals"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "proposal_id": item["proposal_id"],
+            "name": item["name"],
+            "problem_id": item["problem_id"],
+        }
+        for item in extracted_data
+    ]
+
+    return cleaned_data
 
 
 @tool
 def get_all_scenarios(tenant: str):
     """Fetch all scenarios from the API."""
     url = f"{BACKEND_URL}{tenant}/scenarios"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "scenario_id": item["scenario_id"],
+            "name": item["name"],
+        }
+        for item in extracted_data
+    ]
+
+    return cleaned_data
 
 
-def get_single_problem(problem_id: str, tenant: str) -> dict:
+def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> dict:
     """Fetch a single problem instance (internal helper, not exposed as an agent tool)."""
+    logger.info(f"Retrieving info for problem {problem_id}")
+
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    if not cleaned:
+        return extracted_data
+
+    cleaned_data = {
+        "problem_id": extracted_data["problem_id"],
+        "name": extracted_data["name"],
+        "description": extracted_data["description"],
+        "objective": extracted_data["extras"]["objective"],
+        "additional_data_available_on_specific_request": {
+            "related_links": extracted_data["extras"]["links"],
+            "version": extracted_data["version"],
+            "tenant": extracted_data["tenant"],
+            "created": extracted_data["created"],
+            "updated": extracted_data["updated"],
+            "related_subsystem": extracted_data["extras"]["groups"],
+        },
+    }
+
+    return cleaned_data
 
 
-def get_single_proposal(proposal_id: str, tenant) -> dict:
+def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
     """Fetch a single proposal instance (internal helper, not exposed as an agent tool)."""
+
+    logger.info(f"Retrieving info for proposal {proposal_id}")
+
     url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    if not cleaned:
+        return extracted_data
+
+    cleaned_data = {
+        "proposal_id": extracted_data["proposal_id"],
+        "problem_id": extracted_data["problem_id"],
+        "name": extracted_data["name"],
+        "description": extracted_data["description"],
+        "resources": extracted_data["extras"]["resources"],
+        "context": extracted_data["extras"]["context"],
+        "impact": extracted_data["extras"]["impact"],
+        "additional_data_available_on_specific_request": {
+            "version": 2,
+            "status": "draft",
+            "created": "2026-06-16T16:09:03.521471+02:00",
+            "updated": "2026-06-16T16:10:39.691952+02:00",
+            "related_scenario_ids": extracted_data["related_scenario_ids"],
+        },
+    }
+
+    return cleaned_data
 
 
-def get_single_scenario(scenario_id: str, tenant) -> dict:
+def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
     """Fetch a single scenario instance (internal helper, not exposed as an agent tool)."""
+
+    logger.info(f"Retrieving info for scenario {scenario_id}")
+
     url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
-    return get_data(url)
+    extracted_data = get_data(url)
+
+    if not cleaned:
+        return extracted_data
+
+    cleaned_data = {
+        "scenario_id": extracted_data["scenario_id"],
+        "name": extracted_data["name"],
+        "description": extracted_data["description"],
+        "changes_wrt_base_scenario": extracted_data["index_diffs"],
+        "additional_data_available_on_specific_request": {
+            "version": 1,
+            "created": "2026-06-16T16:09:44.825363+02:00",
+            "updated": "2026-06-16T16:09:44.825363+02:00",
+        },
+    }
+
+    return cleaned_data
 
 
 @tool
-def get_data_from_context(current_context, tenant):
+def get_data_from_context(current_context, tenant, cleaned: bool = False):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}
-    for key in ["problems", "proposals", "scenarios"]:
-        for id in current_context[key]:
-            url = f"{BACKEND_URL}{tenant}/{key}/{id}"
-            retrieved[f"{key} {id}"] = get_data(url)
+
+    logger.warning(f"Current context: {current_context}")
+
+    for problem_id in current_context.get("problems", []):
+        retrieved[f"problems {problem_id}"] = get_single_problem(
+            problem_id, tenant, cleaned=cleaned
+        )
+
+    for proposal_id in current_context.get("proposals", []):
+        retrieved[f"proposals {proposal_id}"] = get_single_proposal(
+            proposal_id, tenant, cleaned=cleaned
+        )
+
+    for scenario_id in current_context.get("scenarios", []):
+        retrieved[f"scenarios {scenario_id}"] = get_single_scenario(
+            scenario_id, tenant, cleaned=cleaned
+        )
+
+    logger.warning(f"Retrieved: {retrieved}")
+
     return {"retrieved": retrieved}
 
 
@@ -137,29 +251,31 @@ def get_evaluation_data(current_context, tenant):
     Returns a dict keyed the same way as get_data_from_context's "retrieved"
     entries (e.g. "scenarios <id>") so the two can be merged easily.
     """
-    # TODO: split data according to need (fe action, useful info)
+    # TODO: split data according to need (fe action, useful info), here or in tool_executor
     evaluations = {}
     scenario_ids = current_context.get("scenarios", [])
     if not scenario_ids:
         return evaluations
 
-    try:
-        evals_url = f"{BACKEND_URL}{tenant}/evaluations/"
-        scenarios_to_evals = get_data(evals_url)
-    except Exception as e:
-        logger.warning(f"Unable to fetch evaluations list due to error: {e}")
-        return evaluations
-
-    for id in scenario_ids:
-        item = next((e for e in scenarios_to_evals if e["scenario_id"] == id), None)
-        if item is None:
-            continue
+    evaluations_ids = {}
+    for scenario_id in scenario_ids:
         try:
-            eval_id = item["evaluation_id"]
+            evals_url = f"{BACKEND_URL}{tenant}/evaluations/?scenario_id={scenario_id}"
+            support = get_data(evals_url)
+            evaluations_ids[scenario_id] = support[0]["evaluation_id"]
+        except Exception as e:
+            logger.warning(
+                f"Unable to fetch evaluation for scenario {scenario_id} due to error: {e}"
+            )
+
+    for scenario_id, eval_id in evaluations_ids.items():
+        try:
             eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
             evaluations[f"scenarios {id}"] = get_data(eval_url)
         except Exception as e:
-            logger.warning(f"Unable to get evaluation data for scenario {id}: {e}")
+            logger.warning(
+                f"Unable to get evaluation data for scenario {scenario_id}: {e}"
+            )
 
     return evaluations
 
@@ -246,7 +362,7 @@ def edit_problem(
     # The backend expects the full instance on PUT (version, name, description,
     # extras), not a partial patch. Fetch the current instance first so any
     # field the user didn't mention is preserved instead of being wiped out.
-    existing = get_single_problem(problem_id, tenant=tenant)
+    existing = get_single_problem(problem_id, tenant=tenant, cleaned=False)
 
     extras = dict(existing.get("extras") or {})
     if objective:
@@ -290,7 +406,7 @@ def edit_proposal(
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
     # current instance first so any field the user didn't mention (including
     # status and related scenarios) is preserved instead of being wiped out.
-    existing = get_single_proposal(proposal_id, tenant=tenant)
+    existing = get_single_proposal(proposal_id, tenant=tenant, cleaned=False)
 
     extras = dict(existing.get("extras") or {})
     if resources:
@@ -338,7 +454,7 @@ def edit_scenario(
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
     # current instance first so any field the user didn't mention (including
     # status and related scenarios) is preserved instead of being wiped out.
-    existing = get_single_scenario(scenario_id, tenant=tenant)
+    existing = get_single_scenario(scenario_id, tenant=tenant, cleaned=False)
 
     body = {
         "version": existing.get("version", 0),
@@ -368,7 +484,7 @@ def delete_problem(problem_id: str, tenant: str):
     # no "name" for the confirmation message. Grab it beforehand.
     name = problem_id
     try:
-        existing = get_single_problem(problem_id, tenant=tenant)
+        existing = get_single_problem(problem_id, tenant=tenant, cleaned=False)
         name = existing.get("name", problem_id)
     except Exception as e:
         logger.warning(f"Could not fetch problem '{problem_id}' before delete: {e}")
@@ -390,7 +506,7 @@ def delete_proposal(proposal_id: str, tenant: str):
 
     name = proposal_id
     try:
-        existing = get_single_proposal(proposal_id, tenant=tenant)
+        existing = get_single_proposal(proposal_id, tenant=tenant, cleaned=False)
         name = existing.get("name", proposal_id)
     except Exception as e:
         logger.warning(f"Could not fetch proposal '{proposal_id}' before delete: {e}")
@@ -412,7 +528,7 @@ def delete_scenario(scenario_id: str, tenant: str):
 
     name = scenario_id
     try:
-        existing = get_single_scenario(scenario_id, tenant=tenant)
+        existing = get_single_scenario(scenario_id, tenant=tenant, cleaned=False)
         name = existing.get("name", scenario_id)
     except Exception as e:
         logger.warning(f"Could not fetch scenario '{scenario_id}' before delete: {e}")
