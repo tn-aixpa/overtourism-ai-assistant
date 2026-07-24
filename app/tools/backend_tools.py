@@ -5,7 +5,7 @@ import logging
 from app.utils.common import get_token
 
 BACKEND_URL = os.environ.get("BACKEND_URL")
-AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true")
+AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
 
