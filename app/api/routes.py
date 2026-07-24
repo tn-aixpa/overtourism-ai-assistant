@@ -15,13 +15,14 @@ from fastapi.responses import StreamingResponse
 import logging
 import asyncio
 
-from app.schemas import AgentResponse
+from app.schemas import AgentResponse, ToolStep, RunSelectedToolsRequest
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import load_state, save_state, delete_state, _get_lock
-from app.config import GENERAL_ERROR_MESSAGE
 from app.agent.events import get_queue, publish_done, get_result, clear_session
+from app.config import GENERAL_ERROR_MESSAGE
 from app.tools.backend_tools import check_authorization
+from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 
 logger = logging.getLogger(__name__)
@@ -328,3 +329,85 @@ async def submit_feedback_get(
 
     save_state(state)
     return {"message": "Feedback saved."}
+
+
+@router.post("/agent/tool")
+async def run_selected_tools(
+    body: RunSelectedToolsRequest,
+    tenant: str = Query(default="molveno"),
+    authorization: str | None = Header(default=None),
+):
+    """Depending on the parameters in body, run an explicit, ordered sequence of tools
+    — e.g. for summary: get_context_details -> summary_generation.
+    Each step runs against the SAME AgentState, so later steps see earlier ones' results
+    exactly like they would inside a normal ReAct turn.
+
+    This endpoint is stateless by design: it never loads or reuses an
+    existing session_id, and the throwaway AgentState it builds for the
+    pipeline is never persisted (no save_state call), so there is nothing
+    left over to clean up once the response is returned.
+
+    By default stops at the first failed step (stop_on_error=True); set it
+    to False to run every step regardless and inspect all results.
+
+    curl -X POST "http://localhost:9000/agent/tool?tenant=molveno" -H "Content-Type: application/json" -d '{"key": "summary", "scenario_ids": ["751846b146044e06a37e993251f3fbc3"]}'
+    """
+    from app.agent.nodes.tool_executor import execute_selected_tool
+
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
+    else:
+        token = None
+    if token:
+        set_token(token)
+
+    _ensure_tool_registry()
+
+    # Stateless, session-less scratch state — intentionally never saved.
+    state = AgentState(tenant=tenant)
+
+    if body.key == "summary":
+        if not body.scenario_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="scenario_ids is required when key == 'summary'",
+            )
+        state.cognitive.current_context = {
+            "problems": [],
+            "proposals": [],
+            "scenarios": body.scenario_ids,
+        }
+        steps = [
+            {"tool_name": "get_context_details", "arguments": {}},
+            {"tool_name": "summary_generation", "arguments": {}},
+        ]
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
+
+    # summary_generation (and any other internal-only tool) is disabled in
+    # the registry so it never appears in normal chat's tool allowlist, but
+    # this endpoint is an explicit, admin-style pipeline — so it's allowed
+    # to run disabled tools deliberately.
+    results = []
+    for step in steps:
+        outcome = await asyncio.to_thread(
+            execute_selected_tool,
+            step["tool_name"],
+            step["arguments"],
+            state,
+            allow_disabled=True,
+        )
+        results.append({"tool_name": step["tool_name"], **outcome})
+        if not outcome["success"]:
+            logger.warning(
+                f"Pipeline stopped at '{step['tool_name']}': {outcome['error']}"
+            )
+            break
+
+    last = results[-1]
+
+    if not last["success"]:
+        raise HTTPException(status_code=500, detail=last["error"])
+
+    return {"message": last["output"]["message"]}

@@ -13,9 +13,16 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState, ReActStep
 from app.agent.events import publish_action
+from app.agent.nodes.utils import (
+    _resolve_referenced_id,
+    _missing_required_params,
+    _trim_tool_results,
+    _ensure_scenario_data_cached,
+)
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolDefinition
 from app.prompts.entity_parsing import get_relatet_context_ids
+from app.prompts.scanarios import analyze_scenario, generate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +31,6 @@ _NOT_IMPLEMENTED_MSG = (
     "The ability to {action} is planned for a future release. "
     "Please check back later or contact your system administrator."
 )
-
-# Hard cap on how many tool results we keep in memory per session. This is a
-# second line of defense on top of the prompt-side truncation in
-# build_prior_results_block: without it, state.cognitive.tool_results grows
-# forever for the lifetime of a session (it's kept intentionally across
-# turns so the ReAct reasoner can see what already ran), which bloats both
-# the in-memory AgentState and the JSON dumped to logs/state_<id>.json.
-MAX_STORED_TOOL_RESULTS = 30
 
 # Tools that mutate platform data and therefore require an explicit user
 # confirmation (recap of the data about to be submitted) before they run.
@@ -70,69 +69,23 @@ _CACHE_INVALIDATION_MAP = {
 }
 
 
-_ID_RESOLUTION_MAP = {
-    # parent references (create)
-    "create_new_proposal": ("problem_id", "problems"),
-    "create_new_scenario": ("proposal_id", "proposals"),
-    # target references (edit / delete)
-    "edit_problem": ("problem_id", "problems"),
-    "delete_problem": ("problem_id", "problems"),
-    "edit_proposal": ("proposal_id", "proposals"),
-    "delete_proposal": ("proposal_id", "proposals"),
-    "edit_scenario": ("scenario_id", "scenarios"),
-    "delete_scenario": ("scenario_id", "scenarios"),
-}
-
-
-def _resolve_referenced_id(
-    state: AgentState, tool_name: str, tool_arguments: Dict[str, Any]
-) -> Dict[str, Any]:
-    """If the tool needs an id (its own target id, or a parent id) that
-    wasn't explicitly provided, try to fill it in from IDs already resolved
-    by get_context_ids earlier in the plan. Only auto-fills when exactly one
-    candidate is available — multiple or zero candidates are left for the
-    missing-parameter check to surface, rather than guessed."""
-    mapping = _ID_RESOLUTION_MAP.get(tool_name)
-    if not mapping:
-        return tool_arguments
-
-    param_name, context_key = mapping
-    if tool_arguments.get(param_name):
-        return tool_arguments
-
-    candidates = (state.cognitive.current_context or {}).get(context_key, [])
-    if len(candidates) == 1:
-        tool_arguments = dict(tool_arguments)
-        tool_arguments[param_name] = candidates[0]
-        logger.info(
-            f"Auto-resolved '{param_name}'={candidates[0]!r} from current_context for '{tool_name}'"
-        )
-
-    return tool_arguments
-
-
-def _missing_required_params(tool_def: ToolDefinition, args: Dict[str, Any]) -> list:
-    """Return the list of required parameter names that are missing or empty."""
-    missing = []
-    for param in tool_def.parameters:
-        if not param.required:
-            continue
-        value = args.get(param.name)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            missing.append(param.name)
-    return missing
-
-
 def execute_selected_tool(
     tool_name: str,
     tool_arguments: Dict[str, Any],
     state: AgentState,
+    allow_disabled: bool = False,
 ) -> Dict[str, Any]:
     """
     Execute a tool with the given arguments.
 
     Handles dispatching to tool-specific implementations.
     Returns the tool result.
+
+    `allow_disabled`: some tools (e.g. summary_generation) are registered
+    with enabled=False purely to keep them out of the normal ReAct
+    allowlist (see ToolRegistry.get_all_known_tools), while still being
+    callable explicitly — e.g. from the /agent/tool pipeline endpoint. Set
+    this to True in that kind of explicit, non-ReAct invocation path.
     """
     logger.info(f"Executing tool: {tool_name} with args: {tool_arguments}")
 
@@ -143,7 +96,7 @@ def execute_selected_tool(
     if not tool_def:
         raise ValueError(f"Tool '{tool_name}' not found in registry")
 
-    if not tool_def.enabled:
+    if not tool_def.enabled and not allow_disabled:
         raise ValueError(f"Tool '{tool_name}' is disabled")
 
     validate_tool_arguments(tool_def, tool_arguments)
@@ -207,6 +160,8 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_context_details": execute_get_context_details,
         # Interaction
         "analyze_scenario_results": execute_analyze_scenario_results,
+        # Internal-only (see create_summary_generation_tool)
+        "summary_generation": execute_summary_generation,
         # Creation stubs
         "create_new_problem": execute_create_new_problem,
         "create_new_proposal": execute_create_new_proposal,
@@ -224,26 +179,6 @@ def get_tool_executor(tool_name: str) -> Callable | None:
     }
 
     return executors.get(tool_name)
-
-
-def _trim_tool_results(state: AgentState) -> None:
-    """Evict the oldest tool_results entries once we're over the cap.
-
-    Never evicts a key produced by the scratchpad currently in progress —
-    generate_output_message_node needs those to build the final answer.
-    """
-    results = state.cognitive.tool_results
-    protected = set(state.cognitive.current_turn_result_keys())
-
-    while len(results) > MAX_STORED_TOOL_RESULTS:
-        for key in results:  # dicts preserve insertion order -> oldest first
-            if key not in protected:
-                del results[key]
-                break
-        else:
-            # Everything remaining belongs to the current turn; stop rather
-            # than evict something generate_output_message_node still needs.
-            break
 
 
 def tool_executor_node(state: AgentState) -> Command:
@@ -537,107 +472,35 @@ def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
     """Execute analyze_scenario_results tool."""
-    from app.tools.backend_tools import get_evaluation_data
-    from app.utils.llm import llm_interaction
-    from app.utils.common import truncate_for_prompt
-    import copy
 
     logger.info(f"Executing analyze_scenario_results tool with query: {query}")
 
-    retrieved = state.cognitive.retrieved_context
-    if not retrieved:
-        # Don't fail immediately just because get_context_details hasn't run
-        # yet this turn (or its result was never stored) — if we already
-        # know WHICH problem/proposal/scenario is in play (current_context
-        # was resolved by an earlier get_context_ids call), go fetch the
-        # data ourselves rather than bouncing the request back as an error.
-        current_context = state.cognitive.current_context or {}
-        if not any(
-            current_context.get(kind) for kind in ("problems", "proposals", "scenarios")
-        ):
-            # Nothing to fetch — we don't know which object this is about,
-            # so there's no data to retry for. This is a real error: the
-            # caller needs to resolve context first (get_context_ids), not
-            # something a retry can fix.
-            raise ValueError(
-                "No context has been resolved yet (no problem/proposal/scenario "
-                "selected) — run get_context_ids and get_context_details first."
-            )
-
-        logger.info(
-            "analyze_scenario_results: retrieved_context was empty but "
-            f"current_context={current_context} is known — fetching it now "
-            "via get_context_details instead of failing outright."
-        )
-        retrieved = execute_get_context_details(state)
-
-        if not retrieved.get("retrieved"):
-            # We tried; the backend genuinely has nothing for these ids.
-            raise ValueError(
-                "Unable to retrieve context data for the current context "
-                f"({current_context}) even after fetching — the backend "
-                "returned nothing for these ids."
-            )
-
-    cache = state.cognitive.context_cache
     scenario_ids = state.cognitive.current_context.get("scenarios", [])
-    missing_eval_ids = [
-        scenario_id
-        for scenario_id in scenario_ids
-        if "evaluation_data" not in cache.get(f"scenarios {scenario_id}", {})
-    ]
+    _ensure_scenario_data_cached(state, scenario_ids)
+    answer = analyze_scenario(state, query)
+    return {"success": True, "message": answer}
 
-    if missing_eval_ids:
-        fetched_evals = get_evaluation_data.invoke(
-            {
-                "current_context": {"scenarios": missing_eval_ids},
-                "tenant": state.tenant,
-            }
-        )
-        for key, eval_data in fetched_evals.items():
-            # Only merge into an object we actually have cached; if it's
-            # not cached, get_context_details hasn't retrieved it yet and
-            # we shouldn't create a partial cache entry for it here.
-            if key in cache:
-                cache[key]["evaluation_data"] = eval_data
 
-    enriched = copy.deepcopy(retrieved)
-    for key in enriched.get("retrieved", {}):
-        if key in cache and "evaluation_data" in cache[key]:
+def execute_summary_generation(
+    state: AgentState, scenario_ids: list | None = None, **kwargs
+) -> Dict[str, Any]:
+    scenario_ids = scenario_ids or state.cognitive.current_context.get("scenarios", [])
+    if not scenario_ids:
+        raise ValueError("No scenario_ids available for summary_generation")
 
-            evaluation_data = cache[key]["evaluation_data"]
+    _ensure_scenario_data_cached(state, scenario_ids)
 
-            enriched["retrieved"][key]["evaluation_data"] = {
-                "scenario_id": evaluation_data["scenario_id"],
-                "evaluation_id": evaluation_data["evaluation_id"],
-                "data": {
-                    "sustainable_area": evaluation_data["data"]["sustainable_area"],
-                    "sustainability_index": evaluation_data["data"][
-                        "sustainability_index"
-                    ],
-                    "sustainability_by_constraint": evaluation_data["data"][
-                        "sustainability_by_constraint"
-                    ],
-                },
-            }
+    # Pull glossary definitions for the concepts the report needs to explain.
+    glossary_result = execute_lookup_glossary(
+        state,
+        query="constraint capacity, sustainability, uncertainty",
+    )
+    glossary_matches = (
+        glossary_result.get("matches", []) if glossary_result.get("success") else []
+    )
 
-    context_block = truncate_for_prompt(enriched, max_chars=8000)
-
-    prompt = f"""You are an analyst for a tourism digital twin platform.
-Answer the following question using ONLY the data provided below.
-If the data does not contain enough information to answer (including if it was
-truncated for length), say so explicitly — do not infer or speculate.
-Be concise and factual. Use a neutral, professional tone.
-
-Question: {query}
-
-Context data:
-{context_block}
-
-Answer:"""
-
-    answer = llm_interaction(state, prompt, lightweight_llm=True)
-
+    answer = generate_summary(state, scenario_ids, glossary_matches)
+    logger.info(f"Answer: {answer}")
     return {
         "success": True,
         "message": answer,

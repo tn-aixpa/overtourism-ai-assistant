@@ -8,16 +8,12 @@ Demonstrates:
 4. Producing the LLM tool schema
 """
 
-from app.tools.tool_registry import get_tool_registry
-from app.tools.agent_tools import get_all_agent_tools
+from app.tools.tool_registry import get_tool_registry, _ensure_tool_registry
 
 
 def setup_tool_system():
     """Initialize the global tool registry."""
-    registry = get_tool_registry()
-
-    if not registry.list_tool_names():
-        registry.register_tools(get_all_agent_tools())
+    registry = _ensure_tool_registry()
 
     print(f"Registered {len(registry.list_tool_names())} tools")
     return registry

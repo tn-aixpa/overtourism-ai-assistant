@@ -1,0 +1,119 @@
+import logging
+from typing import Any, Dict
+
+from app.agent.state import AgentState
+from app.tools.tool_schema import ToolDefinition
+
+logger = logging.getLogger(__name__)
+
+_ID_RESOLUTION_MAP = {
+    # parent references (create)
+    "create_new_proposal": ("problem_id", "problems"),
+    "create_new_scenario": ("proposal_id", "proposals"),
+    # target references (edit / delete)
+    "edit_problem": ("problem_id", "problems"),
+    "delete_problem": ("problem_id", "problems"),
+    "edit_proposal": ("proposal_id", "proposals"),
+    "delete_proposal": ("proposal_id", "proposals"),
+    "edit_scenario": ("scenario_id", "scenarios"),
+    "delete_scenario": ("scenario_id", "scenarios"),
+}
+
+# Hard cap on how many tool results we keep in memory per session. This is a
+# second line of defense on top of the prompt-side truncation in
+# build_prior_results_block: without it, state.cognitive.tool_results grows
+# forever for the lifetime of a session (it's kept intentionally across
+# turns so the ReAct reasoner can see what already ran), which bloats both
+# the in-memory AgentState and the JSON dumped to logs/state_<id>.json.
+MAX_STORED_TOOL_RESULTS = 30
+
+
+def _resolve_referenced_id(
+    state: AgentState, tool_name: str, tool_arguments: Dict[str, Any]
+) -> Dict[str, Any]:
+    """If the tool needs an id (its own target id, or a parent id) that
+    wasn't explicitly provided, try to fill it in from IDs already resolved
+    by get_context_ids earlier in the plan. Only auto-fills when exactly one
+    candidate is available — multiple or zero candidates are left for the
+    missing-parameter check to surface, rather than guessed."""
+    mapping = _ID_RESOLUTION_MAP.get(tool_name)
+    if not mapping:
+        return tool_arguments
+
+    param_name, context_key = mapping
+    if tool_arguments.get(param_name):
+        return tool_arguments
+
+    candidates = (state.cognitive.current_context or {}).get(context_key, [])
+    if len(candidates) == 1:
+        tool_arguments = dict(tool_arguments)
+        tool_arguments[param_name] = candidates[0]
+        logger.info(
+            f"Auto-resolved '{param_name}'={candidates[0]!r} from current_context for '{tool_name}'"
+        )
+
+    return tool_arguments
+
+
+def _missing_required_params(tool_def: ToolDefinition, args: Dict[str, Any]) -> list:
+    """Return the list of required parameter names that are missing or empty."""
+    missing = []
+    for param in tool_def.parameters:
+        if not param.required:
+            continue
+        value = args.get(param.name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(param.name)
+    return missing
+
+
+def _ensure_scenario_data_cached(
+    state: AgentState, scenario_ids: list
+) -> Dict[str, Any]:
+    """Make sure `state.cognitive.context_cache` has, for every scenario_id,
+    the base details and evaluation_data. Fetches only what's missing."""
+    from app.tools.backend_tools import get_data_from_context, get_evaluation_data
+
+    cache = state.cognitive.context_cache
+
+    to_fetch = [sid for sid in scenario_ids if f"scenarios {sid}" not in cache]
+    if to_fetch:
+        fetched = get_data_from_context.invoke(
+            {"current_context": {"scenarios": to_fetch}, "tenant": state.tenant}
+        )
+        cache.update(fetched.get("retrieved", {}))
+
+    missing_eval_ids = [
+        sid
+        for sid in scenario_ids
+        if "evaluation_data" not in cache.get(f"scenarios {sid}", {})
+    ]
+    if missing_eval_ids:
+        fetched_evals = get_evaluation_data.invoke(
+            {"current_context": {"scenarios": missing_eval_ids}, "tenant": state.tenant}
+        )
+        for key, eval_data in fetched_evals.items():
+            if key in cache:
+                cache[key]["evaluation_data"] = eval_data
+
+    state.cognitive.context_cache = cache
+
+
+def _trim_tool_results(state: AgentState) -> None:
+    """Evict the oldest tool_results entries once we're over the cap.
+
+    Never evicts a key produced by the scratchpad currently in progress —
+    generate_output_message_node needs those to build the final answer.
+    """
+    results = state.cognitive.tool_results
+    protected = set(state.cognitive.current_turn_result_keys())
+
+    while len(results) > MAX_STORED_TOOL_RESULTS:
+        for key in results:  # dicts preserve insertion order -> oldest first
+            if key not in protected:
+                del results[key]
+                break
+        else:
+            # Everything remaining belongs to the current turn; stop rather
+            # than evict something generate_output_message_node still needs.
+            break

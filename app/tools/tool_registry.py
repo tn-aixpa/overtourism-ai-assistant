@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any
 import logging
 
 from app.tools.tool_schema import ToolDefinition
+from app.tools.agent_tools import get_all_agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -71,3 +72,15 @@ def get_tool_registry() -> ToolRegistry:
 def reset_tool_registry() -> None:
     global _global_registry
     _global_registry = ToolRegistry()
+
+
+def _ensure_tool_registry() -> None:
+    """Populate the tool registry if this is the first call in the process
+    (mirrors initialize_tools' lazy-registration — the registry is a
+    process-wide singleton, so normal chat turns may have already done
+    this)."""
+    registry = get_tool_registry()
+    if not registry.list_tool_names():
+        registry.register_tools(get_all_agent_tools())
+
+    return registry

@@ -147,6 +147,51 @@ def create_analyze_scenario_results_tool() -> ToolDefinition:
     )
 
 
+def create_summary_generation_tool() -> ToolDefinition:
+    """Internal-only variant of analyze_scenario_results.
+
+    `enabled=False` keeps it out of `get_all_known_tools()` / the ReAct
+    allowlist, so it never shows up as a choice for the normal chat agent —
+    it exists purely to be invoked explicitly via the /agent/tool "summary"
+    pipeline (see routes.run_selected_tools), to avoid confusing the
+    reasoner with two overlapping "explain the scenario results" options.
+    """
+    return ToolDefinition(
+        name="summary_generation",
+        description=(
+            "Generate a per-constraint breakdown and short summary of one or "
+            "more scenarios' evaluation results."
+        ),
+        category=ToolCategory.INTERACTION,
+        long_description=(
+            "Uses the evaluation data for the given scenario(s) (fetching it if "
+            "not already retrieved) to report, for every sustainability "
+            "constraint, its index and value, and then drafts a short natural "
+            "language summary highlighting what stands out. Internal tool, not "
+            "exposed to the general ReAct tool selection — invoke it directly "
+            "via the /agent/tool 'summary' pipeline."
+        ),
+        parameters=[
+            ToolParameter(
+                name="scenario_ids",
+                description=(
+                    "IDs of the scenarios to summarize. If omitted, falls back "
+                    "to the scenarios already resolved in current_context."
+                ),
+                type="array",
+                required=False,
+                schema={"items": {"type": "string"}},
+            ),
+        ],
+        output_description=(
+            "Per-scenario constraint index/value breakdown plus a short "
+            "natural-language summary."
+        ),
+        enabled=False,
+        tags=["interaction", "read-only", "internal"],
+    )
+
+
 def create_new_problem_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_problem",
@@ -469,6 +514,8 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_tool(),
         # Interaction
         create_analyze_scenario_results_tool(),
+        # Internal-only (enabled=False — see create_summary_generation_tool)
+        create_summary_generation_tool(),
         # Creation
         create_new_problem_tool(),
         create_new_proposal_tool(),

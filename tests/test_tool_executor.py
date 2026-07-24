@@ -4,6 +4,7 @@ import pytest
 from langgraph.types import Command
 
 from app.agent.nodes import tool_executor as te
+from app.agent.nodes.utils import MAX_STORED_TOOL_RESULTS
 from app.agent.state import AgentState, ReActStep
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
@@ -324,20 +325,18 @@ class TestTrimToolResults:
 
     def test_evicts_oldest_first_over_cap(self, fresh_state: AgentState):
         fresh_state.cognitive.tool_results = {
-            f"k{i}": i for i in range(te.MAX_STORED_TOOL_RESULTS + 5)
+            f"k{i}": i for i in range(MAX_STORED_TOOL_RESULTS + 5)
         }
         te._trim_tool_results(fresh_state)
-        assert len(fresh_state.cognitive.tool_results) == te.MAX_STORED_TOOL_RESULTS
+        assert len(fresh_state.cognitive.tool_results) == MAX_STORED_TOOL_RESULTS
         # oldest keys (k0..k4) evicted
         for i in range(5):
             assert f"k{i}" not in fresh_state.cognitive.tool_results
-        assert (
-            f"k{te.MAX_STORED_TOOL_RESULTS + 4}" in fresh_state.cognitive.tool_results
-        )
+        assert f"k{MAX_STORED_TOOL_RESULTS + 4}" in fresh_state.cognitive.tool_results
 
     def test_never_evicts_current_turn_keys(self, fresh_state: AgentState):
         # Fill over the cap entirely with "current turn" keys.
-        n = te.MAX_STORED_TOOL_RESULTS + 3
+        n = MAX_STORED_TOOL_RESULTS + 3
         fresh_state.cognitive.tool_results = {f"cur{i}": i for i in range(n)}
         fresh_state.cognitive.scratchpad = [
             ReActStep(tool_name=f"cur{i}", observation_key=f"cur{i}") for i in range(n)
@@ -348,7 +347,7 @@ class TestTrimToolResults:
 
     def test_evicts_non_protected_before_protected(self, fresh_state: AgentState):
         n_protected = 5
-        n_old = te.MAX_STORED_TOOL_RESULTS
+        n_old = MAX_STORED_TOOL_RESULTS
         results = {f"old{i}": i for i in range(n_old)}
         results.update({f"cur{i}": i for i in range(n_protected)})
         fresh_state.cognitive.tool_results = results
@@ -357,7 +356,7 @@ class TestTrimToolResults:
             for i in range(n_protected)
         ]
         te._trim_tool_results(fresh_state)
-        assert len(fresh_state.cognitive.tool_results) == te.MAX_STORED_TOOL_RESULTS
+        assert len(fresh_state.cognitive.tool_results) == MAX_STORED_TOOL_RESULTS
         for i in range(n_protected):
             assert f"cur{i}" in fresh_state.cognitive.tool_results
 

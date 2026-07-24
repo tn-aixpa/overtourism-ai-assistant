@@ -222,8 +222,6 @@ def get_data_from_context(current_context, tenant, cleaned: bool = False):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}
 
-    logger.warning(f"Current context: {current_context}")
-
     for problem_id in current_context.get("problems", []):
         retrieved[f"problems {problem_id}"] = get_single_problem(
             problem_id, tenant, cleaned=cleaned
@@ -238,8 +236,6 @@ def get_data_from_context(current_context, tenant, cleaned: bool = False):
         retrieved[f"scenarios {scenario_id}"] = get_single_scenario(
             scenario_id, tenant, cleaned=cleaned
         )
-
-    logger.warning(f"Retrieved: {retrieved}")
 
     return {"retrieved": retrieved}
 
@@ -271,13 +267,27 @@ def get_evaluation_data(current_context, tenant):
     for scenario_id, eval_id in evaluations_ids.items():
         try:
             eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
-            evaluations[f"scenarios {id}"] = get_data(eval_url)
+            raw_data = get_data(eval_url)
+
+            cleaned = {
+                "scenario_id": raw_data["scenario_id"],
+                "evaluation_id": raw_data["evaluation_id"],
+                "data": {
+                    # "sustainable_area": ev["data"]["sustainable_area"],
+                    "sustainability_index": raw_data["data"]["sustainability_index"],
+                    "sustainability_by_constraint": raw_data["data"][
+                        "sustainability_by_constraint"
+                    ],
+                },
+            }
+
+            evaluations[f"scenarios {scenario_id}"] = cleaned
         except Exception as e:
             logger.warning(
                 f"Unable to get evaluation data for scenario {scenario_id}: {e}"
             )
 
-    return evaluations
+    return evaluations  # return also other data for plots
 
 
 @tool

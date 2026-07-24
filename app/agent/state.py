@@ -172,7 +172,9 @@ class CognitiveState:
         self.context_cache.pop(f"{kind} {obj_id}", None)
         # The current turn's already-retrieved snapshot may also hold the
         # now-stale copy — drop it there too if present.
-        retrieved = self.retrieved_context.get("retrieved") if self.retrieved_context else None
+        retrieved = (
+            self.retrieved_context.get("retrieved") if self.retrieved_context else None
+        )
         if retrieved is not None:
             retrieved.pop(f"{kind} {obj_id}", None)
 
