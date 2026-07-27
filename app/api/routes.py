@@ -20,7 +20,6 @@ from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import load_state, save_state, delete_state, _get_lock
 from app.agent.events import get_queue, publish_done, get_result, clear_session
-from app.config import GENERAL_ERROR_MESSAGE
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 from app.utils.authentication import (
@@ -68,7 +67,7 @@ def _run_agent(key: str, state: AgentState, token: str):
         response_text = (
             last_msg.content
             if last_msg and last_msg.role == "assistant"
-            else GENERAL_ERROR_MESSAGE
+            else "System error"
         )
         result = {
             "response": response_text,
@@ -83,7 +82,7 @@ def _run_agent(key: str, state: AgentState, token: str):
     except Exception as e:
         logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
         result = {
-            "response": GENERAL_ERROR_MESSAGE,
+            "response": "System error",
             "session_id": key,
             "assistant_action_data": None,
         }

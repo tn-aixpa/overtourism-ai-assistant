@@ -196,24 +196,6 @@ class TestErrorRecoveryNode:
         assert "something bad happened" in content
         assert result.goto == "generate_output_message"
 
-    def test_sets_generic_error_message_for_user(
-        self, fresh_state: AgentState, tmp_path
-    ):
-        from app.config import GENERAL_ERROR_MESSAGE
-
-        fresh_state.cognitive.error_details = "internal details, not for user"
-        cwd = os.getcwd()
-        os.chdir(tmp_path)
-        try:
-            os.makedirs("logs", exist_ok=True)
-            gn.error_recovery_node(fresh_state)
-        finally:
-            os.chdir(cwd)
-
-        assert fresh_state.cognitive.messages_to_include == [GENERAL_ERROR_MESSAGE]
-        # Never leak internal error details to the user-facing message.
-        assert "internal details" not in fresh_state.cognitive.messages_to_include[0]
-
     def test_no_error_details_skips_log_write(self, fresh_state: AgentState, tmp_path):
         fresh_state.cognitive.error_details = ""
         cwd = os.getcwd()

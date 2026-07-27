@@ -5,6 +5,7 @@ from app.agent.state import AgentState
 import copy
 from app.utils.llm import llm_interaction
 from app.utils.common import truncate_for_prompt
+from app.utils.terminology import build_terminology_block
 from app.agent.state import AgentState
 
 
@@ -49,6 +50,8 @@ def generate_summary(
         else "Only one scenario is present, so no cross-scenario comparison is needed."
     )
 
+    terminology_block = build_terminology_block(glossary_block, context_block)
+
     prompt = f"""You are an analyst for a tourism digital twin platform.
 Write a Markdown in {state.user_lang} report using EXACTLY these three top-level headings, in this order:
 
@@ -69,7 +72,7 @@ by one, with its value(s). {comparison_instruction}
 Use ONLY the data provided below. If some data is missing or was truncated for
 length, say so explicitly rather than inferring or speculating. Be concise,
 factual, and use a neutral, professional tone.
-
+{terminology_block}
 Glossary definitions:
 {glossary_block}
 

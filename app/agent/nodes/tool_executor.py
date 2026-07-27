@@ -315,7 +315,7 @@ def tool_executor_node(state: AgentState) -> Command:
 
 def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute get_system_capabilities tool."""
-    from app.config import SYSTEM_DESCRIPTION
+    from app.utils.system_capabilities import SYSTEM_DESCRIPTION
 
     logger.info("Executing get_system_capabilities tool")
 
@@ -733,7 +733,7 @@ def execute_lookup_glossary(
     Matches the query tokens against: term name, aliases, and related_terms.
     Returns all matching entries with their full detail.
     """
-    from app.config import GLOSSARY
+    from app.utils.terminology import GLOSSARY
 
     logger.info(f"Executing lookup_glossary | query='{query}'")
 
@@ -746,9 +746,18 @@ def execute_lookup_glossary(
         }
 
     matches = {}
-    for term, entry in GLOSSARY.items():
-        # Build a flat list of strings to match against
-        searchable = [term] + entry.get("aliases", []) + entry.get("related_terms", [])
+    for entry in GLOSSARY:
+        term = entry["term"]
+        # Build a flat list of strings to match against. "it" is included
+        # here (unlike in app.utils.terminology's text-matcher) because this
+        # tool is meant to resolve a user's query — including one phrased in
+        # Italian — back to the right entry, not to decide what to generate.
+        searchable = (
+            [term]
+            + entry.get("aliases", [])
+            + entry.get("related_terms", [])
+            + entry.get("it", [])
+        )
         searchable_lower = " ".join(s.lower() for s in searchable)
 
         if any(tok in searchable_lower for tok in tokens):
@@ -774,6 +783,7 @@ def execute_lookup_glossary(
                 "aliases": entry.get("aliases", []),
                 "related_terms": entry.get("related_terms", []),
                 "examples": entry.get("examples", []),
+                "it": entry.get("it", []),
             }
         )
 

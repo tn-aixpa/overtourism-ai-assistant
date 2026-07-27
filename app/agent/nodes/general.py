@@ -6,7 +6,6 @@ from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
 from app.utils.common import truncate_for_prompt
-from app.config import GENERAL_ERROR_MESSAGE
 from app.prompts.answer_generation import generate_answer
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,18 @@ def error_recovery_node(state: AgentState) -> Command:
         with open("logs/errors.txt", "a+") as f:
             f.write(f"{state.cognitive.error_details}\n")
 
-    state.cognitive.messages_to_include = [GENERAL_ERROR_MESSAGE]
+    # This is an English "seed" for generate_answer, not user-facing text —
+    # it goes through the normal messages_to_include -> generate_answer path
+    # below, so it's translated into state.user_lang and reshaped by the
+    # tone instructions there (propositive, brief, no alarmism) exactly like
+    # any other agent message. No hardcoded/pre-translated string needed:
+    # this whole node only runs while the LLM is still reachable — if the
+    # LLM itself were the thing that failed, we'd never make it to
+    # generate_output_message. (The truly LLM-unreachable case is handled
+    # separately in api/routes.py's outer exception handler.)
+    state.cognitive.messages_to_include = [
+        "A technical error occurred and the request could not be completed."
+    ]
 
     return Command(update=state, goto="generate_output_message")
 
@@ -162,18 +172,49 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "analyze_scenario_results":
             return [output.get("message", "No answer could be generated.")]
 
-        case "create_new_problem" | "create_new_proposal":
-            return [f"'{output.get('name', 'The item')}' was created successfully."]
+        case "create_new_problem":
+            return [
+                f"The problem '{output.get('name', 'The item')}' was created successfully."
+            ]
+
+        case "create_new_proposal":
+            return [
+                f"The proposal '{output.get('name', 'The item')}' was created successfully."
+            ]
 
         case "create_new_scenario":
             # TODO
             return [output.get("message", "This feature is not yet implemented.")]
 
-        case "edit_problem" | "edit_proposal" | "edit_scenario":
-            return [f"'{output.get('name', 'The item')}' was modified successfully."]
+        case "edit_problem":
+            return [
+                f"The problem '{output.get('name', 'The item')}' was modified successfully."
+            ]
 
-        case "delete_problem" | "delete_proposal" | "delete_scenario":
-            return [f"'{output.get('name', 'The item')}' was deleted successfully."]
+        case "edit_proposal":
+            return [
+                f"The proposal '{output.get('name', 'The item')}' was modified successfully."
+            ]
+
+        case "edit_scenario":
+            return [
+                f"The scenario '{output.get('name', 'The item')}' was modified successfully."
+            ]
+
+        case "delete_problem":
+            return [
+                f"The problem '{output.get('name', 'The item')}' was deleted successfully."
+            ]
+
+        case "delete_proposal":
+            return [
+                f"The proposal '{output.get('name', 'The item')}' was deleted successfully."
+            ]
+
+        case "delete_scenario":
+            return [
+                f"The scenario '{output.get('name', 'The item')}' was deleted successfully."
+            ]
 
         case "lookup_glossary":
             matches = output.get("matches", [])
@@ -182,6 +223,8 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             lines = []
             for entry in matches:
                 lines.append(f"**{entry['term'].capitalize()}**: {entry['definition']}")
+                if entry.get("it"):
+                    lines.append(f"  Italian term: {entry['it'][0]}")
                 if entry.get("aliases"):
                     lines.append(f"  Also known as: {', '.join(entry['aliases'])}")
                 if entry.get("related_terms"):

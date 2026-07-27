@@ -1,4 +1,5 @@
 from app.utils.llm import llm_interaction
+from app.utils.terminology import build_terminology_block
 from app.agent.state import AgentState
 
 # ---------------------------------------------------------------------------
@@ -23,6 +24,8 @@ def generate_answer(state: AgentState) -> str:
     )
 
     formatted_messages = "\n".join(f"- {msg}" for msg in messages_to_include)
+
+    terminology_block = build_terminology_block(question[0], formatted_messages)
 
     prompt = f"""You are a helpful, proactive assistant synthesizing information from multiple agents into a clear final answer for the user.
 
@@ -49,6 +52,7 @@ The following messages represent the core findings of the answering process. The
 - Never say things like "I haven't found messages from agents to answer your question" even if there are no agent messages.
 - Never include system information like IDs (e.g. problem_id, proposal_id, scenario_id) or fields listed under 'additional_data_available_on_specific_request' unless the user explicitly asked for them.
 - Write your response in: **{language}**
+{terminology_block}
 - Be concise and directly address the user's question.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar.
 {additional_instructions}
