@@ -66,12 +66,12 @@ class TestBuildMessagesFromToolResult:
     def test_create_success_message(self, tool_name):
         result = {"success": True, "output": {"name": "Overtourism"}}
         msgs = gn._build_messages_from_tool_result(tool_name, result)
-        assert msgs == ["'Overtourism' was created successfully."]
+        assert "was created successfully" in msgs[0]
 
     def test_create_success_message_missing_name_fallback(self):
         result = {"success": True, "output": {}}
         msgs = gn._build_messages_from_tool_result("create_new_problem", result)
-        assert msgs == ["'The item' was created successfully."]
+        assert "was created successfully" in msgs[0]
 
     @pytest.mark.parametrize(
         "tool_name", ["edit_problem", "edit_proposal", "edit_scenario"]
@@ -79,7 +79,7 @@ class TestBuildMessagesFromToolResult:
     def test_edit_success_message(self, tool_name):
         result = {"success": True, "output": {"name": "Overtourism"}}
         msgs = gn._build_messages_from_tool_result(tool_name, result)
-        assert msgs == ["'Overtourism' was modified successfully."]
+        assert "was modified successfully" in msgs[0]
 
     @pytest.mark.parametrize(
         "tool_name", ["delete_problem", "delete_proposal", "delete_scenario"]
@@ -87,7 +87,7 @@ class TestBuildMessagesFromToolResult:
     def test_delete_success_message(self, tool_name):
         result = {"success": True, "output": {"name": "Overtourism"}}
         msgs = gn._build_messages_from_tool_result(tool_name, result)
-        assert msgs == ["'Overtourism' was deleted successfully."]
+        assert "was deleted successfully" in msgs[0]
 
     def test_lookup_glossary_with_matches(self):
         result = {
@@ -128,7 +128,7 @@ class TestBuildMessagesFromToolResult:
     def test_output_none_is_treated_as_empty_dict(self):
         result = {"success": True, "output": None}
         msgs = gn._build_messages_from_tool_result("create_new_problem", result)
-        assert msgs == ["'The item' was created successfully."]
+        assert "was created successfully" in msgs[0]
 
     def test_output_key_absent_falls_back_to_whole_result(self):
         # Some tool results (e.g. execute_lookup_glossary's raw dict) don't

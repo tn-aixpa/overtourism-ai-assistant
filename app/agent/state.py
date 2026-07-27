@@ -196,7 +196,7 @@ class AgentState:
     # Orchestration
     session_id: str = ""
     user_id: str | None = None
-    user_lang: str = "English"
+    user_lang: str = "Italian"
     integrated_mode: bool = False
     tenant: str = ""
 

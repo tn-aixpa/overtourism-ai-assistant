@@ -8,6 +8,12 @@ from app.utils.common import truncate_for_prompt
 from app.utils.terminology import build_terminology_block
 from app.agent.state import AgentState
 
+# Scenario evaluation data is the core content of the report, so give it a
+# much larger budget than the default per-entry cap (DEFAULT_MAX_CHARS_PER_ENTRY,
+# used for tool-result injection elsewhere) — trimmed by enforce_prompt_budget
+# downstream if the overall prompt still ends up too large.
+MAX_CONTEXT_BLOCK_CHARS = 12_000
+
 
 def analyze_scenario(state: AgentState, query: str):
     context_block = state.cognitive.context_cache
@@ -33,7 +39,9 @@ def generate_summary(
     scenario_ids: list,
     glossary_matches: list | None = None,
 ):
-    context_block = state.cognitive.context_cache
+    context_block = truncate_for_prompt(
+        state.cognitive.context_cache, max_chars=MAX_CONTEXT_BLOCK_CHARS
+    )
 
     glossary_block = (
         truncate_for_prompt(glossary_matches, max_chars=3000)
