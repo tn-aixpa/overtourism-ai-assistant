@@ -218,6 +218,20 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
 
 
 @tool
+def get_base_scenario(tenant) -> str:
+    """Fetch the id of the base scenario"""
+
+    logger.info(f"Retrieving id of base scenario")
+
+    url = f"{BACKEND_URL}{tenant}/scenarios?base_only=true"
+    extracted_data = get_data(
+        url,
+    )
+
+    return extracted_data["scenario_id"]
+
+
+@tool
 def get_data_from_context(current_context, tenant, cleaned: bool = False):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}

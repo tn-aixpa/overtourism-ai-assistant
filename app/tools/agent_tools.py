@@ -6,6 +6,11 @@ from typing import List
 import logging
 
 from app.tools.tool_schema import ToolDefinition, ToolParameter, ToolCategory
+from app.utils.backend_entities_parameters import (
+    PROBLEM_PARAMETERS,
+    PROPOSAL_PARAMETERS,
+    SCENARIO_PARAMETERS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -202,32 +207,7 @@ def create_new_problem_tool() -> ToolDefinition:
             "A Problem represents a critical situation or phenomenon to be analyzed "
             "(e.g. overtourism, mobility congestion). "
         ),
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new problem.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Detailed description of the problem to be addressed.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="objective",
-                description="The objectives we want to achieve when addressing the problem.",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="additional_data",
-                description="Additional data or piece of information useful to understand the problem.",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=PROBLEM_PARAMETERS,
         output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "problem"],
     )
@@ -239,32 +219,7 @@ def edit_problem_tool() -> ToolDefinition:
         description="Edit a problem available in the system system",
         category=ToolCategory.PROBLEM_MANAGEMENT,
         long_description="Edit one or more attributes of a Problem in the platform.",
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new problem.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Detailed description of the problem to be addressed.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="objective",
-                description="The objectives we want to achieve when addressing the problem.",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="additional_data",
-                description="Additional data or piece of information useful to understand the problem.",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=PROBLEM_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "problem"],
     )
@@ -291,44 +246,7 @@ def create_new_proposal_tool() -> ToolDefinition:
             "Registers a new Proposal for a given Problem in the platform. "
             "A Proposal represents a possible strategy to address the problem. "
         ),
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new proposal.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="problem_id",
-                description="Problem that this proposal addresses.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Detailed description of the proposed strategy.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="resources",
-                description="Links or references to documents, datasets or support material",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="context",
-                description="Factors or elements that might impact the proposed solution (e.g. seasonality, weather conditions, events, etc.)",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="impact",
-                description="Expected impact of the proposal (e.g on the environment, economical return, ...). Possibly specify also the related indicators or metrics (e.g. reduce by 20% the air pollution).",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=PROPOSAL_PARAMETERS,
         output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "proposal"],
     )
@@ -340,44 +258,7 @@ def edit_proposal_tool() -> ToolDefinition:
         description="Edit an existing proposal",
         category=ToolCategory.PROPOSAL_MANAGEMENT,
         long_description="Edit a one or more attributes of a Proposal in the platform.",
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new proposal.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="problem_id",
-                description="Problem that this proposal addresses.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Detailed description of the proposed strategy.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="resources",
-                description="Links or references to documents, datasets or support material",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="context",
-                description="Factors or elements that might impact the proposed solution (e.g. seasonality, weather conditions, events, etc.)",
-                type="string",
-                required=False,
-            ),
-            ToolParameter(
-                name="impact",
-                description="Expected impact of the proposal (e.g on the environment, economical return, ...). Possibly specify also the related indicators or metrics (e.g. reduce by 20% the air pollution).",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=PROPOSAL_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "proposal"],
     )
@@ -406,20 +287,7 @@ def create_new_scenario_tool() -> ToolDefinition:
             "NOTE: this tool is not yet implemented — it will acknowledge the request "
             "and inform the user that the feature is coming soon."
         ),
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new scenario.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Description of the parameter configuration to simulate.",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement that the feature is not yet implemented.",
         tags=["write", "scenario", "not-implemented"],
     )
@@ -431,20 +299,7 @@ def edit_scenario_tool() -> ToolDefinition:
         description="Edit an available scenario",
         category=ToolCategory.SCENARIO_MANAGEMENT,
         long_description="Modify one or more attributes of a scenario that was already defined",
-        parameters=[
-            ToolParameter(
-                name="name",
-                description="Short name or title for the new scenario.",
-                type="string",
-                required=True,
-            ),
-            ToolParameter(
-                name="description",
-                description="Description of the parameter configuration to simulate.",
-                type="string",
-                required=False,
-            ),
-        ],
+        parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "scenario"],
     )

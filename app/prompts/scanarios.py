@@ -1,18 +1,17 @@
+import logging
+
 from app.utils.llm import llm_interaction
 from app.agent.state import AgentState
-
-# app/prompts/scanarios.py
-import copy
-from app.utils.llm import llm_interaction
 from app.utils.common import truncate_for_prompt
 from app.utils.terminology import build_terminology_block
-from app.agent.state import AgentState
 
 # Scenario evaluation data is the core content of the report, so give it a
 # much larger budget than the default per-entry cap (DEFAULT_MAX_CHARS_PER_ENTRY,
 # used for tool-result injection elsewhere) — trimmed by enforce_prompt_budget
 # downstream if the overall prompt still ends up too large.
 MAX_CONTEXT_BLOCK_CHARS = 12_000
+
+logger = logging.getLogger(__name__)
 
 
 def analyze_scenario(state: AgentState, query: str):
