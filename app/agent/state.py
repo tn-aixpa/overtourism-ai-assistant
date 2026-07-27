@@ -193,16 +193,16 @@ class CognitiveState:
 
 @dataclass
 class AgentState:
-    # Interface layer
-    conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
-    assistant_action_data: Optional[dict[str, Any]] = None
-
     # Orchestration
-    token_used: int = 0
     session_id: str = ""
+    user_id: str | None = None
     user_lang: str = "English"
     integrated_mode: bool = False
     tenant: str = ""
+
+    # Interface layer
+    conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
+    assistant_action_data: Optional[dict[str, Any]] = None
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"

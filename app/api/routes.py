@@ -15,53 +15,25 @@ from fastapi.responses import StreamingResponse
 import logging
 import asyncio
 
-from app.schemas import AgentResponse, ToolStep, RunSelectedToolsRequest
+from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import load_state, save_state, delete_state, _get_lock
 from app.agent.events import get_queue, publish_done, get_result, clear_session
 from app.config import GENERAL_ERROR_MESSAGE
-from app.tools.backend_tools import check_authorization
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
+from app.utils.authentication import (
+    _require_bearer_token,
+    _authorize_tenant,
+    get_user_id,
+)
 
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 
 router = APIRouter()
-
-
-# ---------------------------------------------------------------------------
-# AUTH / SESSION-OWNERSHIP HELPERS
-# ---------------------------------------------------------------------------
-# Every endpoint below that reads or mutates an existing session_id needs to
-# both (a) confirm the caller holds a valid token for the claimed tenant, and
-# (b) confirm the session actually belongs to that tenant — otherwise anyone
-# who knows/guesses a session_id could read or reset someone else's
-# conversation. Centralized here so each route applies the same check.
-
-
-def _extract_bearer_token(authorization: str | None) -> str | None:
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    return authorization.removeprefix("Bearer ").strip()
-
-
-def _require_bearer_token(authorization: str | None) -> str:
-    token = _extract_bearer_token(authorization)
-    if not token:
-        raise HTTPException(
-            status_code=401, detail="Missing or malformed Authorization header"
-        )
-    return token
-
-
-def _authorize_tenant(token: str, tenant: str) -> None:
-    if not tenant:
-        raise HTTPException(status_code=400, detail="tenant is required")
-    if not check_authorization(token=token, tenant=tenant):
-        raise HTTPException(status_code=403, detail="Not authorized")
 
 
 def _load_owned_session(session_id: str, tenant: str) -> AgentState | None:
@@ -159,8 +131,11 @@ async def run_agent_endpoint(
         state = load_state(session_id)
 
         if state is None:
+            user_id = get_user_id(token)
+
             state = AgentState(
                 session_id=session_id,
+                user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
                 tenant=tenant,
@@ -365,7 +340,8 @@ async def run_selected_tools(
     _ensure_tool_registry()
 
     # Stateless, session-less scratch state — intentionally never saved.
-    state = AgentState(tenant=tenant)
+    user_id = get_user_id(token) + "-system"
+    state = AgentState(tenant=tenant, user_id=user_id)
 
     if body.key == "summary":
         if not body.scenario_ids:
@@ -411,3 +387,22 @@ async def run_selected_tools(
         raise HTTPException(status_code=500, detail=last["error"])
 
     return {"message": last["output"]["message"]}
+
+
+@router.get("/agent/usage_stats")
+async def get_usge_stats(
+    authorization: str | None = Header(default=None),
+):
+    # curl -X GET "http://localhost:9000/agent/usage_stats" -H "Content-Type: application/json"
+
+    # Verify authorization
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        tenant = "molveno"  # TODO admin?
+        _authorize_tenant(token, tenant)
+    else:
+        token = None
+
+    from app.utils.token_tacking import get_usage_per_day
+
+    return get_usage_per_day()

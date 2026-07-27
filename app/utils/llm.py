@@ -1,12 +1,12 @@
 import os
-import re
 import logging
 import requests
-from time import time, sleep
+from time import sleep
 import anthropic
 
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException, enforce_prompt_budget
+from app.utils.token_tacking import _log_costs
 
 _llm_client = None
 logger = logging.getLogger(__name__)
@@ -134,9 +134,13 @@ def llm_interaction(
                 max_tokens=max_tokens,
             )
             result = response.content[0].text.strip()
-            state.token_used += (
-                response.usage.input_tokens + response.usage.output_tokens
+            _log_costs(
+                response.usage.input_tokens,
+                response.usage.output_tokens,
+                model_name,
+                state.user_id,
             )
+
         except Exception as e:
             logger.error(f"Anthropic error: {e}, falling back to backup llm")
             result, model_name = call_backup_llm(prompt)

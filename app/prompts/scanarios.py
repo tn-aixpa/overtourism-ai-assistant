@@ -50,7 +50,7 @@ def generate_summary(
     )
 
     prompt = f"""You are an analyst for a tourism digital twin platform.
-Write a Markdown in ITALIAN report using EXACTLY these three top-level headings, in this order:
+Write a Markdown in {state.user_lang} report using EXACTLY these three top-level headings, in this order:
 
 # Simulation description Report
 Briefly explain, in plain language and using ONLY the glossary definitions provided below,
