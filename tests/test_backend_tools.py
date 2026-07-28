@@ -401,7 +401,7 @@ class TestGetDataFromContext:
             bt, "get_data", return_value={"id": "p1", "name": "P"}
         ) as mock_get:
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1"}
+                {"current_context": context, "tenant": "t1", "cleaned": False}
             )
         assert result == {"retrieved": {"problems p1": {"id": "p1", "name": "P"}}}
         mock_get.assert_called_once_with(f"{bt.BACKEND_URL}t1/problems/p1")
@@ -420,7 +420,7 @@ class TestGetDataFromContext:
 
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1"}
+                {"current_context": context, "tenant": "t1", "cleaned": False}
             )
 
         scenario_entry = result["retrieved"]["scenarios sc1"]
@@ -438,7 +438,7 @@ class TestGetDataFromContext:
 
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1"}
+                {"current_context": context, "tenant": "t1", "cleaned": False}
             )
 
         scenario_entry = result["retrieved"]["scenarios sc1"]
@@ -455,7 +455,7 @@ class TestGetDataFromContext:
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             # Should not raise despite the evaluations lookup failing.
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1"}
+                {"current_context": context, "tenant": "t1", "cleaned": False}
             )
 
         assert result["retrieved"]["scenarios sc1"]["id"] == "sc1"

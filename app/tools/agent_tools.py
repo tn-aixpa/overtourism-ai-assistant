@@ -124,6 +124,45 @@ def create_get_context_tool() -> ToolDefinition:
     )
 
 
+def create_get_data_from_link_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="get_data_from_link",
+        description=(
+            "Fetch data from a URL, following links found in problem or proposal fields, "
+            "and return the content or an error summary if the link cannot be retrieved."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetch the content at the provided URL. If the URL points to a web page, return a text snippet and extracted title where available. "
+            "If the link is broken, blocked, or otherwise unavailable, return a clear error message."
+        ),
+        parameters=[
+            ToolParameter(
+                name="url",
+                description="The link to fetch data from.",
+                type="string",
+                required=True,
+            ),
+        ],
+        output_description="URL fetch result with content summary or error details",
+        tags=["data", "read-only", "link", "web"],
+    )
+
+
+def create_get_base_scenario_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="get_base_scenario",
+        description="Retrieve the base scenario ID from the backend.",
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetch the ID of the base scenario from the backend, using the same backend tool as the platform's get_base_scenario helper."
+        ),
+        parameters=[],
+        output_description="The base scenario ID",
+        tags=["data", "read-only", "scenario", "base"],
+    )
+
+
 def create_analyze_scenario_results_tool() -> ToolDefinition:
     return ToolDefinition(
         name="analyze_scenario_results",
@@ -367,6 +406,8 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_list_available_scenarios_tool(),
         create_get_context_ids_tool(),
         create_get_context_tool(),
+        create_get_data_from_link_tool(),
+        create_get_base_scenario_tool(),
         # Interaction
         create_analyze_scenario_results_tool(),
         # Internal-only (enabled=False — see create_summary_generation_tool)

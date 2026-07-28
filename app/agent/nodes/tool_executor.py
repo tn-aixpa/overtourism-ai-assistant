@@ -158,6 +158,8 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "list_available_scenarios": execute_list_available_scenarios,
         "get_context_ids": execute_get_context_ids,
         "get_context_details": execute_get_context_details,
+        "get_data_from_link": execute_get_data_from_link,
+        "get_base_scenario": execute_get_base_scenario,
         # Interaction
         "analyze_scenario_results": execute_analyze_scenario_results,
         # Internal-only (see create_summary_generation_tool)
@@ -466,6 +468,39 @@ def execute_get_context_details(
     state.cognitive.retrieved_context = retrieved_context
 
     return retrieved_context
+
+
+def execute_get_data_from_link(
+    state: AgentState,
+    url: str,
+    headers: dict | None = None,
+    params: dict | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Execute get_data_from_link tool."""
+    from app.tools.other_tools import get_data_from_link
+
+    logger.info(f"Executing get_data_from_link for {url}")
+    result = get_data_from_link.invoke(
+        {
+            "url": url,
+            "headers": headers,
+            "params": params,
+        }
+    )
+    return result
+
+
+def execute_get_base_scenario(
+    state: AgentState,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Execute get_base_scenario tool."""
+    from app.tools.backend_tools import get_base_scenario
+
+    logger.info("Executing get_base_scenario tool")
+    result = get_base_scenario.invoke({"tenant": state.tenant})
+    return result
 
 
 def execute_analyze_scenario_results(

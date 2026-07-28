@@ -2,23 +2,12 @@ import os
 import requests
 from langchain.tools import tool
 import logging
-from app.utils.common import get_token
+
+from app.utils.common import _merge_auth_headers
 
 BACKEND_URL = os.environ.get("BACKEND_URL")
-AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
-
-
-def _merge_auth_headers(headers: dict | None) -> dict:
-    """Ensure Authorization is present, without overriding an explicitly-provided one."""
-
-    merged = dict(headers) if headers else {}
-
-    if AUTH_ENABLED and "Authorization" not in merged:
-        merged["Authorization"] = f"Bearer {get_token()}"
-
-    return merged
 
 
 def _log_response(response: requests.Response) -> None:
@@ -139,6 +128,8 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
     extracted_data = get_data(url)
 
+    logger.info(f"AAAAAAA {extracted_data}")
+
     if not cleaned:
         return extracted_data
 
@@ -147,8 +138,8 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
         "name": extracted_data["name"],
         "description": extracted_data["description"],
         "objective": extracted_data["extras"]["objective"],
+        "links": extracted_data["extras"]["links"],
         "additional_data_available_on_specific_request": {
-            "related_links": extracted_data["extras"]["links"],
             "version": extracted_data["version"],
             "tenant": extracted_data["tenant"],
             "created": extracted_data["created"],
@@ -156,6 +147,8 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
             "related_subsystem": extracted_data["extras"]["groups"],
         },
     }
+
+    logger.info(f"BBBBBBB {cleaned_data}")
 
     return cleaned_data
 
@@ -224,15 +217,13 @@ def get_base_scenario(tenant) -> str:
     logger.info(f"Retrieving id of base scenario")
 
     url = f"{BACKEND_URL}{tenant}/scenarios?base_only=true"
-    extracted_data = get_data(
-        url,
-    )
+    extracted_data = get_data(url)
 
     return extracted_data["scenario_id"]
 
 
 @tool
-def get_data_from_context(current_context, tenant, cleaned: bool = False):
+def get_data_from_context(current_context, tenant, cleaned: bool = True):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}
 

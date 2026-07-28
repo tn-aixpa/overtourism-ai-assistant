@@ -1,10 +1,25 @@
 from __future__ import annotations
+import os
 from contextvars import ContextVar
 from typing import Optional, Dict, Any
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+
+
+def _merge_auth_headers(headers: dict | None) -> dict:
+    """Ensure Authorization is present, without overriding an explicitly-provided one."""
+
+    merged = dict(headers) if headers else {}
+
+    if AUTH_ENABLED and "Authorization" not in merged:
+        merged["Authorization"] = f"Bearer {get_token()}"
+
+    return merged
+
 
 # =========================
 # PROMPT-SIZE GUARDS
@@ -91,7 +106,10 @@ def condense_for_matching(
             }
         return shown
     if isinstance(data, dict):
-        return {k: condense_for_matching(v, max_items, max_field_chars) for k, v in data.items()}
+        return {
+            k: condense_for_matching(v, max_items, max_field_chars)
+            for k, v in data.items()
+        }
     return data
 
 
@@ -178,8 +196,12 @@ def _truncate_json(obj: Any, max_chars: int) -> str:
         text = str(obj)
     if len(text) > max_chars:
         omitted = len(text) - max_chars
-        text = text[:max_chars] + f"\n... [truncated, {omitted} more characters omitted]"
+        text = (
+            text[:max_chars] + f"\n... [truncated, {omitted} more characters omitted]"
+        )
     return text
+
+
 _current_token: ContextVar[str | None] = ContextVar("_current_token", default=None)
 
 
@@ -187,19 +209,22 @@ def set_token(token: str) -> None:
     logger.debug("Setting auth token in current context")
     _current_token.set(token)
 
+
 def get_token() -> str:
     token = _current_token.get()
     if token is None:
         raise RuntimeError("No auth token set in current context")
     return token
+
+
 class GraphError(Exception):
     def __init__(self, details: Optional[str] = None):
         self.details = details
         super().__init__(self.details)
 
+
 class RequestHandlingException(GraphError):
     """Exception raised when request handling fails."""
+
     def __init__(self, message: str):
-        super().__init__(
-            details=str(message)
-        )
+        super().__init__(details=str(message))
