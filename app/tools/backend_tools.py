@@ -195,11 +195,13 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
     if not cleaned:
         return extracted_data
 
+    logger.info(extracted_data)
+
     cleaned_data = {
         "scenario_id": extracted_data["scenario_id"],
         "name": extracted_data["name"],
         "description": extracted_data["description"],
-        "changes_wrt_base_scenario": extracted_data["index_diffs"],
+        "changes_wrt_base_scenario": extracted_data["extras"]["index_diffs"],
         "additional_data_available_on_specific_request": {
             "version": 1,
             "created": "2026-06-16T16:09:44.825363+02:00",
