@@ -101,7 +101,7 @@ async def run_agent_endpoint(
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
     authorization: str | None = Header(default=None),
-    tenant: str = Form(default="molveno"),  # TODO remove default
+    tenant: str = Query(...),
 ):
 
     # Verify authorization
@@ -178,7 +178,7 @@ async def run_agent_endpoint(
 async def reset_session(
     session_id: str = Form(...),
     authorization: str | None = Header(default=None),
-    tenant: str = Form(default="molveno"),  # TODO remove default
+    tenant: str = Query(...),
 ):
     """
     Start a fresh conversation for `session_id`.
@@ -214,12 +214,12 @@ async def reset_session(
 @router.get("/agent/result/{session_id}", response_model=AgentResponse)
 async def get_agent_result(
     session_id: str,
-    tenant: str = Query(default="molveno"),
+    tenant: str = Query(...),
     authorization: str | None = Header(default=None),
 ):
-    # if AUTH_ENABLED:
-    # token = _require_bearer_token(authorization)
-    # _authorize_tenant(token, tenant)
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -235,7 +235,7 @@ async def get_agent_result(
 @router.get("/agent/stream/{session_id}")
 async def stream_events(
     session_id: str,
-    tenant: str = Query(default="molveno"),
+    tenant: str = Query(...),
     # EventSource (the standard way to consume SSE from a browser) cannot
     # set custom headers, so this endpoint also accepts the token as a query
     # param. The Authorization header is preferred when present.
@@ -246,13 +246,9 @@ async def stream_events(
     ),
     authorization: str | None = Header(default=None),
 ):
-    # if AUTH_ENABLED:
-    # bearer = _extract_bearer_token(authorization) or token
-    # if not bearer:
-    #     raise HTTPException(
-    #         status_code=401, detail="Missing bearer token (header or ?token=)"
-    #     )
-    # _authorize_tenant(bearer, tenant)
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -275,14 +271,14 @@ async def stream_events(
 async def submit_feedback_get(
     session_id: str,
     message_index: int,
-    tenant: str = Query(default="molveno"),
+    tenant: str = Query(...),
     authorization: str | None = Header(default=None),
     vote: str | None = None,
     comment: str | None = None,
 ):
-    # if AUTH_ENABLED:
-    # token = _require_bearer_token(authorization)
-    # _authorize_tenant(token, tenant)
+    if AUTH_ENABLED:
+        token = _require_bearer_token(authorization)
+        _authorize_tenant(token, tenant)
 
     state = _load_owned_session(session_id, tenant)
     if state is None:
@@ -308,7 +304,7 @@ async def submit_feedback_get(
 @router.post("/agent/tool")
 async def run_selected_tools(
     body: RunSelectedToolsRequest,
-    tenant: str = Query(default="molveno"),
+    tenant: str = Query(...),
     authorization: str | None = Header(default=None),
 ):
     """Depending on the parameters in body, run an explicit, ordered sequence of tools
@@ -324,7 +320,6 @@ async def run_selected_tools(
     By default stops at the first failed step (stop_on_error=True); set it
     to False to run every step regardless and inspect all results.
 
-    curl -X POST "http://localhost:9000/agent/tool?tenant=molveno" -H "Content-Type: application/json" -d '{"key": "summary", "scenario_ids": ["751846b146044e06a37e993251f3fbc3"]}'
     """
     from app.agent.nodes.tool_executor import execute_selected_tool
 
@@ -392,8 +387,6 @@ async def run_selected_tools(
 async def get_usge_stats(
     authorization: str | None = Header(default=None),
 ):
-    # curl -X GET "http://localhost:9000/agent/usage_stats" -H "Content-Type: application/json"
-
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
