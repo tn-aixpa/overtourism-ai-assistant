@@ -113,3 +113,7 @@ Notes:
 Also, dump_to_file writes the entire state to disk on every single turn (logs/state_<id>.json), synchronously, on a relative logs/ path with no rotation. That's an I/O bottleneck under load and an unbounded-disk-growth risk. error_recovery_node does the same to logs/errors.txt.
 4) The SSE stream has no timeout or heartbeat. queue.get() blocks forever if a session never finishes; most reverse proxies/load balancers will silently kill idle connections without periodic keepalive pings, and a stuck session ties up a thread forever.
 5) No /health or /ready endpoint for orchestration probes.
+
+# TODO:
+- fix widgets not all shown
+- scenario non associato a un problema o ad una proposta

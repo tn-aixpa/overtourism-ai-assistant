@@ -522,22 +522,8 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
                 "index_name": param["index_name"],
                 "description": param.get("description"),
                 "group": param.get("group", group),
-                "index_type": param.get("index_type"),
-                "editable": param.get("editable", True),
-                # "v" is the representative value for a "constant" index. For
-                # non-constant distributions (uniform, triang, lognorm, ...)
-                # there is no single "v" — fall back through the most
-                # sensible representative statistic the backend does supply,
-                # trying the mode/mean/median before "loc" (which for many
-                # distributions is just a shift parameter, e.g. 0, and NOT a
-                # meaningful "current value" on its own).
-                "current_value": param.get(
-                    "v",
-                    param.get(
-                        "mode",
-                        param.get("mean", param.get("median", param.get("loc"))),
-                    ),
-                ),
+                # "editable": param.get("editable", True),
+                "current_value": param.get("v") or param.get("loc"),
                 "unit": param.get("index_category"),
                 "min": param.get("min"),
                 "max": param.get("max"),

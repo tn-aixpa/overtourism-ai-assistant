@@ -44,7 +44,12 @@ DEFAULT_MAX_CHARS_PER_ENTRY = 1200
 # distinguish from "that's everything", and results in incomplete or
 # invented answers. Give these a larger, still-bounded budget instead.
 _LARGE_BUDGET_TOOLS = {
-    "get_configuration_parameters": 6000,
+    # get_configuration_parameters' full catalog is ~9.9k chars as of the
+    # current 5 groups / 23 parameters (measured, not guessed). 6000 was
+    # silently dropping the last 2 groups. 14000 gives ~40% headroom for
+    # the catalog to grow before this needs revisiting; the boundary-aware
+    # truncation in _truncate_json is the real backstop if it ever does.
+    "get_configuration_parameters": 14000,
     "create_new_temp_scenario": 4000,
 }
 
@@ -56,6 +61,7 @@ def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
         return default
     base_name = tool_name.split("__", 1)[0]
     return _LARGE_BUDGET_TOOLS.get(base_name, default)
+
 
 # Fields that regularly hold large/nested payloads (simulation output,
 # free-form extras, etc.) and are almost never needed to *match* an object
@@ -213,17 +219,84 @@ def build_prior_results_block(
     return "\n\n".join(lines)
 
 
-def _truncate_json(obj: Any, max_chars: int) -> str:
+def _dump(obj: Any) -> str:
     try:
-        text = json.dumps(obj, indent=2, default=str, ensure_ascii=False)
+        return json.dumps(obj, indent=2, default=str, ensure_ascii=False)
     except (TypeError, ValueError):
-        text = str(obj)
-    if len(text) > max_chars:
-        omitted = len(text) - max_chars
-        text = (
-            text[:max_chars] + f"\n... [truncated, {omitted} more characters omitted]"
-        )
-    return text
+        return str(obj)
+
+
+def _truncate_json(obj: Any, max_chars: int, _note_reserve: int = 200) -> str:
+    """JSON-serialize obj for prompt injection, capped at max_chars.
+
+    Boundary-aware: for dicts and lists, whole top-level keys/items are kept
+    or dropped as a unit — never sliced mid-object — and any drop is always
+    called out with an explicit note (mirroring condense_for_matching's
+    philosophy, but applied at the final serialization step too, since a
+    structure like {"widgets": {"GroupA": [...], "GroupB": [...]}} can still
+    exceed budget after condensing and needs the same treatment one level
+    deeper). If a single key/item is itself too big to fit even alone, we
+    recurse into it rather than dropping it outright, so partial content
+    from a large group still beats no content from it.
+    """
+    text = _dump(obj)
+    if len(text) <= max_chars:
+        return text
+
+    budget = max(max_chars - _note_reserve, max_chars // 2)
+
+    if isinstance(obj, dict) and obj:
+        kept: Dict[Any, Any] = {}
+        omitted_keys = []
+        for key, value in obj.items():
+            candidate_text = _dump({**kept, key: value})
+            if len(candidate_text) <= budget:
+                kept[key] = value
+            else:
+                omitted_keys.append(key)
+        if not kept:
+            # Not even the first key fits whole: recurse into it so we still
+            # return *something* structurally sound instead of nothing.
+            first_key, first_val = next(iter(obj.items()))
+            inner = _truncate_json(first_val, budget, _note_reserve=0)
+            try:
+                kept = {first_key: json.loads(inner)}
+                result = _dump(kept)
+            except (TypeError, ValueError):
+                result = f'{{\n  "{first_key}": {inner}\n}}'
+            omitted_keys = [k for k in obj if k != first_key]
+        else:
+            result = _dump(kept)
+        if omitted_keys:
+            result += (
+                f"\n... [{len(omitted_keys)} more key(s) omitted for space: "
+                f"{list(omitted_keys)}. Data was NOT lost — say so if you "
+                "summarize this, rather than presenting it as complete.]"
+            )
+        return result
+
+    if isinstance(obj, list) and obj:
+        kept_items = []
+        for item in obj:
+            candidate_text = _dump(kept_items + [item])
+            if len(candidate_text) <= budget:
+                kept_items.append(item)
+            else:
+                break
+        omitted_count = len(obj) - len(kept_items)
+        result = _dump(kept_items) if kept_items else "[]"
+        if omitted_count:
+            result += (
+                f"\n... [{omitted_count} more item(s) omitted for space. "
+                "Data was NOT lost — say so if you summarize this, rather "
+                "than presenting it as complete.]"
+            )
+        return result
+
+    # Not a dict/list we can reason about structurally (e.g. a long string) —
+    # this is the only case where a raw character slice is safe.
+    omitted = len(text) - max_chars
+    return text[:max_chars] + f"\n... [truncated, {omitted} more characters omitted]"
 
 
 _current_token: ContextVar[str | None] = ContextVar("_current_token", default=None)
