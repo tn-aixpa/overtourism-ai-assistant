@@ -523,7 +523,8 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
                 "description": param.get("description"),
                 "group": param.get("group", group),
                 # "editable": param.get("editable", True),
-                "current_value": param.get("v") or param.get("loc"),
+                "current_value": param.get("v")
+                or [param.get("loc"), param.get("scale")],
                 "unit": param.get("index_category"),
                 "min": param.get("min"),
                 "max": param.get("max"),
@@ -632,6 +633,51 @@ def execute_create_new_proposal(
     return result
 
 
+def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:
+    """Shape each override in `values` to match its widget's underlying
+    representation before it's sent to the backend.
+
+    Widgets come in two flavors (see execute_get_configuration_parameters):
+      - constant widgets, keyed by "v" — a plain scalar. The override passed
+        in `values` is already correct as-is; nothing to do.
+      - distribution widgets, keyed by "loc"/"scale" — the backend expects a
+        [loc, scale] pair, not a bare scalar. Two cases:
+          * the caller already supplied both numbers (a 2-item list/tuple)
+            -> use them directly as [new_loc, new_scale].
+          * the caller supplied a single number -> that's treated as the
+            new scale, and the widget's original loc is kept unchanged:
+            [param.get("loc"), new_scale].
+
+    Widgets not found in the catalog (e.g. an id typo) are passed through
+    unchanged rather than dropped, so the backend can surface the real
+    error instead of this silently discarding the override.
+    """
+    from app.tools.backend_tools import get_widgets
+
+    raw = get_widgets.invoke({"tenant": state.tenant})
+    widgets = raw.get("widgets", raw) if isinstance(raw, dict) else raw
+    by_id = {
+        param["index_id"]: param for params in widgets.values() for param in params
+    }
+
+    normalized = {}
+    for index_id, value in values.items():
+        param = by_id.get(index_id)
+
+        if not param or param.get("v") is not None:
+            # "v"-type (or unknown id): pass through unchanged.
+            normalized[index_id] = value
+            continue
+
+        # "loc"/"scale"-type.
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            normalized[index_id] = [value[0], value[1]]
+        else:
+            normalized[index_id] = [param.get("loc"), value]
+
+    return normalized
+
+
 def execute_create_new_temp_scenario(
     state: AgentState,
     values: dict,
@@ -654,6 +700,8 @@ def execute_create_new_temp_scenario(
             "'values' must contain at least one parameter override "
             "(index_id -> new numeric value)"
         )
+
+    values = _normalize_widget_overrides(state, values)
 
     logger.info(
         f"Creating temp scenario on base '{base_scenario_id}' with values: {values}"

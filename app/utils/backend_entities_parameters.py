@@ -118,7 +118,7 @@ SCENARIO_DESCRIPTION_PARAM = ToolParameter(
     name="description",
     description="Description of the parameter configuration to simulate.",
     type="string",
-    required=False,
+    required=True,
 )
 
 # NOTE: base_scenario_id / values / extras are deliberately NOT parameters of
