@@ -10,6 +10,7 @@ from app.utils.backend_entities_parameters import (
     PROBLEM_PARAMETERS,
     PROPOSAL_PARAMETERS,
     SCENARIO_PARAMETERS,
+    TEMP_SCENARIO_PARAMETERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,32 @@ def create_get_base_scenario_tool() -> ToolDefinition:
         parameters=[],
         output_description="The base scenario ID",
         tags=["data", "read-only", "scenario", "base"],
+    )
+
+
+def create_get_configuration_parameters_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="get_configuration_parameters",
+        description=(
+            "Retrieve all tunable simulation parameters (widgets) that scenarios can override"
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches every configurable index/parameter from the backend (parking, beach, "
+            "hotel, restaurant, and flow parameters), grouped by category, with its "
+            "index_id, current value, allowed range/step, and description. "
+            "Call this before create_new_temp_scenario whenever you need to: resolve a "
+            "parameter the user referred to by name (e.g. 'parking turnover'); read its "
+            "current value in order to compute a relative change (e.g. 'double X', "
+            "'increase Y by 20%'); or check the min/max/step bounds of a value the user "
+            "wants to set."
+        ),
+        parameters=[],
+        output_description=(
+            "Widgets grouped by category, each with index_id, index_name, description, "
+            "current value, min, max, and step."
+        ),
+        tags=["data", "read-only", "scenario", "parameters"],
     )
 
 
@@ -315,20 +342,51 @@ def delete_proposal_tool() -> ToolDefinition:
     )
 
 
+def create_new_temp_scenario_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="create_new_temp_scenario",
+        description=(
+            "Create a temporary, unsaved scenario with modified parameter values and evaluate it"
+        ),
+        category=ToolCategory.SCENARIO_MANAGEMENT,
+        long_description=(
+            "Applies the given parameter overrides on top of a base scenario, creates a "
+            "throwaway (temporary) scenario from them, and immediately evaluates it. Use this "
+            "to preview the effect of a what-if change (e.g. 'what if I double the parking "
+            "turnover?') before deciding whether to save it as a real scenario. If the user "
+            "expresses the change in relative terms ('double', 'increase by 20%', ...), first "
+            "call get_configuration_parameters to resolve the parameter's current value and "
+            "compute the final numeric value yourself, then pass the resulting index_id -> "
+            "value mapping here. This tool does not require user confirmation and does not "
+            "persist anything permanently — nothing is saved until create_new_scenario is "
+            "called afterwards on the scenario it produced."
+        ),
+        parameters=TEMP_SCENARIO_PARAMETERS,
+        output_description=(
+            "The temporary scenario_id, its evaluation_id, and the evaluation results "
+            "(sustainability index and per-constraint breakdown)."
+        ),
+        tags=["scenario", "simulation", "preview"],
+    )
+
+
 def create_new_scenario_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_scenario",
-        description="Create a new scenario linked to an existing proposal",
+        description="Save a previously previewed temporary scenario as a permanent scenario",
         category=ToolCategory.SCENARIO_MANAGEMENT,
         long_description=(
-            "Registers a new Scenario for a given Proposal in the platform. "
-            "A Scenario is a simulation run exploring a specific parameter configuration. "
-            "NOTE: this tool is not yet implemented — it will acknowledge the request "
-            "and inform the user that the feature is coming soon."
+            "Persists the temporary scenario that create_new_temp_scenario already created "
+            "and evaluated, giving it a permanent name and description. "
+            "create_new_temp_scenario MUST have been called earlier in the conversation — a "
+            "scenario and its evaluation must already exist before it can be saved. If no "
+            "temporary scenario is available yet, ask the user what values they want to "
+            "simulate and call create_new_temp_scenario first, let them review the results, "
+            "and only call this tool once they confirm they want to keep it."
         ),
         parameters=SCENARIO_PARAMETERS,
-        output_description="Acknowledgement that the feature is not yet implemented.",
-        tags=["write", "scenario", "not-implemented"],
+        output_description="Acknowledgement of successful save with the final scenario_id.",
+        tags=["write", "scenario"],
     )
 
 
@@ -408,6 +466,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_context_tool(),
         create_get_data_from_link_tool(),
         create_get_base_scenario_tool(),
+        create_get_configuration_parameters_tool(),
         # Interaction
         create_analyze_scenario_results_tool(),
         # Internal-only (enabled=False — see create_summary_generation_tool)
@@ -415,7 +474,8 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         # Creation
         create_new_problem_tool(),
         create_new_proposal_tool(),
-        create_new_scenario_tool(),  # (not yet implemented)
+        create_new_temp_scenario_tool(),
+        create_new_scenario_tool(),
         # Editing
         edit_problem_tool(),
         edit_proposal_tool(),

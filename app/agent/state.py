@@ -148,6 +148,13 @@ class CognitiveState:
     # tool_executor knows to actually run it instead of pausing again.
     tool_confirmed: bool = False
 
+    # The most recently created-and-evaluated temporary scenario (see
+    # execute_create_new_temp_scenario), kept around so a later
+    # create_new_scenario call can promote it to permanent. Cleared once
+    # promoted (execute_create_new_scenario) or overwritten by the next
+    # create_new_temp_scenario call.
+    pending_temp_scenario: Optional[Dict[str, Any]] = None
+
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.
 
@@ -197,8 +204,9 @@ class AgentState:
     session_id: str = ""
     user_id: str | None = None
     user_lang: str = "Italian"
-    integrated_mode: bool = False
     tenant: str = ""
+    integrated_mode: bool = False
+    integrated_context: Dict[str, Any] = field(default_factory=dict)
 
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)

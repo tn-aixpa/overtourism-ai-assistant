@@ -27,9 +27,14 @@ def _wait_instructions(state: AgentState) -> str:
         "create_new_proposal",
         "create_new_scenario",
     ]:
+        fields = dict(args)
+        if pending_tool == "create_new_scenario":
+            pending_values = (state.cognitive.pending_temp_scenario or {}).get("values")
+            if pending_values:
+                fields["values"] = pending_values
         return (
             "Before I submit this, please confirm the details below are correct:\n"
-            f"{_format_fields(args)}\n\nShall I proceed?"
+            f"{_format_fields(fields)}\n\nShall I proceed?"
         )
 
     return "Please confirm to proceed."

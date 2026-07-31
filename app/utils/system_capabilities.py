@@ -13,7 +13,9 @@ b. Show the trend of a certain indicator using graphs or maps
 # For 2 typical workflows include
 
 1. **Explore**: call list_available_scenarios → get_context_details → analyze_scenario_results
-2. **Create a proposal**: set a problem context → extract_proposal_details → confirm → create_proposal
-3. **Create a scenario**: set a proposal context → extract_scenario_details → confirm → create_scenario
+2. **Create a proposal**: set a problem context → gather the proposal details → confirm → create_new_proposal
+3. **Create a scenario**: get_configuration_parameters (to resolve/compute the desired parameter
+   values) → create_new_temp_scenario (previews the simulated result, no confirmation needed) →
+   once the user is happy with the preview → confirm → create_new_scenario (saves it permanently)
 
 """

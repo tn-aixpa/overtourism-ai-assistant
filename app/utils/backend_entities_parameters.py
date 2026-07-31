@@ -121,9 +121,34 @@ SCENARIO_DESCRIPTION_PARAM = ToolParameter(
     required=False,
 )
 
-# TODO: add base_scenario_id, values, extras
-
+# NOTE: base_scenario_id / values / extras are deliberately NOT parameters of
+# create_new_scenario. They are supplied earlier, to create_new_temp_scenario,
+# which creates and evaluates the (unsaved) scenario first; create_new_scenario
+# only ever promotes that already-evaluated temp scenario to permanent, so it
+# just needs the final name/description.
 SCENARIO_PARAMETERS = [
     SCENARIO_NAME_PARAM,
     SCENARIO_DESCRIPTION_PARAM,
+]
+
+# --- Temp scenario parameters -------------------------------------------
+SCENARIO_VALUES_PARAM = ToolParameter(
+    name="values",
+    description=(
+        "Mapping of configuration parameter index_id to its new numeric value, e.g. "
+        '{"excursionists_per_vehicle_average": 3.4, "excursionists_parking_turnover": 2.4}. '
+        "Only include the parameters the user actually wants to change; every key must be "
+        "an index_id returned by get_configuration_parameters. For relative changes "
+        "expressed in words (e.g. 'double the parking turnover', 'increase X by 20%'), "
+        "first fetch the current value with get_configuration_parameters and compute the "
+        "final numeric value yourself before calling this tool."
+    ),
+    type="object",
+    required=True,
+    schema={"additionalProperties": {"type": "number"}},
+)
+
+
+TEMP_SCENARIO_PARAMETERS = [
+    SCENARIO_VALUES_PARAM,
 ]

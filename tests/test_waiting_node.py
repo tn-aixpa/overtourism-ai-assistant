@@ -10,10 +10,10 @@ from app.agent.nodes.waiting import (
 )
 from app.agent.state import AgentState
 
-
 # ---------------------------------------------------------------------------
 # _normalize
 # ---------------------------------------------------------------------------
+
 
 class TestNormalize:
     def test_lowercases_and_strips_punctuation(self):
@@ -33,12 +33,30 @@ class TestNormalize:
 # _is_confirmation / _is_cancellation
 # ---------------------------------------------------------------------------
 
+
 class TestIsConfirmation:
     @pytest.mark.parametrize(
         "text",
-        ["yes", "Yes", "YES!", "ok", "okay", "sure", "proceed", "go ahead",
-         "confirm", "correct", "fine", "agreed", "sounds good", "sì", "si",
-         "va bene", "d'accord"],
+        [
+            "yes",
+            "Yes",
+            "YES!",
+            "ok",
+            "okay",
+            "sure",
+            "proceed",
+            "go ahead",
+            "confirm",
+            "correct",
+            "fine",
+            "agreed",
+            "sounds good",
+            "sì",
+            "si",
+            "va bene",
+            "d'accord",
+            "procedi",
+        ],
     )
     def test_exact_confirmatory_phrases(self, text):
         assert _is_confirmation(text) is True
@@ -71,8 +89,18 @@ class TestIsConfirmation:
 
 class TestIsCancellation:
     @pytest.mark.parametrize(
-        "text", ["no", "No", "cancel", "stop", "abort", "nevermind",
-                  "never mind", "annulla", "nein"],
+        "text",
+        [
+            "no",
+            "No",
+            "cancel",
+            "stop",
+            "abort",
+            "nevermind",
+            "never mind",
+            "annulla",
+            "nein",
+        ],
     )
     def test_exact_cancellation_phrases(self, text):
         assert _is_cancellation(text) is True
@@ -91,11 +119,14 @@ class TestIsCancellation:
 # _wait_instructions
 # ---------------------------------------------------------------------------
 
+
 class TestWaitInstructions:
     def test_creation_tool_recaps_fields(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_problem"
         fresh_state.cognitive.tool_arguments = {
-            "name": "Overtourism", "description": "Too many tourists", "objective": None
+            "name": "Overtourism",
+            "description": "Too many tourists",
+            "objective": None,
         }
         msg = _wait_instructions(fresh_state)
         assert "Name: Overtourism" in msg
@@ -133,8 +164,11 @@ class TestWaitInstructions:
 # wait_user_input_node
 # ---------------------------------------------------------------------------
 
+
 class TestWaitUserInputNode:
-    def test_first_pass_no_user_input_sets_prompt_and_waiting_for(self, fresh_state: AgentState):
+    def test_first_pass_no_user_input_sets_prompt_and_waiting_for(
+        self, fresh_state: AgentState
+    ):
         fresh_state.cognitive.selected_tool = "create_new_problem"
         fresh_state.cognitive.tool_arguments = {"name": "N", "description": "D"}
         fresh_state.user_input = None
@@ -147,7 +181,9 @@ class TestWaitUserInputNode:
         assert len(fresh_state.cognitive.messages_to_include) == 1
         assert "Shall I proceed?" in fresh_state.cognitive.messages_to_include[0]
 
-    def test_first_pass_unknown_tool_defaults_to_context_input(self, fresh_state: AgentState):
+    def test_first_pass_unknown_tool_defaults_to_context_input(
+        self, fresh_state: AgentState
+    ):
         fresh_state.cognitive.selected_tool = "some_other_tool"
         fresh_state.user_input = None
 
@@ -189,7 +225,9 @@ class TestWaitUserInputNode:
         # The pending tool itself is preserved so tool_executor can run it.
         assert fresh_state.cognitive.selected_tool == "create_new_problem"
 
-    def test_ambiguous_reply_routes_back_to_initialize_tools(self, fresh_state: AgentState):
+    def test_ambiguous_reply_routes_back_to_initialize_tools(
+        self, fresh_state: AgentState
+    ):
         fresh_state.cognitive.selected_tool = "create_new_problem"
         fresh_state.cognitive.tool_arguments = {"name": "N"}
         fresh_state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION

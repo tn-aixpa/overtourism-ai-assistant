@@ -69,6 +69,20 @@ def delete_data(url, headers=None, params=None):
     return response.json()
 
 
+def clean_scenario(raw_data):
+    return {
+        "scenario_id": raw_data["scenario_id"],
+        "evaluation_id": raw_data["evaluation_id"],
+        "data": {
+            # "sustainable_area": ev["data"]["sustainable_area"],
+            "sustainability_index": raw_data["data"]["sustainability_index"],
+            "sustainability_by_constraint": raw_data["data"][
+                "sustainability_by_constraint"
+            ],
+        },
+    }
+
+
 @tool
 def get_all_problems(tenant: str):
     """Fetch all problems from the API."""
@@ -213,6 +227,129 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
 
 
 @tool
+def get_widgets(tenant: str) -> dict:
+    """Fetch all tunable configuration parameters (widgets) from the API."""
+    url = f"{BACKEND_URL}{tenant}/widgets"
+    return get_data(url)
+
+
+@tool
+def create_cration_session(tenant: str):
+    """Create a creation session to handle temporary scenario(s)"""
+    url = f"{BACKEND_URL}{tenant}/sessions/"
+    raw_data = post_data(url, json={})
+    return raw_data["session_id"]
+
+
+@tool
+def create_temp_scenario(
+    tenant: str,
+    values: dict,
+    base_scenario_id: str,
+    creation_session: str,
+) -> dict:
+    """
+    Create a temporary (unsaved) scenario applying the given parameter
+    overrides on top of a base scenario.
+
+    NOTE: assumes a `temporary: true` flag on the standard POST /scenarios/
+    payload keeps the backend from treating this as a permanent scenario.
+    Adjust to the real contract (e.g. a dedicated /scenarios/temp endpoint)
+    if that differs.
+
+    Returns:
+        The created (temporary) scenario record, including its scenario_id.
+    """
+    logger.info(
+        f"Entered tool create_temp_scenario for values {values}. Current creation session {creation_session}"
+    )
+
+    # Step 1. Create the temporary scenario
+    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/scenarios/"
+
+    body = {
+        "base_scenario_id": base_scenario_id,
+        "values": values,
+    }
+
+    params = {"base_scenario_id": base_scenario_id} if base_scenario_id else None
+
+    created_scenario = post_data(url, json=body, params=params)
+    logger.info(f"Step1. Created scenario: {created_scenario}")
+
+    # Step 2. Created associated evaluation
+    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/"
+    body = {
+        "scenario_id": created_scenario["scenario_id"],
+        "ensemble_size": 20,
+        "kwargs": {},
+    }
+
+    created_eval = post_data(url, json=body, params=params)
+    logger.info(f"Step 2. Created evalutation: {created_eval}")
+
+    # Step 3. Return evaluation results
+    eval_url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
+    raw_data = get_data(eval_url)
+
+    logger.info(f"Step 3.1 Raw eval results {raw_data}")
+
+    cleaned = clean_scenario(raw_data)
+    cleaned["creation_session"] = creation_session
+
+    logger.info(f"Step 3.2 cleaned {cleaned}")
+
+    return cleaned
+
+
+@tool
+def create_evaluation(tenant: str, scenario_id: str) -> dict:
+    """
+    Trigger evaluation of a scenario.
+
+    Returns:
+        The created evaluation record, including its evaluation_id.
+    """
+    logger.info("Entered tool create_evaluation")
+
+    url = f"{BACKEND_URL}{tenant}/evaluations/"
+    body = {"scenario_id": scenario_id}
+
+    return post_data(url, json=body)
+
+
+def get_evaluation_data_by_id(evaluation_id: str, tenant: str) -> dict:
+    """Fetch evaluation results by evaluation_id (internal helper, mirrors
+    the /evaluations/{id}/data call already used by get_evaluation_data)."""
+    url = f"{BACKEND_URL}{tenant}/evaluations/{evaluation_id}/data"
+    return get_data(url)
+
+
+@tool
+def promote_scenario(
+    tenant: str,
+    creation_session: str,
+    scenario_id: str,
+    name: str,
+    description: str | None = None,
+) -> dict:
+    """
+    Promote a temporary scenario (already created and evaluated) into a
+    permanent, named scenario.
+
+    Returns:
+        A dict with a confirmation message
+    """
+    logger.info("Entered tool promote_scenario")
+
+    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/scenarios/{scenario_id}"
+
+    body = {"name": name, "description": description}
+
+    return post_data(url, json=body)
+
+
+@tool
 def get_base_scenario(tenant) -> str:
     """Fetch the id of the base scenario"""
 
@@ -276,17 +413,7 @@ def get_evaluation_data(current_context, tenant):
             eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
             raw_data = get_data(eval_url)
 
-            cleaned = {
-                "scenario_id": raw_data["scenario_id"],
-                "evaluation_id": raw_data["evaluation_id"],
-                "data": {
-                    # "sustainable_area": ev["data"]["sustainable_area"],
-                    "sustainability_index": raw_data["data"]["sustainability_index"],
-                    "sustainability_by_constraint": raw_data["data"][
-                        "sustainability_by_constraint"
-                    ],
-                },
-            }
+            cleaned = clean_scenario(raw_data)
 
             evaluations[f"scenarios {scenario_id}"] = cleaned
         except Exception as e:

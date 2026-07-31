@@ -26,12 +26,6 @@ from app.prompts.scanarios import analyze_scenario, generate_summary
 
 logger = logging.getLogger(__name__)
 
-_NOT_IMPLEMENTED_MSG = (
-    "This feature is not yet available. "
-    "The ability to {action} is planned for a future release. "
-    "Please check back later or contact your system administrator."
-)
-
 # Tools that mutate platform data and therefore require an explicit user
 # confirmation (recap of the data about to be submitted) before they run.
 CONFIRMATION_REQUIRED_TOOLS = {
@@ -160,6 +154,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_context_details": execute_get_context_details,
         "get_data_from_link": execute_get_data_from_link,
         "get_base_scenario": execute_get_base_scenario,
+        "get_configuration_parameters": execute_get_configuration_parameters,
         # Interaction
         "analyze_scenario_results": execute_analyze_scenario_results,
         # Internal-only (see create_summary_generation_tool)
@@ -167,7 +162,8 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         # Creation stubs
         "create_new_problem": execute_create_new_problem,
         "create_new_proposal": execute_create_new_proposal,
-        "create_new_scenario": execute_create_new_scenario,  # not yet implemented
+        "create_new_temp_scenario": execute_create_new_temp_scenario,
+        "create_new_scenario": execute_create_new_scenario,
         # Editing stubs
         "edit_problem": execute_edit_problem,
         "edit_proposal": execute_edit_proposal,
@@ -503,6 +499,58 @@ def execute_get_base_scenario(
     return result
 
 
+def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[str, Any]:
+    """Execute get_configuration_parameters tool.
+
+    Fetches the backend's /widgets payload and flattens each entry down to
+    the fields relevant for tuning a scenario: id, name, description, a
+    single representative current value (the constant's "v", or the "loc"
+    of a distribution when there's no single constant), and the allowed
+    range/step.
+    """
+    from app.tools.backend_tools import get_widgets
+
+    logger.info("Executing get_configuration_parameters tool")
+
+    raw = get_widgets.invoke({"tenant": state.tenant})
+    widgets = raw.get("widgets", raw) if isinstance(raw, dict) else raw
+
+    cleaned = {
+        group: [
+            {
+                "index_id": param["index_id"],
+                "index_name": param["index_name"],
+                "description": param.get("description"),
+                "group": param.get("group", group),
+                "index_type": param.get("index_type"),
+                "editable": param.get("editable", True),
+                # "v" is the representative value for a "constant" index. For
+                # non-constant distributions (uniform, triang, lognorm, ...)
+                # there is no single "v" — fall back through the most
+                # sensible representative statistic the backend does supply,
+                # trying the mode/mean/median before "loc" (which for many
+                # distributions is just a shift parameter, e.g. 0, and NOT a
+                # meaningful "current value" on its own).
+                "current_value": param.get(
+                    "v",
+                    param.get(
+                        "mode",
+                        param.get("mean", param.get("median", param.get("loc"))),
+                    ),
+                ),
+                "unit": param.get("index_category"),
+                "min": param.get("min"),
+                "max": param.get("max"),
+                "step": param.get("step"),
+            }
+            for param in params
+        ]
+        for group, params in widgets.items()
+    }
+
+    return {"widgets": cleaned}
+
+
 def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
@@ -598,25 +646,121 @@ def execute_create_new_proposal(
     return result
 
 
+def execute_create_new_temp_scenario(
+    state: AgentState,
+    values: dict,
+    base_scenario_id: str | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Create a temporary scenario from the given overrides and evaluate it.
+
+    Stashes the result on state.cognitive.pending_temp_scenario so a later
+    create_new_scenario call (in this or a following turn) can promote it.
+    """
+    from app.tools.backend_tools import (
+        create_temp_scenario,
+        get_base_scenario,
+        create_cration_session,
+    )
+
+    if not values:
+        raise ValueError(
+            "'values' must contain at least one parameter override "
+            "(index_id -> new numeric value)"
+        )
+
+    logger.info(
+        f"Creating temp scenario on base '{base_scenario_id}' with values: {values}"
+    )
+
+    if not base_scenario_id:
+        base_scenario_id = get_base_scenario.invoke({"tenant": state.tenant})
+
+    # Create a new creation session if needed
+    pending = state.cognitive.pending_temp_scenario or {}
+    creation_session = (
+        state.integrated_context.get("creation_session")
+        or pending.get("creation_session")
+        or None
+    )
+    if creation_session is None:
+        creation_session = create_cration_session.invoke(state.tenant)
+
+    logger.info(
+        f"Retrieved required info: base_scenario id {base_scenario_id} and creation_session {creation_session}"
+    )
+
+    scenario_result = create_temp_scenario.invoke(
+        {
+            "tenant": state.tenant,
+            "values": values,
+            "base_scenario_id": base_scenario_id,
+            "creation_session": creation_session,
+        }
+    )
+
+    scenario_id = scenario_result["scenario_id"]
+    evaluation_id = scenario_result["evaluation_id"]
+    creation_session = scenario_result.get("creation_session", creation_session)
+    evaluation = scenario_result["data"]
+
+    # Remember this so create_new_scenario can promote it without redoing
+    # the simulation, and so the next what-if preview this session can
+    # reuse the same creation_session.
+    state.cognitive.pending_temp_scenario = {
+        "scenario_id": scenario_id,
+        "evaluation_id": evaluation_id,
+        "base_scenario_id": base_scenario_id,
+        "creation_session": creation_session,
+        "values": values,
+    }
+
+    return {
+        "scenario_id": scenario_id,
+        "evaluation_id": evaluation_id,
+        "base_scenario_id": base_scenario_id,
+        "values": values,
+        "temporary": True,
+        "evaluation": evaluation,
+    }
+
+
 def execute_create_new_scenario(
     state: AgentState,
     name: str = "",
-    proposal_id: str = "",
     description: str = "",
     **kwargs,
 ) -> Dict[str, Any]:
-    """Stub executor for create_new_scenario — feature not yet implemented."""
-    logger.info(f"create_new_scenario called (not implemented) | name='{name}'")
-    return {
-        "success": True,
-        "not_implemented": True,
-        "message": _NOT_IMPLEMENTED_MSG.format(action="create new scenarios"),
-        "received": {
+    """Promote the pending temporary scenario (created and evaluated by
+    create_new_temp_scenario) to a permanent, named scenario."""
+    from app.tools.backend_tools import promote_scenario
+
+    pending = state.cognitive.pending_temp_scenario
+    if not pending:
+        raise ValueError(
+            "No temporary scenario available to save. Call create_new_temp_scenario "
+            "first to preview the desired values, then create_new_scenario to save it."
+        )
+
+    logger.info(
+        f"Promoting temp scenario '{pending['scenario_id']}' to permanent as '{name}'"
+    )
+
+    result = promote_scenario.invoke(
+        {
+            "tenant": state.tenant,
+            "creation_session": pending["creation_session"],
+            "scenario_id": pending["scenario_id"],
             "name": name,
-            "proposal_id": proposal_id,
             "description": description,
-        },
-    }
+        }
+    )
+
+    # Consumed — clear it so a later create_new_scenario without a fresh
+    # preview fails loudly instead of accidentally re-saving the same one.
+    state.cognitive.pending_temp_scenario = None
+
+    return result
 
 
 # =============================================================================

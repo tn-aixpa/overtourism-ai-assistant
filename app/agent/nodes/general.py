@@ -80,7 +80,7 @@ def error_recovery_node(state: AgentState) -> Command:
 # Tools whose result is purely an internal resolution step (e.g. id lookups
 # used to fill in arguments for later tools this turn) and therefore
 # should never be surfaced to the user as part of the final answer.
-_INTERNAL_ONLY_TOOLS = {"get_context_ids"}
+_INTERNAL_ONLY_TOOLS = {"get_context_ids", "get_base_scenario"}
 
 
 def generate_output_message_node(state: AgentState) -> Command:
@@ -171,6 +171,24 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
         case "analyze_scenario_results":
             return [output.get("message", "No answer could be generated.")]
+
+        case "get_configuration_parameters":
+            # Bounded, fixed-size payload (not tenant data), so give it a
+            # much larger budget than the generic default — see
+            # app.utils.common._LARGE_BUDGET_TOOLS.
+            return [
+                "Here are the tunable simulation parameters, grouped by "
+                f"category: {truncate_for_prompt(output, max_chars=6000)}"
+            ]
+
+        case "create_new_temp_scenario":
+            evaluation = output.get("evaluation", {})
+            return [
+                "This is a TEMPORARY, unsaved scenario preview — if it isn't "
+                "saved it may be lost. Evaluation results (sustainability "
+                f"index and per-constraint breakdown): "
+                f"{truncate_for_prompt(evaluation, max_chars=4000)}"
+            ]
 
         case "create_new_problem":
             return [

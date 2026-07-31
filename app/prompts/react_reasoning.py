@@ -3,7 +3,11 @@ from typing import Dict, Any, List
 
 from app.agent.state import AgentState, ReActStep
 from app.utils.llm import llm_interaction, format_messages
-from app.utils.common import build_prior_results_block, condense_for_matching
+from app.utils.common import (
+    build_prior_results_block,
+    condense_for_matching,
+    _max_chars_for_tool,
+)
 
 
 def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
@@ -33,10 +37,11 @@ def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
             # silently seeing less than what's really there.
             condensed = condense_for_matching(step.observation)
             obs = json.dumps(condensed, indent=2, default=str)
-            if len(obs) > 1200:
+            max_chars = _max_chars_for_tool(step.tool_name, 1200)
+            if len(obs) > max_chars:
                 obs = (
-                    obs[:1200]
-                    + f"\n... [truncated, {len(obs) - 1200} more characters omitted]"
+                    obs[:max_chars]
+                    + f"\n... [truncated, {len(obs) - max_chars} more characters omitted]"
                 )
             lines.append(f"Observation {i}: {obs}")
         elif step.status:
@@ -130,9 +135,32 @@ GUIDELINES (apply in order — stop at the first that matches)
      a problem, proposal, or scenario; answer directly from the data returned by
      get_context_details.
 
-6. CREATE / EDIT / DELETE — map the request to ONE of: create_new_problem, create_new_proposal,
+6. EVALUATE A NEW / "WHAT-IF" SCENARIO — if the user wants to try out, preview, simulate, or
+   evaluate a new scenario with different parameter values (e.g. "what if I double the parking
+   spaces?", "create a new scenario with 500 parking spots", "valuta uno scenario con..."),
+   this is a TEMPORARY, throwaway preview — treat it as fundamentally different from saving a
+   permanent scenario (guideline 7):
+     a. If the user refers to a parameter by name rather than by its index_id, or expresses the
+        change in relative terms ("double X", "increase Y by 20%"), first call
+        get_configuration_parameters to resolve the index_id and current value, then compute
+        the final numeric value yourself.
+     b. Call create_new_temp_scenario with the resolved index_id -> value mapping. This tool
+        needs NO user confirmation and NEVER takes a name or description — do not ask the user
+        for either at this stage, and do not route this through guideline 7.
+     c. Only if the user separately and explicitly asks to save/keep this scenario permanently
+        (e.g. "save it", "keep this one", "make it official") — and only once
+        create_new_temp_scenario has already run earlier this session — ask for a name (and
+        optionally a description) and then call create_new_scenario per guideline 7.
+     d. When you finish after running create_new_temp_scenario, your message MUST explicitly
+        tell the user this scenario is temporary and unsaved, and that it may be lost if they
+        don't save it — in addition to reporting the evaluation results (sustainability index
+        and per-constraint breakdown) from the Observation.
+
+7. CREATE / EDIT / DELETE — map the request to ONE of: create_new_problem, create_new_proposal,
    create_new_scenario, edit_problem, edit_proposal, edit_scenario, delete_problem,
-   delete_proposal, delete_scenario.
+   delete_proposal, delete_scenario. create_new_scenario here means SAVING an
+   already-previewed temporary scenario permanently (see guideline 6c) — it is never the right
+   tool for previewing/evaluating a new what-if scenario.
    Extract only name/description details the user actually typed. Never invent details, never
    suggest your own mitigation ideas or strategies as arguments.
 
@@ -155,7 +183,16 @@ GUIDELINES (apply in order — stop at the first that matches)
         tool and OMIT the id field entirely from its arguments — it is auto-filled from the
         resolved context. Do not guess it.
 
-7. NOTHING ABOVE APPLIED — finish with a clarifying question.
+8. NOTHING ABOVE APPLIED — finish with a clarifying question.
+
+9. GROUNDING — whenever your finish message summarizes data from an Observation (e.g. the
+   list of tunable parameters from get_configuration_parameters, scenario evaluation results,
+   problem/proposal/scenario lists), you MUST use the exact group names, parameter names, and
+   values that literally appear in that Observation. Never invent, rename, merge, or
+   reorganize categories that aren't present verbatim in the data — if you're not sure a group
+   or item exists in the Observation, don't mention it. If the Observation says data was
+   truncated/omitted, say so explicitly instead of silently presenting a partial list as
+   complete.
 
 ============================================================
 OUTPUT FORMAT

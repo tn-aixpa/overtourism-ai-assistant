@@ -34,6 +34,29 @@ def _merge_auth_headers(headers: dict | None) -> dict:
 DEFAULT_MAX_RESULT_ENTRIES = 6
 DEFAULT_MAX_CHARS_PER_ENTRY = 1200
 
+# Most tool results are raw backend payloads that can grow without bound
+# (tenant data, scenario lists, ...), so the generic cap above is the right
+# default. A few tools instead return a fixed, small, bounded payload
+# (e.g. the full catalog of tunable simulation parameters, or a single
+# scenario's evaluation summary) — capping those at the generic size cuts
+# them off mid-structure (e.g. only the first one or two parameter groups
+# survive), which the reasoning/answer-generation LLM then has no way to
+# distinguish from "that's everything", and results in incomplete or
+# invented answers. Give these a larger, still-bounded budget instead.
+_LARGE_BUDGET_TOOLS = {
+    "get_configuration_parameters": 6000,
+    "create_new_temp_scenario": 4000,
+}
+
+
+def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
+    """Look up the prompt-injection char budget for a given tool/result key,
+    stripping any '__N' collision suffix (see tool_executor's result_key)."""
+    if not tool_name:
+        return default
+    base_name = tool_name.split("__", 1)[0]
+    return _LARGE_BUDGET_TOOLS.get(base_name, default)
+
 # Fields that regularly hold large/nested payloads (simulation output,
 # free-form extras, etc.) and are almost never needed to *match* an object
 # by name/description — only to inspect it once a specific id is already
@@ -184,7 +207,8 @@ def build_prior_results_block(
         # items whole and, if it does need to drop any, says so explicitly
         # via a "note" field instead of silently truncating mid-structure.
         condensed = condense_for_matching(tool_results[key])
-        lines.append(f"### {key}\n{_truncate_json(condensed, max_chars_per_entry)}")
+        entry_max_chars = _max_chars_for_tool(key, max_chars_per_entry)
+        lines.append(f"### {key}\n{_truncate_json(condensed, entry_max_chars)}")
 
     return "\n\n".join(lines)
 
