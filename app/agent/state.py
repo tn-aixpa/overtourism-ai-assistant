@@ -210,7 +210,7 @@ class AgentState:
 
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
-    assistant_action_data: Optional[dict[str, Any]] = None
+    assistant_action_data: Optional[List[Dict[str, Any]]] = None
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"

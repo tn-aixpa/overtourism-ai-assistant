@@ -1,11 +1,13 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 
 class AgentResponse(BaseModel):
     session_id: str
     response: Optional[str] = None
-    assistant_action_data: Optional[dict[str, Any]] = None
+    # List of UIAction-shaped dicts: {"type": "SHOW_WIDGET" | "NAVIGATE" | "SHOW_TOAST", "payload": {...}}.
+    # Matches the frontend's UIAction[] (see chat.model.ts / ChatbotActionTranslatorService).
+    assistant_action_data: Optional[List[Dict[str, Any]]] = None
 
     model_config = ConfigDict(extra="allow")
 

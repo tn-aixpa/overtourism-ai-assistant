@@ -14,15 +14,25 @@ MAX_CONTEXT_BLOCK_CHARS = 12_000
 logger = logging.getLogger(__name__)
 
 
-def analyze_scenario(state: AgentState, query: str):
+def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = None):
     context_block = state.cognitive.context_cache
+
+    visual_note = (
+        f"\n    A {widget_hint} will be displayed to the user automatically alongside "
+        "your answer, so do NOT claim that charts/visualizations cannot be shown — "
+        "you may refer to it (e.g. 'see the chart below') if relevant.\n"
+        if widget_hint
+        else "\n    No chart or visualization will be displayed alongside your answer — "
+        "if the user asked specifically for one, say only the underlying data is "
+        "available as text, without speculating about why a chart isn't shown.\n"
+    )
 
     prompt = f"""You are an analyst for a tourism digital twin platform.
     Answer the following question using ONLY the data provided below.
     If the data does not contain enough information to answer (including if it was
     truncated for length), say so explicitly — do not infer or speculate.
     Be concise and factual. Use a neutral, professional tone.
-    
+    {visual_note}
     Question: {query}
     
     Context data:

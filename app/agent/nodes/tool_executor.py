@@ -538,6 +538,144 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
     return {"widgets": cleaned}
 
 
+# =============================================================================
+# ASSISTANT ACTIONS (frontend SHOW_WIDGET resolution)
+# =============================================================================
+#
+# The frontend used to translate DomainEvents into UIActions itself
+# (ChatbotActionTranslatorService). That logic now lives here: tools that
+# produce something worth visualizing populate state.assistant_action_data
+# with the final UIAction-shaped dicts, which routes.py forwards as-is.
+#
+# TODO(integrated widgets): the standalone chatbot renders SHOW_WIDGET
+# inline; the integrated one currently only executes NAVIGATE/SHOW_TOAST and
+# has nowhere to put an inline widget. Once that's ready, gate widget
+# resolution below on `not state.integrated_mode`.
+
+
+def _show_widget_action(widget_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a SHOW_WIDGET UIAction, matching the frontend's UIAction shape:
+    { type: 'SHOW_WIDGET', payload: { widgetName, data } }."""
+    return {"type": "SHOW_WIDGET", "payload": {"widgetName": widget_name, "data": data}}
+
+
+def _level_confidence(entry: Any) -> Dict[str, float]:
+    """Normalize one sustainability_by_constraint entry into the frontend's
+    {level, confidence} shape. Defensive on purpose, mirroring the same
+    fallback the frontend already applies client-side (see
+    ConfrontoScenariComponent.filterKpis): a bare number becomes
+    {level: number, confidence: 0}."""
+    if isinstance(entry, dict):
+        return {
+            "level": entry.get("level", entry.get("value", 0)) or 0,
+            "confidence": entry.get("confidence", 0) or 0,
+        }
+    return {"level": entry or 0, "confidence": 0}
+
+
+def _scenario_label(state: AgentState, scenario_id: str) -> str:
+    cached = state.cognitive.context_cache.get(f"scenarios {scenario_id}", {})
+    return cached.get("name") or scenario_id
+
+
+def _build_histogram_comparison_widget(
+    state: AgentState, scenario_ids: list
+) -> Dict[str, Any] | None:
+    """SHOW_WIDGET(histogramComparison) from the first two scenarios' cached
+    evaluation data. Matches the frontend's TODO."""
+    left_id, right_id = scenario_ids[0], scenario_ids[1]
+    cache = state.cognitive.context_cache
+    left_constraints = (
+        cache.get(f"scenarios {left_id}", {})
+        .get("evaluation_data", {})
+        .get("data", {})
+        .get("sustainability_by_constraint", {})
+    )
+    right_constraints = (
+        cache.get(f"scenarios {right_id}", {})
+        .get("evaluation_data", {})
+        .get("data", {})
+        .get("sustainability_by_constraint", {})
+    )
+    if not left_constraints and not right_constraints:
+        return None
+
+    return _show_widget_action(
+        "histogramComparison",
+        {
+            "payload": {
+                "dataLeft": {
+                    k: _level_confidence(v) for k, v in left_constraints.items()
+                },
+                "dataRight": {
+                    k: _level_confidence(v) for k, v in right_constraints.items()
+                },
+                "labelLeft": _scenario_label(state, left_id),
+                "labelRight": _scenario_label(state, right_id),
+            },
+            "loading": False,
+        },
+    )
+
+
+def _build_plot_widget(state: AgentState, scenario_id: str) -> Dict[str, Any] | None:
+    """SHOW_WIDGET(plot) from the scenario evaluation data.
+    Matches the frontend's X."""
+    cache = state.cognitive.context_cache
+    logger.info(f"CACHE: {cache}")
+    constraints = (
+        cache.get(f"scenarios {scenario_id}", {})
+        .get("evaluation_data", {})
+        .get("data", {})
+        .get("sustainability_by_constraint", {})
+    )
+    if not constraints:
+        return None
+
+    return _show_widget_action(
+        "plot",
+        {
+            "payload": {
+                "plot": {k: _level_confidence(v) for k, v in constraints.items()},
+            },
+            "loading": False,
+        },
+    )
+
+
+def _resolve_assistant_widget(state: AgentState, scenario_ids: list) -> str | None:
+    """Decide, from how many scenarios are in play, which widget (if any) to
+    attach to this turn's response, and stash it on state.assistant_action_data.
+
+    Heuristic: >=2 scenarios in current_context -> the user is comparing
+    them -> histogramComparison. Exactly 1 -> they want detail on it ->
+    kpiList. This mirrors the same len(scenario_ids) check generate_summary
+    already uses to decide whether to include cross-scenario comparison
+    text, so it stays consistent with how "comparison vs. detail" is
+    inferred elsewhere, without needing a second LLM call just to classify
+    intent.
+
+    Returns a short human-readable hint of what widget will be shown (or
+    None), so the caller can tell analyze_scenario's prompt about it — the
+    LLM answer is otherwise generated with no knowledge that a widget
+    mechanism exists, and will confidently (and wrongly) tell the user no
+    chart can be shown.
+    """
+    logger.info(f"_resolve_assistant_widget {len(scenario_ids)}")
+    if len(scenario_ids) >= 2:
+        action = _build_histogram_comparison_widget(state, scenario_ids)
+        hint = "histogram comparison chart" if action else None
+    elif len(scenario_ids) == 1:
+        action = _build_plot_widget(state, scenario_ids[0])
+        hint = "plot for single scenario" if action else None
+    else:
+        action, hint = None, None
+
+    if action:
+        state.assistant_action_data = [action]
+    return hint
+
+
 def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
@@ -547,7 +685,10 @@ def execute_analyze_scenario_results(
 
     scenario_ids = state.cognitive.current_context.get("scenarios", [])
     _ensure_scenario_data_cached(state, scenario_ids)
-    answer = analyze_scenario(state, query)
+    # Resolve the widget BEFORE generating the text answer, so the LLM can be
+    # told whether a chart is being shown and doesn't contradict it.
+    widget_hint = _resolve_assistant_widget(state, scenario_ids)
+    answer = analyze_scenario(state, query, widget_hint=widget_hint)
     return {"success": True, "message": answer}
 
 

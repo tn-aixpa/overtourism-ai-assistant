@@ -60,6 +60,7 @@ def initialize_tools(state: AgentState) -> Command:
 
     # Fresh user turn: reset the working memory for the ReAct loop. Long-term
     # memory (tool_results) is intentionally left untouched.
+    state.assistant_action_data = None
     state.cognitive.scratchpad = []
     state.cognitive.selected_tool = None
     state.cognitive.tool_arguments = {}
