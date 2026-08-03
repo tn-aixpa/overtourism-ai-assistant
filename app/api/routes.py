@@ -352,6 +352,25 @@ async def run_selected_tools(
             {"tool_name": "get_context_details", "arguments": {}},
             {"tool_name": "summary_generation", "arguments": {}},
         ]
+    elif body.key == "summary-temp":
+        if not body.creation_session or not body.evaluation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="creation_session and evaluation_id are required when key == 'summary-temp'",
+            )
+        state.cognitive.current_context = {
+            "problems": [],
+            "proposals": [],
+            "scenarios": [],
+            "temp": {
+                "creation_session": body.creation_session,
+                "evaluation_id": body.evaluation_id,
+            },
+        }
+        steps = [
+            {"tool_name": "get_context_details", "arguments": {}},
+            {"tool_name": "summary_generation", "arguments": {}},
+        ]
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
 

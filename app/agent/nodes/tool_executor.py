@@ -426,8 +426,18 @@ def execute_get_context_details(
     CognitiveState.context_cache). Cache is scoped to the current topic and
     kept up to date by prune_context_cache (on topic change) and
     invalidate_cached_object (on edit/delete) — see tool_executor_node.
+
+    Optionally also resolves a "temp" entry in current_context —
+    {"creation_session": ..., "evaluation_id": ...} — pointing at a
+    temporary, not-yet-saved scenario/evaluation created via
+    create_temp_scenario (e.g. for the /agent/tool "summary-temp"
+    pipeline). When present, its data is fetched with a single call to the
+    session-scoped evaluation endpoint, cached under "scenarios <id>" just
+    like a permanent scenario, and its id is folded into
+    current_context["scenarios"] so downstream tools (e.g.
+    summary_generation) pick it up without any further changes.
     """
-    from app.tools.backend_tools import get_data_from_context
+    from app.tools.backend_tools import get_data_from_context, get_temp_evaluation_data
 
     current_context = state.cognitive.current_context
     cache = state.cognitive.context_cache
@@ -451,6 +461,43 @@ def execute_get_context_details(
             {"current_context": to_fetch, "tenant": state.tenant}
         )
         cache.update(fetched.get("retrieved", {}))
+
+    temp = current_context.get("temp")
+    if temp:
+        creation_session = temp.get("creation_session")
+        evaluation_id = temp.get("evaluation_id")
+        if not creation_session or not evaluation_id:
+            raise ValueError(
+                "current_context['temp'] requires both 'creation_session' and "
+                "'evaluation_id'"
+            )
+
+        # Keyed by (session, evaluation) rather than scenario_id, since the
+        # scenario_id itself is only known once the fetch below returns.
+        cache_key_temp = f"temp {creation_session} {evaluation_id}"
+        if cache_key_temp not in cache:
+            logger.info(
+                f"Fetching temp evaluation data for session {creation_session}, "
+                f"evaluation {evaluation_id}"
+            )
+            cleaned = get_temp_evaluation_data.invoke(
+                {
+                    "tenant": state.tenant,
+                    "creation_session": creation_session,
+                    "evaluation_id": evaluation_id,
+                }
+            )
+            scenario_id = cleaned["scenario_id"]
+            cache[f"scenarios {scenario_id}"] = {**cleaned, "evaluation_data": cleaned}
+            # Remember which scenario_id this (session, evaluation) pair
+            # resolved to, so a repeat call is a cache hit too.
+            cache[cache_key_temp] = {"scenario_id": scenario_id}
+        else:
+            scenario_id = cache[cache_key_temp]["scenario_id"]
+
+        scenarios_in_context = current_context.setdefault("scenarios", [])
+        if scenario_id not in scenarios_in_context:
+            scenarios_in_context.append(scenario_id)
 
     retrieved_context = {
         "retrieved": {

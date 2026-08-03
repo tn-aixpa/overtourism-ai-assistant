@@ -362,6 +362,38 @@ def get_base_scenario(tenant) -> str:
 
 
 @tool
+def get_temp_evaluation_data(
+    tenant: str, creation_session: str, evaluation_id: str
+) -> dict:
+    """
+    Fetch evaluation results for a temporary (session-scoped, not-yet-saved)
+    scenario, given the creation_session and evaluation_id returned earlier
+    by create_temp_scenario.
+
+    Mirrors Step 3 of create_temp_scenario, but as a standalone call for
+    when the temp scenario/evaluation were created in a previous request
+    (e.g. the /agent/tool "summary-temp" pipeline) and only their ids are
+    available now.
+
+    Returns:
+        The cleaned evaluation record (scenario_id, evaluation_id, data),
+        with creation_session attached.
+    """
+    logger.info(
+        f"Entered tool get_temp_evaluation_data for session {creation_session}, "
+        f"evaluation {evaluation_id}"
+    )
+
+    eval_url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/{evaluation_id}/data"
+    raw_data = get_data(eval_url)
+
+    cleaned = clean_scenario(raw_data)
+    cleaned["creation_session"] = creation_session
+
+    return cleaned
+
+
+@tool
 def get_data_from_context(current_context, tenant, cleaned: bool = True):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}

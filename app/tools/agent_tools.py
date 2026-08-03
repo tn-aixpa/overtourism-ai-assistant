@@ -117,7 +117,11 @@ def create_get_context_tool() -> ToolDefinition:
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Retrieve the stored information for the current problem, proposal, or scenario, "
-            "including descriptions, metadata, relationships, and other textual attributes."
+            "including descriptions, metadata, relationships, and other textual attributes. "
+            "Also resolves a temporary (not-yet-saved) scenario/evaluation when "
+            "current_context carries a 'temp' entry with 'creation_session' and "
+            "'evaluation_id' (e.g. the /agent/tool 'summary-temp' pipeline), folding "
+            "its scenario_id into the scenario context like any other scenario."
         ),
         parameters=[],
         output_description="Dictionary with retrieved details for all items in the current context",
