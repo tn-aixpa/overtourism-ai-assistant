@@ -267,6 +267,55 @@ def create_summary_generation_tool() -> ToolDefinition:
     )
 
 
+def create_report_generation_tool() -> ToolDefinition:
+    """Internal-only tool that renders a full PDF report (chapters for the
+    given problems/proposals/scenarios, plus a conclusion when appropriate).
+
+    `enabled=False` for the same reason as create_summary_generation_tool:
+    it's only meant to be invoked explicitly via the /agent/tool
+    'pdf-report' pipeline (see routes.run_selected_tools), not chosen by
+    the ReAct reasoner.
+    """
+    return ToolDefinition(
+        name="report_generation",
+        description=(
+            "Generate a full PDF report covering one or more problems, "
+            "proposals and/or scenarios."
+        ),
+        category=ToolCategory.INTERACTION,
+        long_description=(
+            "Uses the data already retrieved for the given problem(s), "
+            "proposal(s) and/or scenario(s) (fetching it if not already "
+            "cached) to write a structured report — an introduction, one "
+            "chapter per problem, one per proposal, a chapter with each "
+            "scenario's description and evaluation results, and (unless "
+            "the report is just a single standalone scenario) a "
+            "Conclusion chapter summarizing the document — and renders it "
+            "to a PDF file on disk. Internal tool, not exposed to the "
+            "general ReAct tool selection — invoke it directly via the "
+            "/agent/tool 'pdf-report' pipeline."
+        ),
+        parameters=[
+            ToolParameter(
+                name="current_context",
+                description=(
+                    "problems/proposals/scenarios ids to include in the report. "
+                    "If omitted, falls back to the ids already resolved in "
+                    "current_context."
+                ),
+                type="object",
+                required=False,
+            ),
+        ],
+        output_description=(
+            "Confirmation that the report was generated, plus the path to "
+            "the rendered PDF file."
+        ),
+        enabled=False,
+        tags=["interaction", "read-only", "internal"],
+    )
+
+
 def create_new_problem_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_problem",
@@ -475,6 +524,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_analyze_scenario_results_tool(),
         # Internal-only (enabled=False — see create_summary_generation_tool)
         create_summary_generation_tool(),
+        create_report_generation_tool(),
         # Creation
         create_new_problem_tool(),
         create_new_proposal_tool(),

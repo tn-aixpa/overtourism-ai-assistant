@@ -371,6 +371,17 @@ async def run_selected_tools(
             {"tool_name": "get_context_details", "arguments": {}},
             {"tool_name": "summary_generation", "arguments": {}},
         ]
+    elif body.key == "pdf-report":
+        if not body.current_context:
+            raise HTTPException(
+                status_code=400,
+                detail="at least one problem, proposal or scenario has to be specified",
+            )
+        state.cognitive.current_context = body.current_context
+        steps = [
+            {"tool_name": "get_context_details", "arguments": {}},
+            {"tool_name": "report_generation", "arguments": {}},
+        ]
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
 

@@ -67,22 +67,33 @@ def _missing_required_params(tool_def: ToolDefinition, args: Dict[str, Any]) -> 
     return missing
 
 
-def _ensure_scenario_data_cached(
-    state: AgentState, scenario_ids: list
+def _ensure_data_cached(
+    state: AgentState, current_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Make sure `state.cognitive.context_cache` has, for every scenario_id,
-    the base details and evaluation_data. Fetches only what's missing."""
+    """Make sure `state.cognitive.context_cache` has, for every problem_id,
+    proposal_id, and scenario_id in `current_context`, the base details
+    (and, for scenarios only, evaluation_data). Fetches only what's missing."""
     from app.tools.backend_tools import get_data_from_context, get_evaluation_data
 
     cache = state.cognitive.context_cache
 
-    to_fetch = [sid for sid in scenario_ids if f"scenarios {sid}" not in cache]
-    if to_fetch:
+    to_fetch = {
+        kind: [
+            item_id
+            for item_id in current_context.get(kind, [])
+            if f"{kind} {item_id}" not in cache
+        ]
+        for kind in ("problems", "proposals", "scenarios")
+    }
+
+    if any(to_fetch.values()):
         fetched = get_data_from_context.invoke(
-            {"current_context": {"scenarios": to_fetch}, "tenant": state.tenant}
+            {"current_context": to_fetch, "tenant": state.tenant}
         )
         cache.update(fetched.get("retrieved", {}))
 
+    # Evaluation data only applies to scenarios
+    scenario_ids = current_context.get("scenarios", [])
     missing_eval_ids = [
         sid
         for sid in scenario_ids
@@ -97,6 +108,7 @@ def _ensure_scenario_data_cached(
                 cache[key]["evaluation_data"] = eval_data
 
     state.cognitive.context_cache = cache
+    return cache
 
 
 def _trim_tool_results(state: AgentState) -> None:

@@ -37,6 +37,7 @@ class RunSelectedToolsRequest(BaseModel):
     key: str
     steps: list[ToolStep] = Field(default_factory=list)
     scenario_ids: list[str] = Field(default_factory=list)
+    current_context: Optional[Dict[str, List[str]]] = None
     creation_session: Optional[str] = None
     evaluation_id: Optional[str] = None
     stop_on_error: bool = True
