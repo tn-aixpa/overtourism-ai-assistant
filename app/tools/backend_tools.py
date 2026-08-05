@@ -504,7 +504,7 @@ def create_new_proposal(
 
     url = f"{BACKEND_URL}{tenant}/proposals/"
 
-    body = {"name": name, "description": description, "extras": {}}
+    body = {"problem_id": problem_id, "name": name, "description": description, "extras": {}}
     if resources:
         body["extras"]["resources"] = resources
     if context:
@@ -513,7 +513,7 @@ def create_new_proposal(
         body["extras"]["impact"] = impact
     # TODO: add other fields
 
-    return post_data(url, json=body, params={"problem_id": problem_id})
+    return post_data(url, json=body)
 
 
 @tool

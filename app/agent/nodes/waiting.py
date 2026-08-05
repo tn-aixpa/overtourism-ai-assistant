@@ -200,11 +200,14 @@ def wait_user_input_node(state: AgentState):
         state.user_input = None
         return Command(update=state, goto="tool_executor")
 
-    # Ambiguous or new intent — let the reasoner re-interpret from a fresh turn
-    logger.info("Ambiguous reply — routing back to initialize_tools")
-    state.cognitive.tool_confirmation_needed = False
-    state.cognitive.selected_tool = None
-    state.cognitive.tool_arguments = {}
-    state.cognitive.pending_thought = ""
-    state.waiting_for = None
-    return Command(update=state, goto="initialize_tools")
+    # Ambiguous reply: keep the pending confirmation alive, ask for a clear
+    # yes/no answer, and do not discard the tool or its arguments.
+    logger.info("Ambiguous reply — asking for clarification without clearing pending confirmation")
+    state.cognitive.messages_to_include = [
+        "I’m not sure whether you want me to proceed or cancel. Please reply with a clear confirmation such as 'yes' to proceed or 'no' to cancel."
+    ]
+    state.waiting_for = _CONFIRMATION_WAITING_FOR.get(
+        state.cognitive.selected_tool, AgentState.WaitingFor.CONTEXT_INPUT
+    )
+    state.user_input = None
+    return Command(update=state, goto="generate_output_message")

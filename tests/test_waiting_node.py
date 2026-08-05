@@ -225,23 +225,23 @@ class TestWaitUserInputNode:
         # The pending tool itself is preserved so tool_executor can run it.
         assert fresh_state.cognitive.selected_tool == "create_new_problem"
 
-    def test_ambiguous_reply_routes_back_to_initialize_tools(
+    def test_ambiguous_reply_asks_for_clarification_and_keeps_pending_action(
         self, fresh_state: AgentState
     ):
         fresh_state.cognitive.selected_tool = "create_new_problem"
         fresh_state.cognitive.tool_arguments = {"name": "N"}
+        fresh_state.cognitive.tool_confirmation_needed = True
         fresh_state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
         fresh_state.user_input = "actually, let's talk about something else"
 
         result = wait_user_input_node(fresh_state)
 
-        assert result.goto == "initialize_tools"
-        assert fresh_state.cognitive.selected_tool is None
-        assert fresh_state.cognitive.tool_arguments == {}
-        assert fresh_state.waiting_for is None
-        # NOTE: unlike cancellation, user_input is intentionally left as-is
-        # here so initialize_tools can re-interpret it as a fresh turn.
-        assert fresh_state.user_input == "actually, let's talk about something else"
+        assert result.goto == "generate_output_message"
+        assert fresh_state.cognitive.selected_tool == "create_new_problem"
+        assert fresh_state.cognitive.tool_arguments == {"name": "N"}
+        assert fresh_state.waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION
+        assert fresh_state.cognitive.tool_confirmation_needed is True
+        assert "clarify" in fresh_state.cognitive.messages_to_include[0].lower()
 
     def test_user_input_stripped_of_whitespace(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_problem"
