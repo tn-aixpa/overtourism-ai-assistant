@@ -158,6 +158,10 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_configuration_parameters": execute_get_configuration_parameters,
         # Interaction
         "analyze_scenario_results": execute_analyze_scenario_results,
+        "comparison_plot": execute_comparison_plot,
+        "kpi_comparison": execute_kpi_comparison,
+        "show_capacity_plot": execute_show_capacity_plot,
+        "show_load_plot": execute_show_load_plot,
         # Internal-only (see create_summary_generation_tool)
         "summary_generation": execute_summary_generation,
         "report_generation": execute_report_generation,
@@ -284,6 +288,17 @@ def tool_executor_node(state: AgentState) -> Command:
         if not result["success"]:
             state.cognitive.error_details = result.get("error", "Unknown error")
             return Command(update=state, goto="error")
+
+        tool_output = (
+            result.get("output", {}) if isinstance(result.get("output"), dict) else {}
+        )
+        assistant_actions = tool_output.get("assistant_action_data")
+        if assistant_actions:
+            existing = state.assistant_action_data or []
+            if isinstance(assistant_actions, list):
+                state.assistant_action_data = existing + assistant_actions
+            else:
+                state.assistant_action_data = existing + [assistant_actions]
 
         # The object this tool just edited/deleted may still be cached from
         # an earlier get_context_details — evict it so any later lookup
@@ -732,13 +747,189 @@ def execute_analyze_scenario_results(
 
     logger.info(f"Executing analyze_scenario_results tool with query: {query}")
 
-    scenario_ids = state.cognitive.current_context.get("scenarios", [])
     _ensure_data_cached(state, state.cognitive.current_context)
-    # Resolve the widget BEFORE generating the text answer, so the LLM can be
-    # told whether a chart is being shown and doesn't contradict it.
-    widget_hint = _resolve_assistant_widget(state, scenario_ids)
-    answer = analyze_scenario(state, query, widget_hint=widget_hint)
+    answer = analyze_scenario(state, query)
     return {"success": True, "message": answer}
+
+
+def _make_widget_result(
+    response: str, widget_name: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    action = {
+        "type": "SHOW_WIDGET",
+        "payload": {"widgetName": widget_name, "data": payload},
+    }
+    return {"success": True, "response": response, "assistant_action_data": [action]}
+
+
+def execute_comparison_plot(
+    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
+) -> Dict[str, Any]:
+    """Build the histogram comparison widget using backend data or safe mocks."""
+    logger.info("Executing comparison_plot tool")
+    data = payload or {
+        "labelLeft": "Scenario Attuale",
+        "labelRight": "Scenario Prossimo",
+        "dataLeft": {
+            "Overtourism": {"level": 0.70, "confidence": 0},
+            "Soddisfazione": {"level": 0.94, "confidence": 0},
+        },
+        "dataRight": {
+            "Overtourism": {"level": 0.86, "confidence": 0},
+            "Soddisfazione": {"level": 0.96, "confidence": 0},
+        },
+    }
+    return _make_widget_result(
+        "Ecco il confronto tra gli scenari:",
+        "histogramComparison",
+        {"payload": {"loading": False, **data}},
+    )
+
+
+def execute_kpi_comparison(
+    state: AgentState,
+    kpis_main: Dict[str, Any] | None = None,
+    kpis_compare: Dict[str, Any] | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Build the KPI comparison widget using backend data or safe mocks."""
+    logger.info("Executing kpi_comparison tool")
+    comparison = {
+        "kpisMain": kpis_main
+        or {
+            "overtourism_level": {"level": 88, "confidence": 2},
+            "constraint_level_beach": {"level": 95, "confidence": 1},
+            "Soddisfazione": {"level": 65, "confidence": 3},
+        },
+        "kpisCompare": kpis_compare
+        or {
+            "overtourism_level": {"level": 65, "confidence": 3},
+            "constraint_level_beach": {"level": 70, "confidence": 2},
+            "Soddisfazione": {"level": 88, "confidence": 3},
+        },
+    }
+    return _make_widget_result(
+        "Ecco i KPI comparati tra i due scenari:",
+        "indexComparison",
+        comparison,
+    )
+
+
+def execute_show_load_plot(
+    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
+) -> Dict[str, Any]:
+    """Build a load plot widget using backend data or safe mocks."""
+    logger.info("Executing show_load_plot tool")
+    data = payload or {
+        "type": "load",
+        "subsystem": "default",
+        "data": {
+            "curves": [],
+            "points": [
+                {
+                    "name": "Presenze",
+                    "x": [0, 1, 2, 3],
+                    "y": [100, 200, 400, 800],
+                    "customdata": [10, 20, 50, 95],
+                    "marker": {"color": [0.1, 0.2, 0.5, 0.95], "size": 8},
+                    "mode": "markers",
+                    "type": "scatter",
+                }
+            ],
+            "kpis": {
+                "uncertainty": [
+                    {
+                        "usage": 100,
+                        "usage_uncertainty": 0.1,
+                        "tourists": 100,
+                        "excursionists": 50,
+                        "index": 0.1,
+                    },
+                    {
+                        "usage": 200,
+                        "usage_uncertainty": 0.2,
+                        "tourists": 150,
+                        "excursionists": 80,
+                        "index": 0.2,
+                    },
+                    {
+                        "usage": 400,
+                        "usage_uncertainty": 0.5,
+                        "tourists": 200,
+                        "excursionists": 150,
+                        "index": 0.5,
+                    },
+                    {
+                        "usage": 800,
+                        "usage_uncertainty": 0.95,
+                        "tourists": 400,
+                        "excursionists": 300,
+                        "index": 0.95,
+                    },
+                ]
+            },
+            "capacity_mean": 500,
+            "xMax": 4,
+            "yMax": 1000,
+        },
+    }
+    return _make_widget_result(
+        "Ecco il grafico del carico turistico:",
+        "plot",
+        {
+            "payload": {
+                "type": "load",
+                "subsystem": "default",
+                "data": data.get("data", data),
+                "loading": False,
+            }
+        },
+    )
+
+
+def execute_show_capacity_plot(
+    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
+) -> Dict[str, Any]:
+    """Build a capacity (sustainability) plot widget using backend data or mock."""
+    logger.info("Executing show_capacity_plot tool")
+    data = payload or {
+        "type": "capacity",
+        "subsystem": "default",
+        "data": {
+            "curves": [
+                {
+                    "name": "Capacità spiagge",
+                    "x": [0, 500, 1000, 1500],
+                    "y": [2000, 1500, 500, 0],
+                    "color": "rgb(180,4,38)",
+                    "dash": "dash",
+                }
+            ],
+            "points": [
+                {
+                    "name": "Attuale",
+                    "x": [400],
+                    "y": [800],
+                    "color": "red",
+                    "marker": {"size": 10, "color": "blue"},
+                }
+            ],
+            "xMax": 2000,
+            "yMax": 2500,
+        },
+    }
+    return _make_widget_result(
+        "Ecco il grafico di sostenibilità:",
+        "plot",
+        {
+            "payload": {
+                "type": "capacity",
+                "subsystem": "default",
+                "data": data.get("data", data),
+                "loading": False,
+            }
+        },
+    )
 
 
 def execute_summary_generation(

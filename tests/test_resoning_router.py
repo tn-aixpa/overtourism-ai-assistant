@@ -74,6 +74,36 @@ class TestInitializeTools:
         reasoner_module.initialize_tools(fresh_state)
         assert fresh_state.cognitive.enabled_tools == ["a"]
 
+    def test_widget_tools_are_visible_in_standalone_and_hidden_in_integrated_mode(
+        self, fresh_state: AgentState
+    ):
+        for name in [
+            "comparison_plot",
+            "kpi_comparison",
+            "show_capacity_plot",
+            "show_load_plot",
+        ]:
+            register_tool(name)
+
+        fresh_state.integrated_mode = False
+        reasoner_module.initialize_tools(fresh_state)
+        assert {
+            "comparison_plot",
+            "kpi_comparison",
+            "show_capacity_plot",
+            "show_load_plot",
+        } <= set(fresh_state.cognitive.enabled_tools)
+
+        fresh_state.integrated_mode = True
+        fresh_state.cognitive.enabled_tools = ["a"]
+        reasoner_module.initialize_tools(fresh_state)
+        assert not {
+            "comparison_plot",
+            "kpi_comparison",
+            "show_capacity_plot",
+            "show_load_plot",
+        } & set(fresh_state.cognitive.enabled_tools)
+
     def test_resets_scratchpad_and_pending_action_on_fresh_turn(
         self, fresh_state: AgentState
     ):

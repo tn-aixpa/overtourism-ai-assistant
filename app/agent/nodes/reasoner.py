@@ -23,6 +23,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.agent.events import publish_thought
 from app.tools.tool_registry import get_tool_registry, _ensure_tool_registry
+from app.tools.agent_tools import WIDGET_TOOL_NAMES
 from app.prompts.react_reasoning import react_step
 
 logger = logging.getLogger(__name__)
@@ -46,15 +47,28 @@ def initialize_tools(state: AgentState) -> Command:
 
     registry = _ensure_tool_registry()
 
+    # Widget tools are intentionally restricted to standalone mode only.
+    # Set enabled state BEFORE get_context_tools so the registry already
+    # reflects the correct mode when the allowlist is built below.
+    # In integrated mode the route already passed a curated allowlist and we
+    # must not expose them there.
+    for tool_name in WIDGET_TOOL_NAMES:
+        registry.set_tool_enabled(tool_name, not state.integrated_mode)
+
     allowlist = state.cognitive.known_tools or None
     known_tools = registry.get_context_tools(allowlist=allowlist)
     state.cognitive.known_tools = list(known_tools.keys())
 
-    # In non-integrated mode enabled_tools is not pre-set by the route, so
-    # make all known tools available. In integrated mode the route already
-    # wrote the restricted allowlist and we must not overwrite it.
-    if not state.integrated_mode:
-        state.cognitive.enabled_tools = state.cognitive.known_tools
+    if state.integrated_mode:
+        if not state.cognitive.enabled_tools:
+            state.cognitive.enabled_tools = state.cognitive.known_tools
+        state.cognitive.enabled_tools = [
+            name
+            for name in state.cognitive.enabled_tools
+            if name not in WIDGET_TOOL_NAMES
+        ]
+    else:
+        state.cognitive.enabled_tools = list(state.cognitive.known_tools)
 
     logger.info(f"Available tools: {state.cognitive.enabled_tools}")
 

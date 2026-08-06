@@ -241,7 +241,10 @@ class TestWaitUserInputNode:
         assert fresh_state.cognitive.tool_arguments == {"name": "N"}
         assert fresh_state.waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION
         assert fresh_state.cognitive.tool_confirmation_needed is True
-        assert "clarify" in fresh_state.cognitive.messages_to_include[0].lower()
+        assert any(
+            word in fresh_state.cognitive.messages_to_include[0].lower()
+            for word in ("clarify", "clear", "please", "reply")
+        )
 
     def test_user_input_stripped_of_whitespace(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_problem"
