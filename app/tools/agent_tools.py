@@ -250,11 +250,15 @@ def create_comparison_plot_tool() -> ToolDefinition:
         ),
         parameters=[
             ToolParameter(
-                name="payload",
-                description="Comparison data for the two scenarios; if omitted, uses cached data or mock values.",
-                type="object",
+                name="scenario_ids",
+                description=(
+                    "IDs of the two scenarios to compare. If omitted, the tool "
+                    "uses the scenarios already resolved in current_context."
+                ),
+                type="array",
                 required=False,
-            )
+                schema={"items": {"type": "string"}},
+            ),
         ],
         output_description="histogramComparison widget to display in the interface, already formatted for assistant_action_data.",
         enabled=False,
@@ -283,17 +287,15 @@ def create_kpi_comparison_tool() -> ToolDefinition:
         ),
         parameters=[
             ToolParameter(
-                name="kpis_main",
-                description="KPIs of the first scenario; if omitted, uses mock values.",
-                type="object",
+                name="scenario_ids",
+                description=(
+                    "IDs of the two scenarios to compare. If omitted, the tool "
+                    "uses the scenarios already resolved in current_context."
+                ),
+                type="array",
                 required=False,
-            ),
-            ToolParameter(
-                name="kpis_compare",
-                description="KPIs of the second scenario; if omitted, uses mock values.",
-                type="object",
-                required=False,
-            ),
+                schema={"items": {"type": "string"}},
+            )
         ],
         output_description="indexComparison widget to display in the interface, already formatted for assistant_action_data.",
         enabled=False,
@@ -322,10 +324,14 @@ def create_show_load_plot_tool() -> ToolDefinition:
         ),
         parameters=[
             ToolParameter(
-                name="payload",
-                description="Turistic load plot",
-                type="object",
+                name="scenario_ids",
+                description=(
+                    "List containing the ID of the scenarios to analyze. If omitted, the "
+                    "tool uses the scenario already resolved in current_context."
+                ),
+                type="array",
                 required=False,
+                schema={"items": {"type": "string"}},
             )
         ],
         output_description="Turistic load plot widget to display in the interface, already formatted for assistant_action_data.",
@@ -355,10 +361,14 @@ def create_show_capacity_plot_tool() -> ToolDefinition:
         ),
         parameters=[
             ToolParameter(
-                name="payload",
-                description="Sustainability chart data",
-                type="object",
+                name="scenario_ids",
+                description=(
+                    "List containing the ID of the scenarios to analyze. If omitted, the "
+                    "tool uses the scenario already resolved in current_context."
+                ),
+                type="array",
                 required=False,
+                schema={"items": {"type": "string"}},
             )
         ],
         output_description="Sustainability plot widget to display in the interface, already formatted for assistant_action_data.",

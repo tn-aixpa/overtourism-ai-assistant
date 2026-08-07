@@ -24,6 +24,7 @@ from app.tools.tool_schema import ToolDefinition
 from app.prompts.entity_parsing import get_relatet_context_ids
 from app.prompts.scanarios import analyze_scenario, generate_summary
 from app.prompts.report import generate_report
+from app.utils.backend_entities_parsing import _parse_kpis
 
 logger = logging.getLogger(__name__)
 
@@ -602,144 +603,6 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
     return {"widgets": cleaned}
 
 
-# =============================================================================
-# ASSISTANT ACTIONS (frontend SHOW_WIDGET resolution)
-# =============================================================================
-#
-# The frontend used to translate DomainEvents into UIActions itself
-# (ChatbotActionTranslatorService). That logic now lives here: tools that
-# produce something worth visualizing populate state.assistant_action_data
-# with the final UIAction-shaped dicts, which routes.py forwards as-is.
-#
-# TODO(integrated widgets): the standalone chatbot renders SHOW_WIDGET
-# inline; the integrated one currently only executes NAVIGATE/SHOW_TOAST and
-# has nowhere to put an inline widget. Once that's ready, gate widget
-# resolution below on `not state.integrated_mode`.
-
-
-def _show_widget_action(widget_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a SHOW_WIDGET UIAction, matching the frontend's UIAction shape:
-    { type: 'SHOW_WIDGET', payload: { widgetName, data } }."""
-    return {"type": "SHOW_WIDGET", "payload": {"widgetName": widget_name, "data": data}}
-
-
-def _level_confidence(entry: Any) -> Dict[str, float]:
-    """Normalize one sustainability_by_constraint entry into the frontend's
-    {level, confidence} shape. Defensive on purpose, mirroring the same
-    fallback the frontend already applies client-side (see
-    ConfrontoScenariComponent.filterKpis): a bare number becomes
-    {level: number, confidence: 0}."""
-    if isinstance(entry, dict):
-        return {
-            "level": entry.get("level", entry.get("value", 0)) or 0,
-            "confidence": entry.get("confidence", 0) or 0,
-        }
-    return {"level": entry or 0, "confidence": 0}
-
-
-def _scenario_label(state: AgentState, scenario_id: str) -> str:
-    cached = state.cognitive.context_cache.get(f"scenarios {scenario_id}", {})
-    return cached.get("name") or scenario_id
-
-
-def _build_histogram_comparison_widget(
-    state: AgentState, scenario_ids: list
-) -> Dict[str, Any] | None:
-    """SHOW_WIDGET(histogramComparison) from the first two scenarios' cached
-    evaluation data. Matches the frontend's TODO."""
-    left_id, right_id = scenario_ids[0], scenario_ids[1]
-    cache = state.cognitive.context_cache
-    left_constraints = (
-        cache.get(f"scenarios {left_id}", {})
-        .get("evaluation_data", {})
-        .get("data", {})
-        .get("sustainability_by_constraint", {})
-    )
-    right_constraints = (
-        cache.get(f"scenarios {right_id}", {})
-        .get("evaluation_data", {})
-        .get("data", {})
-        .get("sustainability_by_constraint", {})
-    )
-    if not left_constraints and not right_constraints:
-        return None
-
-    return _show_widget_action(
-        "histogramComparison",
-        {
-            "payload": {
-                "dataLeft": {
-                    k: _level_confidence(v) for k, v in left_constraints.items()
-                },
-                "dataRight": {
-                    k: _level_confidence(v) for k, v in right_constraints.items()
-                },
-                "labelLeft": _scenario_label(state, left_id),
-                "labelRight": _scenario_label(state, right_id),
-            },
-            "loading": False,
-        },
-    )
-
-
-def _build_plot_widget(state: AgentState, scenario_id: str) -> Dict[str, Any] | None:
-    """SHOW_WIDGET(plot) from the scenario evaluation data.
-    Matches the frontend's X."""
-    cache = state.cognitive.context_cache
-    logger.info(f"CACHE: {cache}")
-    constraints = (
-        cache.get(f"scenarios {scenario_id}", {})
-        .get("evaluation_data", {})
-        .get("data", {})
-        .get("sustainability_by_constraint", {})
-    )
-    if not constraints:
-        return None
-
-    return _show_widget_action(
-        "plot",
-        {
-            "payload": {
-                "plot": {k: _level_confidence(v) for k, v in constraints.items()},
-            },
-            "loading": False,
-        },
-    )
-
-
-def _resolve_assistant_widget(state: AgentState, scenario_ids: list) -> str | None:
-    """Decide, from how many scenarios are in play, which widget (if any) to
-    attach to this turn's response, and stash it on state.assistant_action_data.
-
-    Heuristic: >=2 scenarios in current_context -> the user is comparing
-    them -> histogramComparison. Exactly 1 -> they want detail on it ->
-    kpiList. This mirrors the same len(scenario_ids) check generate_summary
-    already uses to decide whether to include cross-scenario comparison
-    text, so it stays consistent with how "comparison vs. detail" is
-    inferred elsewhere, without needing a second LLM call just to classify
-    intent.
-
-    Returns a short human-readable hint of what widget will be shown (or
-    None), so the caller can tell analyze_scenario's prompt about it — the
-    LLM answer is otherwise generated with no knowledge that a widget
-    mechanism exists, and will confidently (and wrongly) tell the user no
-    chart can be shown.
-    """
-    logger.info(f"_resolve_assistant_widget {len(scenario_ids)}")
-    if len(scenario_ids) >= 2:
-        action = _build_histogram_comparison_widget(state, scenario_ids)
-        hint = "histogram comparison chart" if action else None
-    elif len(scenario_ids) == 1:
-        action = _build_plot_widget(state, scenario_ids[0])
-        hint = "plot for single scenario" if action else None
-    else:
-        action, hint = None, None
-
-    if action:
-        state.assistant_action_data = [action]
-    return hint
-
-
 def execute_analyze_scenario_results(
     state: AgentState, query: str, **kwargs
 ) -> Dict[str, Any]:
@@ -762,23 +625,61 @@ def _make_widget_result(
     return {"success": True, "response": response, "assistant_action_data": [action]}
 
 
+def _resolve_comparison_scenario_ids(
+    state: AgentState, scenario_ids: list | None
+) -> list:
+    """Resolve the two scenario_ids to compare.
+
+    Mirrors the fallback used elsewhere (see execute_summary_generation):
+    if the reasoner didn't pass scenario_ids explicitly, fall back to the
+    scenarios already resolved in current_context by get_context_ids. Also
+    makes sure their evaluation data is actually cached before the caller
+    tries to read sustainability_by_constraint off of it.
+    """
+    scenario_ids = scenario_ids or state.cognitive.current_context.get("scenarios", [])
+    if not scenario_ids or len(scenario_ids) < 2:
+        raise ValueError(
+            "Two scenario_ids are required for a comparison — none (or only "
+            "one) were provided and none are resolved in current_context. "
+            "Call get_context_ids first to resolve the two scenarios to compare."
+        )
+
+    left_id, right_id = scenario_ids[0], scenario_ids[1]
+    _ensure_data_cached(state, {"scenarios": [left_id, right_id]})
+    return [left_id, right_id]
+
+
+def _scenario_label(state: AgentState, scenario_id: str) -> str:
+    cache = state.cognitive.context_cache
+    return cache.get(f"scenarios {scenario_id}", {}).get("name", scenario_id)
+
+
 def execute_comparison_plot(
-    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
+    state: AgentState,
+    scenario_ids: list | None = None,
+    **kwargs,
 ) -> Dict[str, Any]:
     """Build the histogram comparison widget using backend data or safe mocks."""
     logger.info("Executing comparison_plot tool")
-    data = payload or {
-        "labelLeft": "Scenario Attuale",
-        "labelRight": "Scenario Prossimo",
-        "dataLeft": {
-            "Overtourism": {"level": 0.70, "confidence": 0},
-            "Soddisfazione": {"level": 0.94, "confidence": 0},
-        },
-        "dataRight": {
-            "Overtourism": {"level": 0.86, "confidence": 0},
-            "Soddisfazione": {"level": 0.96, "confidence": 0},
-        },
+
+    try:
+        left_id, right_id = _resolve_comparison_scenario_ids(state, scenario_ids)
+        kpis_main = _parse_kpis(state, left_id)
+        kpis_compare = _parse_kpis(state, right_id)
+    except ValueError:
+        kpis_main = kpis_compare = {}
+        left_id = right_id = None
+
+    if not kpis_main and not kpis_compare:
+        return None
+
+    data = {
+        "labelLeft": _scenario_label(state, left_id),
+        "labelRight": _scenario_label(state, right_id),
+        "dataLeft": kpis_main,
+        "dataRight": kpis_compare,
     }
+
     return _make_widget_result(
         "Ecco il confronto tra gli scenari:",
         "histogramComparison",
@@ -788,28 +689,25 @@ def execute_comparison_plot(
 
 def execute_kpi_comparison(
     state: AgentState,
-    kpis_main: Dict[str, Any] | None = None,
-    kpis_compare: Dict[str, Any] | None = None,
+    scenario_ids: list | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """Build the KPI comparison widget using backend data or safe mocks."""
     logger.info("Executing kpi_comparison tool")
+
+    left_id, right_id = _resolve_comparison_scenario_ids(state, scenario_ids)
+
+    kpis_main = _parse_kpis(state, left_id)
+    kpis_compare = _parse_kpis(state, right_id)
+    if not kpis_main and not kpis_compare:
+        return None
+
     comparison = {
-        "kpisMain": kpis_main
-        or {
-            "overtourism_level": {"level": 88, "confidence": 2},
-            "constraint_level_beach": {"level": 95, "confidence": 1},
-            "Soddisfazione": {"level": 65, "confidence": 3},
-        },
-        "kpisCompare": kpis_compare
-        or {
-            "overtourism_level": {"level": 65, "confidence": 3},
-            "constraint_level_beach": {"level": 70, "confidence": 2},
-            "Soddisfazione": {"level": 88, "confidence": 3},
-        },
+        "kpisMain": kpis_main,
+        "kpisCompare": kpis_compare,
     }
     return _make_widget_result(
-        "Ecco i KPI comparati tra i due scenari:",
+        "Here are the KPI for the two scenarios",
         "indexComparison",
         comparison,
     )

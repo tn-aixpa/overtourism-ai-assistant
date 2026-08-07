@@ -318,13 +318,6 @@ def create_evaluation(tenant: str, scenario_id: str) -> dict:
     return post_data(url, json=body)
 
 
-def get_evaluation_data_by_id(evaluation_id: str, tenant: str) -> dict:
-    """Fetch evaluation results by evaluation_id (internal helper, mirrors
-    the /evaluations/{id}/data call already used by get_evaluation_data)."""
-    url = f"{BACKEND_URL}{tenant}/evaluations/{evaluation_id}/data"
-    return get_data(url)
-
-
 @tool
 def promote_scenario(
     tenant: str,
@@ -504,7 +497,12 @@ def create_new_proposal(
 
     url = f"{BACKEND_URL}{tenant}/proposals/"
 
-    body = {"problem_id": problem_id, "name": name, "description": description, "extras": {}}
+    body = {
+        "problem_id": problem_id,
+        "name": name,
+        "description": description,
+        "extras": {},
+    }
     if resources:
         body["extras"]["resources"] = resources
     if context:
