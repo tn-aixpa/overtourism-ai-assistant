@@ -1424,6 +1424,7 @@ def execute_create_new_scenario(
     state: AgentState,
     name: str = "",
     description: str = "",
+    proposal_id: str = "",
     **kwargs,
 ) -> Dict[str, Any]:
     """Promote the pending temporary scenario (created and evaluated by
@@ -1448,6 +1449,7 @@ def execute_create_new_scenario(
             "scenario_id": pending["scenario_id"],
             "name": name,
             "description": description,
+            "proposal_id": proposal_id,
         }
     )
 

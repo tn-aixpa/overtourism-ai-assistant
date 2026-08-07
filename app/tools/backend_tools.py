@@ -359,6 +359,7 @@ def promote_scenario(
     scenario_id: str,
     name: str,
     description: str | None = None,
+    proposal_id: str = "",
 ) -> dict:
     """
     Promote a temporary scenario (already created and evaluated) into a
@@ -371,7 +372,7 @@ def promote_scenario(
 
     url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/scenarios/{scenario_id}"
 
-    body = {"name": name, "description": description}
+    body = {"name": name, "description": description, "proposal_id": proposal_id}
 
     return post_data(url, json=body)
 

@@ -612,7 +612,9 @@ def create_new_scenario_tool() -> ToolDefinition:
             "scenario and its evaluation must already exist before it can be saved. If no "
             "temporary scenario is available yet, ask the user what values they want to "
             "simulate and call create_new_temp_scenario first, let them review the results, "
-            "and only call this tool once they confirm they want to keep it."
+            "and only call this tool once they confirm they want to keep it. Optionally, the "
+            "scenario can be linked to a proposal via proposal_id — only set this if the user "
+            "mentions or clearly implies an associated proposal; never ask for one otherwise."
         ),
         parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement of successful save with the final scenario_id.",

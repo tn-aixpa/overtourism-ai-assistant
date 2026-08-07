@@ -196,7 +196,8 @@ GUIDELINES (apply in order — stop at the first that matches)
          - Only if the user separately and explicitly asks to save/keep this scenario
            permanently (e.g. "save it", "keep this one", "make it official") — and only once
            create_new_temp_scenario has already run earlier this session — ask for a name (and
-           optionally a description) and then call create_new_scenario per guideline 7.
+           optionally a description, and optionally an associated proposal) and then call
+           create_new_scenario per guideline 7.
          - When you finish after running create_new_temp_scenario, your message MUST explicitly
            tell the user this scenario is temporary and unsaved, and that it may be lost if
            they don't save it — in addition to reporting the evaluation results (sustainability
@@ -210,7 +211,7 @@ GUIDELINES (apply in order — stop at the first that matches)
    Extract only name/description details the user actually typed. Never invent details, never
    suggest your own mitigation ideas or strategies as arguments.
 
-   Every one of these 9 tools needs an id. NEVER type/guess/pattern-match an id string
+   Most of these 9 tools need an id. NEVER type/guess/pattern-match an id string
    yourself. The user almost never knows or types the literal id — they refer to problems,
    proposals, scenarios by name or description (e.g. "the parking problem"). Work it out step
    by step:
@@ -220,7 +221,12 @@ GUIDELINES (apply in order — stop at the first that matches)
         - create_new_proposal, edit_proposal, delete_proposal → a PROBLEM id (parent, or
           edit/delete target's own id — edit/delete only need their own id unless the parent
           is being changed)
-        - create_new_scenario, edit_scenario, delete_scenario → a PROPOSAL id likewise
+        - create_new_scenario → an OPTIONAL PROPOSAL id (parent). Only include it if the user
+          named or clearly implied a proposal to associate the scenario with (e.g. "link it to
+          the parking proposal", or a proposal was the obvious subject of this session) — unlike
+          the other parent ids above, do not go looking for one or ask the user for it if they
+          never mentioned a proposal; leave it out entirely.
+        - edit_scenario, delete_scenario → their own SCENARIO id (the target itself)
         - create_new_problem → no parent id needed
         - edit_problem, delete_problem → the PROBLEM id (the target itself)
      c. If not yet resolved, call the matching list_available_* tool first (skip if already

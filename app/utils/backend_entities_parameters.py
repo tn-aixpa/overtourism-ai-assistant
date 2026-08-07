@@ -116,9 +116,15 @@ SCENARIO_NAME_PARAM = ToolParameter(
 )
 SCENARIO_DESCRIPTION_PARAM = ToolParameter(
     name="description",
-    description="Description of the parameter configuration to simulate.",
+    description="Description of the scenario defined by the current parameter configuratiion.",
     type="string",
     required=True,
+)
+SCENARIO_ASSOCIATED_PROPOSAL_PARAM = ToolParameter(
+    name="proposal_id",
+    description="Proposal to which to link the scenario (later can be also associated to others)",
+    type="string",
+    required=False,
 )
 
 # NOTE: base_scenario_id / values / extras are deliberately NOT parameters of
@@ -129,6 +135,7 @@ SCENARIO_DESCRIPTION_PARAM = ToolParameter(
 SCENARIO_PARAMETERS = [
     SCENARIO_NAME_PARAM,
     SCENARIO_DESCRIPTION_PARAM,
+    SCENARIO_ASSOCIATED_PROPOSAL_PARAM,
 ]
 
 # --- Temp scenario parameters -------------------------------------------
