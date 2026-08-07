@@ -67,7 +67,11 @@ def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
 # free-form extras, etc.) and are almost never needed to *match* an object
 # by name/description — only to inspect it once a specific id is already
 # known. Dropped when condensing list-shaped data for prompt injection.
-_HEAVY_FIELDS = {"extras", "evaluation_data", "related_scenario_ids"}
+# "plot_data" holds the raw per-sample arrays (curves, uncertainty, usage,
+# ...) that back the load/capacity plot widgets — see clean_scenario in
+# app/tools/backend_tools.py. It's only ever meant to be consumed
+# programmatically to build a SHOW_WIDGET payload, never shown to the LLM.
+_HEAVY_FIELDS = {"extras", "evaluation_data", "related_scenario_ids", "plot_data"}
 
 # Any single object's textual fields (name/description/...) get truncated to
 # this many characters when condensing a list for name/intent matching.

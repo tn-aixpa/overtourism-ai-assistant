@@ -327,12 +327,23 @@ def create_show_load_plot_tool() -> ToolDefinition:
                 name="scenario_ids",
                 description=(
                     "List containing the ID of the scenarios to analyze. If omitted, the "
-                    "tool uses the scenario already resolved in current_context."
+                    "tool uses the scenario already resolved in current_context (or, "
+                    "failing that, the most recently previewed temporary scenario)."
                 ),
                 type="array",
                 required=False,
                 schema={"items": {"type": "string"}},
-            )
+            ),
+            ToolParameter(
+                name="subsystem",
+                description=(
+                    "Which constraint/subsystem to plot the load for (e.g. 'parcheggi', "
+                    "'spiaggia', 'alberghi', 'ristoranti'). Defaults to 'default', which "
+                    "plots the overall destination load across all constraints."
+                ),
+                type="string",
+                required=False,
+            ),
         ],
         output_description="Turistic load plot widget to display in the interface, already formatted for assistant_action_data.",
         enabled=False,
@@ -364,12 +375,23 @@ def create_show_capacity_plot_tool() -> ToolDefinition:
                 name="scenario_ids",
                 description=(
                     "List containing the ID of the scenarios to analyze. If omitted, the "
-                    "tool uses the scenario already resolved in current_context."
+                    "tool uses the scenario already resolved in current_context (or, "
+                    "failing that, the most recently previewed temporary scenario)."
                 ),
                 type="array",
                 required=False,
                 schema={"items": {"type": "string"}},
-            )
+            ),
+            ToolParameter(
+                name="subsystem",
+                description=(
+                    "Which constraint/subsystem to plot capacity for (e.g. 'parcheggi', "
+                    "'spiaggia', 'alberghi', 'ristoranti'). Defaults to 'default', which "
+                    "plots every constraint curve together."
+                ),
+                type="string",
+                required=False,
+            ),
         ],
         output_description="Sustainability plot widget to display in the interface, already formatted for assistant_action_data.",
         enabled=False,

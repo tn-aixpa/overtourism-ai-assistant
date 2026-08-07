@@ -713,120 +713,297 @@ def execute_kpi_comparison(
     )
 
 
-def execute_show_load_plot(
-    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
-) -> Dict[str, Any]:
-    """Build a load plot widget using backend data or safe mocks."""
-    logger.info("Executing show_load_plot tool")
-    data = payload or {
-        "type": "load",
-        "subsystem": "default",
-        "data": {
-            "curves": [],
-            "points": [
-                {
-                    "name": "Presenze",
-                    "x": [0, 1, 2, 3],
-                    "y": [100, 200, 400, 800],
-                    "customdata": [10, 20, 50, 95],
-                    "marker": {"color": [0.1, 0.2, 0.5, 0.95], "size": 8},
-                    "mode": "markers",
-                    "type": "scatter",
-                }
-            ],
-            "kpis": {
-                "uncertainty": [
-                    {
-                        "usage": 100,
-                        "usage_uncertainty": 0.1,
-                        "tourists": 100,
-                        "excursionists": 50,
-                        "index": 0.1,
-                    },
-                    {
-                        "usage": 200,
-                        "usage_uncertainty": 0.2,
-                        "tourists": 150,
-                        "excursionists": 80,
-                        "index": 0.2,
-                    },
-                    {
-                        "usage": 400,
-                        "usage_uncertainty": 0.5,
-                        "tourists": 200,
-                        "excursionists": 150,
-                        "index": 0.5,
-                    },
-                    {
-                        "usage": 800,
-                        "usage_uncertainty": 0.95,
-                        "tourists": 400,
-                        "excursionists": 300,
-                        "index": 0.95,
-                    },
-                ]
+def _resolve_single_scenario_id(
+    state: AgentState, scenario_ids: list | None
+) -> str | None:
+    """Resolve the one scenario_id a load/capacity plot should be built for.
+
+    Order of preference: an explicit scenario_ids[0] argument, then
+    whatever get_context_ids already resolved in current_context, then (so
+    plots also work for a just-previewed, not-yet-saved scenario) the
+    pending temp scenario's id.
+    """
+    if scenario_ids:
+        return scenario_ids[0]
+
+    context_scenarios = state.cognitive.current_context.get("scenarios", [])
+    if context_scenarios:
+        return context_scenarios[0]
+
+    pending = state.cognitive.pending_temp_scenario
+    if pending:
+        return pending.get("scenario_id")
+
+    return None
+
+
+def _get_plot_data_for_scenario(
+    state: AgentState, scenario_id: str
+) -> Dict[str, Any] | None:
+    """Fetch (and cache) the raw plot_data for a scenario_id, transparently
+    handling both permanent scenarios and the currently pending temp
+    scenario (see execute_create_new_temp_scenario).
+
+    Returns None if the scenario can't be resolved to any evaluation data —
+    callers fall back to a mock in that case rather than failing outright.
+
+    NOTE: plot_data is intentionally never merged into anything returned by
+    get_context_details/get_data_from_context, and is tagged as a heavy
+    field in app/utils/common.py — it's only meant to be consumed here to
+    build a widget payload, never shown to the LLM directly (see
+    clean_scenario in app/tools/backend_tools.py).
+    """
+    from app.tools.backend_tools import get_temp_evaluation_data
+
+    cache = state.cognitive.context_cache
+    pending = state.cognitive.pending_temp_scenario
+
+    if pending and pending.get("scenario_id") == scenario_id:
+        cache_key = f"scenarios {scenario_id}"
+        cached = cache.get(cache_key, {})
+        plot_data = cached.get("plot_data") or cached.get("evaluation_data", {}).get(
+            "plot_data"
+        )
+        if plot_data:
+            return plot_data
+
+        logger.info(f"Fetching temp evaluation data for plot, scenario {scenario_id}")
+        cleaned = get_temp_evaluation_data.invoke(
+            {
+                "tenant": state.tenant,
+                "creation_session": pending["creation_session"],
+                "evaluation_id": pending["evaluation_id"],
+            }
+        )
+        plot_data = cleaned.get("plot_data")
+        # Cache it so a second plot request this turn (e.g. show_load_plot
+        # then show_capacity_plot) doesn't refetch.
+        cache.setdefault(cache_key, {}).update(cleaned)
+        return plot_data
+
+    # Permanent scenario: warm the shared cache the same way kpi_comparison
+    # does, then read the plot_data that clean_scenario now attaches
+    # alongside the small KPI "data" dict.
+    _ensure_data_cached(state, {"scenarios": [scenario_id]})
+    cached = cache.get(f"scenarios {scenario_id}", {})
+    return cached.get("evaluation_data", {}).get("plot_data")
+
+
+_LOAD_PLOT_MOCK = {
+    "curves": [],
+    "points": [
+        {
+            "name": "Presenze",
+            "x": [0, 1, 2, 3],
+            "y": [100, 200, 400, 800],
+            "customdata": [10, 20, 50, 95],
+            "marker": {"color": [0.1, 0.2, 0.5, 0.95], "size": 8},
+            "mode": "markers",
+            "type": "scatter",
+        }
+    ],
+    "kpis": {
+        "uncertainty": [
+            {
+                "usage": 100,
+                "usage_uncertainty": 0.1,
+                "tourists": 100,
+                "excursionists": 50,
+                "index": 0.1,
             },
-            "capacity_mean": 500,
-            "xMax": 4,
-            "yMax": 1000,
+            {
+                "usage": 200,
+                "usage_uncertainty": 0.2,
+                "tourists": 150,
+                "excursionists": 80,
+                "index": 0.2,
+            },
+            {
+                "usage": 400,
+                "usage_uncertainty": 0.5,
+                "tourists": 200,
+                "excursionists": 150,
+                "index": 0.5,
+            },
+            {
+                "usage": 800,
+                "usage_uncertainty": 0.95,
+                "tourists": 400,
+                "excursionists": 300,
+                "index": 0.95,
+            },
+        ]
+    },
+    "capacity_mean": 500,
+    "xMax": 4,
+    "yMax": 1000,
+}
+
+_CAPACITY_PLOT_MOCK = {
+    "curves": [
+        {
+            "name": "Capacità spiagge",
+            "x": [0, 500, 1000, 1500],
+            "y": [2000, 1500, 500, 0],
+            "color": "rgb(180,4,38)",
+            "dash": "dash",
+        }
+    ],
+    "points": [
+        {
+            "name": "Attuale",
+            "x": [400],
+            "y": [800],
+            "color": "red",
+            "marker": {"size": 10, "color": "blue"},
+        }
+    ],
+    "xMax": 2000,
+    "yMax": 2500,
+}
+
+
+def _make_plot_widget_result(
+    response: str,
+    plot_type: str,
+    subsystem: str,
+    plot_payload: Dict[str, Any],
+    chart_summary: list | None,
+) -> Dict[str, Any]:
+    """Like _make_widget_result, but for the "plot" widget specifically.
+
+    `plot_type` must be the frontend's own vocabulary — "mono" (load plot)
+    or "bi" (capacity plot) — not the tool names ("load"/"capacity"), since
+    that's what the widget switches its renderer on.
+
+    The envelope shape matters and must match exactly what the frontend
+    widget expects:
+        data: { payload: { type, subsystem, data }, loading }
+    "loading" is a SIBLING of "payload", not nested inside it — nesting it
+    inside "payload" (as this used to) leaves the widget without a
+    top-level "loading" flag, which is why the constraint curves rendered
+    but the points didn't: whatever reads data.loading to know the plot is
+    ready never found it there.
+
+    Field order matters too: "response" and "chart_summary" (small, always
+    kept) are set before "assistant_action_data" (which nests the full
+    curves/points arrays). build_prior_results_block's truncation
+    (app/utils/common.py) keeps whole dict keys in insertion order until it
+    runs out of budget, so this ordering makes sure the compact, LLM-useful
+    fields survive intact and the heavy widget payload is what gets
+    dropped/truncated first — keeping this tool's real (potentially large)
+    data out of the reasoner's prompt without needing a special case there.
+    """
+    action = {
+        "type": "SHOW_WIDGET",
+        "payload": {
+            "widgetName": "plot",
+            "data": {
+                "payload": {
+                    "type": plot_type,
+                    "subsystem": subsystem,
+                    "data": plot_payload,
+                },
+                "loading": False,
+            },
         },
     }
-    return _make_widget_result(
+    result: Dict[str, Any] = {"success": True, "response": response}
+    if chart_summary is not None:
+        result["chart_summary"] = chart_summary
+    result["assistant_action_data"] = [action]
+    return result
+
+
+# Frontend widget vocabulary for the plot "type" field — deliberately
+# different from the tool names (show_load_plot / show_capacity_plot),
+# mirroring uiState.monoDimensionale ? 'mono' : 'bi' in plot.service.ts.
+_MONO_PLOT_TYPE = "mono"
+_BI_PLOT_TYPE = "bi"
+
+
+def execute_show_load_plot(
+    state: AgentState,
+    scenario_ids: list | None = None,
+    subsystem: str = "default",
+    payload: Dict[str, Any] | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Build the tourist-load plot widget for a single scenario, from real
+    backend evaluation data when available (falling back to a mock only if
+    the scenario/evaluation data can't be resolved)."""
+    logger.info("Executing show_load_plot tool")
+
+    if payload is not None:
+        plot_payload = payload.get("data", payload)
+        chart_summary = None
+    else:
+        scenario_id = _resolve_single_scenario_id(state, scenario_ids)
+        raw_plot_data = (
+            _get_plot_data_for_scenario(state, scenario_id) if scenario_id else None
+        )
+
+        if raw_plot_data:
+            from app.utils.backend_entities_parsing import (
+                build_load_plot_data,
+                summarize_plot,
+            )
+
+            plot_payload = build_load_plot_data(raw_plot_data, subsystem)
+            chart_summary = summarize_plot(plot_payload["points"], "load")
+        else:
+            plot_payload = _LOAD_PLOT_MOCK
+            chart_summary = None
+
+    return _make_plot_widget_result(
         "Ecco il grafico del carico turistico:",
-        "plot",
-        {
-            "payload": {
-                "type": "load",
-                "subsystem": "default",
-                "data": data.get("data", data),
-                "loading": False,
-            }
-        },
+        _MONO_PLOT_TYPE,
+        subsystem,
+        plot_payload,
+        chart_summary,
     )
 
 
 def execute_show_capacity_plot(
-    state: AgentState, payload: Dict[str, Any] | None = None, **kwargs
+    state: AgentState,
+    scenario_ids: list | None = None,
+    subsystem: str = "default",
+    payload: Dict[str, Any] | None = None,
+    **kwargs,
 ) -> Dict[str, Any]:
-    """Build a capacity (sustainability) plot widget using backend data or mock."""
+    """Build the capacity (sustainability) plot widget for a single
+    scenario, from real backend evaluation data when available (falling
+    back to a mock only if the scenario/evaluation data can't be
+    resolved)."""
     logger.info("Executing show_capacity_plot tool")
-    data = payload or {
-        "type": "capacity",
-        "subsystem": "default",
-        "data": {
-            "curves": [
-                {
-                    "name": "Capacità spiagge",
-                    "x": [0, 500, 1000, 1500],
-                    "y": [2000, 1500, 500, 0],
-                    "color": "rgb(180,4,38)",
-                    "dash": "dash",
-                }
-            ],
-            "points": [
-                {
-                    "name": "Attuale",
-                    "x": [400],
-                    "y": [800],
-                    "color": "red",
-                    "marker": {"size": 10, "color": "blue"},
-                }
-            ],
-            "xMax": 2000,
-            "yMax": 2500,
-        },
-    }
-    return _make_widget_result(
+
+    if payload is not None:
+        plot_payload = payload.get("data", payload)
+        chart_summary = None
+    else:
+        scenario_id = _resolve_single_scenario_id(state, scenario_ids)
+        raw_plot_data = (
+            _get_plot_data_for_scenario(state, scenario_id) if scenario_id else None
+        )
+
+        if raw_plot_data:
+            from app.utils.backend_entities_parsing import (
+                build_capacity_plot_data,
+                summarize_plot,
+            )
+
+            plot_payload = build_capacity_plot_data(raw_plot_data, subsystem)
+            chart_summary = summarize_plot(plot_payload["curves"], "capacity")
+        else:
+            plot_payload = _CAPACITY_PLOT_MOCK
+            chart_summary = None
+
+    return _make_plot_widget_result(
         "Ecco il grafico di sostenibilità:",
-        "plot",
-        {
-            "payload": {
-                "type": "capacity",
-                "subsystem": "default",
-                "data": data.get("data", data),
-                "loading": False,
-            }
-        },
+        _BI_PLOT_TYPE,
+        subsystem,
+        plot_payload,
+        chart_summary,
     )
 
 

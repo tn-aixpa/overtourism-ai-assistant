@@ -70,15 +70,49 @@ def delete_data(url, headers=None, params=None):
 
 
 def clean_scenario(raw_data):
+    """Strip a raw `.../evaluations/{id}/data` backend payload down to what
+    the rest of the app needs, split into two buckets:
+
+    - "data": the tiny sustainability/KPI summary (used by _parse_kpis for
+      the histogramComparison / indexComparison widgets). Unchanged from
+      before — anything reading `["data"]` keeps working exactly as-is.
+    - "plot_data": the additional raw fields needed to build the load and
+      capacity plots (constraint curves, per-sample uncertainty/usage,
+      capacity thresholds, x/y ranges). This used to be discarded entirely,
+      which is why show_load_plot/show_capacity_plot could only ever
+      return mocks.
+
+    IMPORTANT: "plot_data" is intentionally kept separate from "data" and
+    is NEVER meant to be dumped wholesale into an LLM prompt — it can hold
+    hundreds of sample points. Callers must only use it to build a widget
+    payload (sent straight to the frontend) or a small derived summary, the
+    same way `_HEAVY_FIELDS` in app/utils/common.py keeps other bulky
+    backend fields (extras, evaluation_data, ...) out of prompt injection.
+    """
+    data = raw_data["data"]
     return {
         "scenario_id": raw_data["scenario_id"],
         "evaluation_id": raw_data["evaluation_id"],
         "data": {
             # "sustainable_area": ev["data"]["sustainable_area"],
-            "sustainability_index": raw_data["data"]["sustainability_index"],
-            "sustainability_by_constraint": raw_data["data"][
-                "sustainability_by_constraint"
-            ],
+            "sustainability_index": data["sustainability_index"],
+            "sustainability_by_constraint": data["sustainability_by_constraint"],
+        },
+        "plot_data": {
+            "constraint_curves": data.get("constraint_curves", {}) or {},
+            "uncertainty": data.get("uncertainty", []) or [],
+            "uncertainty_by_constraint": data.get("uncertainty_by_constraint", {})
+            or {},
+            "usage": data.get("usage", []) or [],
+            "usage_by_constraint": data.get("usage_by_constraint", {}) or {},
+            "sample_x": data.get("sample_x", []) or [],
+            "sample_y": data.get("sample_y", []) or [],
+            "capacity_mean": data.get("capacity_mean"),
+            "capacity_mean_by_constraint": data.get("capacity_mean_by_constraint", {})
+            or {},
+            "x_max": data.get("x_max"),
+            "y_max": data.get("y_max"),
+            "kpis": data.get("kpis", {}) or {},
         },
     }
 
