@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Prices are USD per 1M tokens.
 MODEL_PRICING = {
     "claude-haiku-4-5": {
         "input": 0.80,
@@ -16,13 +17,44 @@ MODEL_PRICING = {
         "input": 3.00,
         "output": 15.00,
     },
+    # --- Azure GPT models -------------------------------------------------
+    # TODO: these are PLACEHOLDERS (0.0). Replace with the actual per-1M-token
+    # prices from your Azure pricing agreement/invoice before relying on the
+    # cost figures for these models — as-is they will log $0.00 and silently
+    # understate spend.
+    "gpt-5.6-terra": {
+        "input": 0.0,
+        "output": 0.0,
+    },
+    "gpt-5.6-luna": {
+        "input": 0.0,
+        "output": 0.0,
+    },
+    "gpt-5-mini": {
+        "input": 0.0,
+        "output": 0.0,
+    },
+    "model-router": {
+        "input": 0.0,
+        "output": 0.0,
+    },
 }
 
 TOKEN_LOG_FILE = "logs/tokens_usage.csv"
 
 
 def _log_costs(input_tokens, output_tokens, model, user_id):
-    pricing = MODEL_PRICING[model]
+    pricing = MODEL_PRICING.get(model)
+
+    if pricing is None:
+        # Don't crash the request just because pricing metadata is missing
+        # (e.g. a new/renamed deployment) — log a visible warning and record
+        # cost as 0 so usage tracking keeps working.
+        logger.warning(
+            f"No pricing entry for model '{model}' — logging cost as 0.0. "
+            f"Add it to MODEL_PRICING in {__name__}."
+        )
+        pricing = {"input": 0.0, "output": 0.0}
 
     input_cost = input_tokens * pricing["input"] / 1_000_000
     output_cost = output_tokens * pricing["output"] / 1_000_000
