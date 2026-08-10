@@ -7,6 +7,34 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 
+def _resolve_proposal_name(state: AgentState, proposal_id: str) -> str:
+    """Look up a proposal's display name for the confirmation recap, so the
+    user sees the name they typed rather than the raw proposal_id. Falls
+    back to the raw id if the proposal hasn't been fetched/listed yet this
+    session (e.g. the id was typed explicitly rather than resolved from a
+    prior list_available_proposals call)."""
+    if not proposal_id:
+        return proposal_id
+
+    cached = state.cognitive.context_cache.get(f"proposals {proposal_id}", {})
+    if cached.get("name"):
+        return cached["name"]
+
+    for key, value in state.cognitive.tool_results.items():
+        if key == "list_available_proposals" or key.startswith(
+            "list_available_proposals__"
+        ):
+            if isinstance(value, list):
+                for item in value:
+                    if (
+                        isinstance(item, dict)
+                        and item.get("proposal_id") == proposal_id
+                    ):
+                        return item.get("name", proposal_id)
+
+    return proposal_id
+
+
 def _wait_instructions(state: AgentState) -> str:
     """Generate confirmation message for the pending tool, recapping every
     piece of data that is about to be submitted."""
@@ -32,6 +60,9 @@ def _wait_instructions(state: AgentState) -> str:
             pending_values = (state.cognitive.pending_temp_scenario or {}).get("values")
             if pending_values:
                 fields["values"] = pending_values
+            proposal_id = fields.pop("proposal_id", None)
+            if proposal_id:
+                fields["proposal"] = _resolve_proposal_name(state, proposal_id)
         return (
             "Before I submit this, please confirm the details below are correct:\n"
             f"{_format_fields(fields)}\n\nShall I proceed?"
@@ -202,7 +233,9 @@ def wait_user_input_node(state: AgentState):
 
     # Ambiguous reply: keep the pending confirmation alive, ask for a clear
     # yes/no answer, and do not discard the tool or its arguments.
-    logger.info("Ambiguous reply — asking for clarification without clearing pending confirmation")
+    logger.info(
+        "Ambiguous reply — asking for clarification without clearing pending confirmation"
+    )
     state.cognitive.messages_to_include = [
         "I’m not sure whether you want me to proceed or cancel. Please reply with a clear confirmation such as 'yes' to proceed or 'no' to cancel."
     ]
