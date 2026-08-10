@@ -111,6 +111,6 @@ Glossary definitions:
 Scenario evaluation data:
 {context_block}
 
-Respond with ONLY the HTML fragment above (h6/p, h6/p, h6/div>ul>li), filled in, following every formatting rule exactly. Do not add a document wrapper, markdown code fences, or any explanatory text before or after."""
+Respond with ONLY the HTML fragment above (h6/p, h6/p, h6/p>ul>li), filled in, following every formatting rule exactly. Do not add a document wrapper, markdown code fences, or any explanatory text before or after."""
 
     return llm_interaction(state, prompt, lightweight_llm=True)
