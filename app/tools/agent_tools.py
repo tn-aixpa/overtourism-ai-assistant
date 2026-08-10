@@ -127,8 +127,8 @@ def create_get_context_tool() -> ToolDefinition:
             "including descriptions, metadata, relationships, and other textual attributes. "
             "Also resolves a temporary (not-yet-saved) scenario/evaluation when "
             "current_context carries a 'temp' entry with 'creation_session' and "
-            "'evaluation_id' (e.g. the /agent/tool 'summary' pipeline), folding "
-            "its scenario_id into the scenario context like any other scenario."
+            "'evaluation_id' (e.g. a /agent/tool 'summary' entry), folding its scenario_id "
+            "into the scenario context like any other scenario."
         ),
         parameters=[],
         output_description="Dictionary with retrieved details for all items in the current context",
@@ -685,10 +685,59 @@ def create_lookup_glossary_tool() -> ToolDefinition:
     )
 
 
+def create_lookup_territorial_index_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="lookup_territorial_index",
+        description=(
+            "Look up the territorial indices (indici territoriali) reference "
+            "documentation: what a Fenomeno, Indice, combinatore, or macro "
+            "area is, and the definition, formula, and source data for each "
+            "available index (e.g. indice di ricettività, di turisticità)."
+        ),
+        category=ToolCategory.UTILITY,
+        long_description=(
+            "Searches 'indici territoriali.md', the canonical documentation "
+            "for the territorial-indices framework, parsed fresh on every "
+            "call so edits to the file are always reflected. Without a "
+            "query, returns the full document — framework overview, the "
+            "Fenomeno/Indice/combinatore/macro area glossary, and every "
+            "currently available index — which is enough to answer broad "
+            "questions like 'what indices are available' or 'what is an "
+            "index'. With a query, returns only the matching section(s) "
+            "verbatim, including the exact formula and source "
+            "columns/aggregation/resolution used, so nothing about the "
+            "calculation is paraphrased away. "
+            "Call this whenever the user asks what territorial indices "
+            "exist, what a specific index means or how it's calculated, or "
+            "what a core framework concept (Fenomeno, Indice, combinatore, "
+            "macro area) means."
+        ),
+        parameters=[
+            ToolParameter(
+                name="query",
+                description=(
+                    "Optional keyword(s) to search for, e.g. 'ricettività', "
+                    "'turisticità', 'fenomeno', 'combinatore', 'macro area'. "
+                    "Leave empty (or omit) to get the full documentation, "
+                    "e.g. for 'what indices are available'."
+                ),
+                type="string",
+                required=False,
+            ),
+        ],
+        output_description=(
+            "Either the full territorial-indices document, or the matching "
+            "section(s) with definition, formula, and source data."
+        ),
+        tags=["data", "read-only", "glossary", "utility", "territorial-index"],
+    )
+
+
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         # Utility
         create_lookup_glossary_tool(),
+        create_lookup_territorial_index_tool(),
         create_get_system_capabilities_tool(),
         # Data retrieval
         create_list_available_problems_tool(),
