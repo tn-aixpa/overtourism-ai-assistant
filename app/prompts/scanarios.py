@@ -96,10 +96,10 @@ evaluation data below. Also mention index_diffs if present (what changed from th
 </p>
 
 <h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati dettagliati</h6>
-<div _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
+<p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
 [fill in: a <ul class="mb-0"> with one <li> per sustainability constraint found in the evaluation data below,
 each starting with the constraint name in <strong>, followed by its value(s) as percentages. {comparison_instruction}]
-</div>
+</p>
 
 Use ONLY the data provided below. If some data is missing or was truncated for
 length, say so explicitly rather than inferring or speculating. Be concise,
