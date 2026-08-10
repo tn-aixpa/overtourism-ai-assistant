@@ -400,7 +400,7 @@ def get_temp_evaluation_data(
 
     Mirrors Step 3 of create_temp_scenario, but as a standalone call for
     when the temp scenario/evaluation were created in a previous request
-    (e.g. the /agent/tool "summary-temp" pipeline) and only their ids are
+    (e.g. the /agent/tool "summary" pipeline) and only their ids are
     available now.
 
     Returns:

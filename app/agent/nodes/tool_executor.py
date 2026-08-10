@@ -448,7 +448,7 @@ def execute_get_context_details(
     Optionally also resolves a "temp" entry in current_context —
     {"creation_session": ..., "evaluation_id": ...} — pointing at a
     temporary, not-yet-saved scenario/evaluation created via
-    create_temp_scenario (e.g. for the /agent/tool "summary-temp"
+    create_temp_scenario (e.g. for the /agent/tool "summary
     pipeline). When present, its data is fetched with a single call to the
     session-scoped evaluation endpoint, cached under "scenarios <id>" just
     like a permanent scenario, and its id is folded into

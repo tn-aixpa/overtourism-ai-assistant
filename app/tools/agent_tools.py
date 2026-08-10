@@ -127,7 +127,7 @@ def create_get_context_tool() -> ToolDefinition:
             "including descriptions, metadata, relationships, and other textual attributes. "
             "Also resolves a temporary (not-yet-saved) scenario/evaluation when "
             "current_context carries a 'temp' entry with 'creation_session' and "
-            "'evaluation_id' (e.g. the /agent/tool 'summary-temp' pipeline), folding "
+            "'evaluation_id' (e.g. the /agent/tool 'summary' pipeline), folding "
             "its scenario_id into the scenario context like any other scenario."
         ),
         parameters=[],

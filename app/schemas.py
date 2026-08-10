@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Optional, List, Dict
+from typing import Any, Literal, Optional, List, Dict
 
 
 class AgentResponse(BaseModel):
@@ -20,21 +20,33 @@ class ToolStep(BaseModel):
 class RunSelectedToolsRequest(BaseModel):
     """Body for POST /agent/tool.
 
-    `key` selects the pipeline flavor (e.g. "summary"). `steps` is the
-    explicit, ordered list of tools to run against a shared, throwaway
-    AgentState (no session_id, nothing persisted). For key == "summary",
-    `scenario_ids` are pre-seeded into that state's current_context so the
-    steps (e.g. summary_generation, optionally preceded by
-    get_context_details) don't need to re-resolve them.
+    `key` selects the pipeline (see `run_selected_tools` in api/routes.py
+    for the step sequence each one runs against a shared, throwaway
+    AgentState — no session_id, nothing persisted):
 
-    For key == "summary-temp" (summarizing a temporary, not-yet-saved
-    scenario/evaluation created via a creation session — see
-    create_temp_scenario), `creation_session` and `evaluation_id` are
-    pre-seeded into that state's current_context under the "temp" key so
-    get_context_details can fetch the temporary evaluation data directly.
+    - "summary": runs get_context_details -> summary_generation.
+      `current_context` seeds that state's current_context so the steps
+      don't need to re-resolve it. It normally holds id lists, e.g.
+      {"scenarios": ["id1", "id2"]}. It may also carry a "temp" entry —
+      {"creation_session": ..., "evaluation_id": ...} — identifying a
+      temporary, not-yet-saved scenario/evaluation created via a creation
+      session (see create_temp_scenario); when present,
+      get_context_details fetches that temporary evaluation data directly
+      and folds its resolved scenario id into current_context["scenarios"].
+    - "pdf-report": runs get_context_details -> report_generation, seeded
+      the same way via `current_context` (without "temp" support).
+
+    `steps` is currently unused by the route (each key hardcodes its own
+    step sequence) and is reserved for a future explicit/arbitrary
+    pipeline.
     """
 
-    key: str
+    key: Literal["summary", "pdf-report"]
     steps: list[ToolStep] = Field(default_factory=list)
-    current_context: Optional[Dict[str, List[str]]] = None
+    # Values are normally id lists (e.g. "scenarios": ["id1", "id2"]), but
+    # "temp" (only meaningful for key == "summary") holds a nested
+    # {"creation_session": ..., "evaluation_id": ...} dict — see
+    # execute_get_context_details — so this can't be narrowed to
+    # Dict[str, List[str]].
+    current_context: Optional[Dict[str, Any]] = None
     stop_on_error: bool = True
