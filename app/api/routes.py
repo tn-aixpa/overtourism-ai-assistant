@@ -31,6 +31,7 @@ from app.utils.authentication import (
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "true"
 
 router = APIRouter()
 
@@ -103,6 +104,26 @@ async def run_agent_endpoint(
     authorization: str | None = Header(default=None),
     tenant: str = Query(...),
 ):
+    if integrated_mode and DISABLE_INTEGRATED:
+        state = AgentState(
+            session_id=session_id,
+            user_id="system",
+            integrated_mode=True,
+            tenant=tenant,
+        )
+
+        save_state(state)
+
+        result = {
+            "response": "Al momento l'assistente integrato non è disponibile",
+            "session_id": session_id,
+            "assistant_action_data": None,
+        }
+
+        # Whatever mechanism your frontend expects for completion:
+        publish_done(session_id, result)
+
+        return {"session_id": session_id}
 
     # Verify authorization
     if AUTH_ENABLED:
