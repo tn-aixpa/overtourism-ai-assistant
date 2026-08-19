@@ -3,7 +3,7 @@ import logging
 from app.utils.llm import llm_interaction
 from app.agent.state import AgentState
 from app.utils.common import truncate_for_prompt
-from app.utils.terminology import build_terminology_block
+from app.utils.knowledge import build_terminology_block
 
 # Scenario evaluation data is the core content of the report, so give it a
 # much larger budget than the default per-entry cap (DEFAULT_MAX_CHARS_PER_ENTRY,

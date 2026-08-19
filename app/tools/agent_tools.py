@@ -201,6 +201,33 @@ def create_get_configuration_parameters_tool() -> ToolDefinition:
     )
 
 
+def create_get_territorial_index_list_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="get_territorial_index_list",
+        description=(
+            "List the concrete territorial indexes available on the platform (e.g. "
+            "'Indice di ricettività', 'Indice di turisticità'), with a description and "
+            "the years each is available for. Call this whenever the user asks what "
+            "indices/indicators exist, or needs to pick one by name before analyzing it."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches the live list of territorial indexes from the backend. Unlike "
+            "lookup_glossary (static domain vocabulary), this always reflects the "
+            "indexes currently available for the tenant, including which ones support "
+            "variation analysis and the min/max year each one covers. Call this before "
+            "any tool that needs a specific index value/id, whenever the user asks "
+            "'what indices are there' or names an index you haven't seen the id for yet."
+        ),
+        parameters=[],
+        output_description=(
+            "List of indexes, each with its id (value), display label, description, "
+            "whether it supports variation analysis, and its available year range."
+        ),
+        tags=["data", "read-only", "territorial-index", "navigation"],
+    )
+
+
 def create_analyze_scenario_results_tool() -> ToolDefinition:
     return ToolDefinition(
         name="analyze_scenario_results",
@@ -651,9 +678,13 @@ def create_lookup_glossary_tool() -> ToolDefinition:
         name="lookup_glossary",
         description=(
             "Look up definitions, aliases, and relationships for domain terms "
-            "(e.g. 'problem', 'proposal', 'scenario', 'overtourism', 'digital twin'). "
-            "Use this to answer user questions about terminology OR to clarify ambiguous "
-            "intent before selecting another tool."
+            "(e.g. 'problem', 'proposal', 'scenario', 'overtourism', 'digital twin', "
+            "'territorial index'). Use this to answer user questions about terminology "
+            "or to clarify ambiguous intent before selecting another tool. To list the "
+            "concrete, individual territorial indexes that actually exist (e.g. 'what "
+            "indices are there?', 'which territorial indices exist?'), use "
+            "get_territorial_index_list instead — that data comes from the backend, not "
+            "the glossary."
         ),
         category=ToolCategory.UTILITY,
         long_description=(
@@ -664,7 +695,10 @@ def create_lookup_glossary_tool() -> ToolDefinition:
             "Call this whenever: (a) the user asks what a term means, "
             "(b) the user uses unfamiliar vocabulary that might map to a platform concept, "
             "or (c) you need to clarify whether the user is referring to a Problem, "
-            "Proposal, or Scenario before proceeding."
+            "Proposal, or Scenario before proceeding. "
+            "This tool does NOT enumerate the concrete territorial indexes available on "
+            "the platform (e.g. 'Indice di ricettività') — those are backend data, not "
+            "glossary vocabulary; call get_territorial_index_list for that instead."
         ),
         parameters=[
             ToolParameter(
@@ -685,59 +719,10 @@ def create_lookup_glossary_tool() -> ToolDefinition:
     )
 
 
-def create_lookup_territorial_index_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="lookup_territorial_index",
-        description=(
-            "Look up the territorial indices (indici territoriali) reference "
-            "documentation: what a Fenomeno, Indice, combinatore, or macro "
-            "area is, and the definition, formula, and source data for each "
-            "available index (e.g. indice di ricettività, di turisticità)."
-        ),
-        category=ToolCategory.UTILITY,
-        long_description=(
-            "Searches 'indici territoriali.md', the canonical documentation "
-            "for the territorial-indices framework, parsed fresh on every "
-            "call so edits to the file are always reflected. Without a "
-            "query, returns the full document — framework overview, the "
-            "Fenomeno/Indice/combinatore/macro area glossary, and every "
-            "currently available index — which is enough to answer broad "
-            "questions like 'what indices are available' or 'what is an "
-            "index'. With a query, returns only the matching section(s) "
-            "verbatim, including the exact formula and source "
-            "columns/aggregation/resolution used, so nothing about the "
-            "calculation is paraphrased away. "
-            "Call this whenever the user asks what territorial indices "
-            "exist, what a specific index means or how it's calculated, or "
-            "what a core framework concept (Fenomeno, Indice, combinatore, "
-            "macro area) means."
-        ),
-        parameters=[
-            ToolParameter(
-                name="query",
-                description=(
-                    "Optional keyword(s) to search for, e.g. 'ricettività', "
-                    "'turisticità', 'fenomeno', 'combinatore', 'macro area'. "
-                    "Leave empty (or omit) to get the full documentation, "
-                    "e.g. for 'what indices are available'."
-                ),
-                type="string",
-                required=False,
-            ),
-        ],
-        output_description=(
-            "Either the full territorial-indices document, or the matching "
-            "section(s) with definition, formula, and source data."
-        ),
-        tags=["data", "read-only", "glossary", "utility", "territorial-index"],
-    )
-
-
 def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         # Utility
         create_lookup_glossary_tool(),
-        create_lookup_territorial_index_tool(),
         create_get_system_capabilities_tool(),
         # Data retrieval
         create_list_available_problems_tool(),
@@ -748,6 +733,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_data_from_link_tool(),
         create_get_base_scenario_tool(),
         create_get_configuration_parameters_tool(),
+        create_get_territorial_index_list_tool(),
         # Interaction
         create_analyze_scenario_results_tool(),
         create_comparison_plot_tool(),

@@ -6,6 +6,7 @@ from app.utils.llm import llm_interaction, format_messages
 from app.utils.common import (
     build_prior_results_block,
     condense_for_matching,
+    truncate_for_prompt,
     _max_chars_for_tool,
 )
 
@@ -36,13 +37,8 @@ def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
             # "note" field, so the model knows more exist instead of
             # silently seeing less than what's really there.
             condensed = condense_for_matching(step.observation)
-            obs = json.dumps(condensed, indent=2, default=str)
             max_chars = _max_chars_for_tool(step.tool_name, 1200)
-            if len(obs) > max_chars:
-                obs = (
-                    obs[:max_chars]
-                    + f"\n... [truncated, {len(obs) - max_chars} more characters omitted]"
-                )
+            obs = truncate_for_prompt(condensed, max_chars)
             lines.append(f"Observation {i}: {obs}")
         elif step.status:
             lines.append(f"Observation {i}: [{step.status}]")
@@ -109,9 +105,16 @@ GUIDELINES (apply in order — stop at the first that matches)
    proposals, scenarios, and related decision-support. If the message is clearly about
    something else, finish with a message saying so.
 
-4. DEFINITIONS — if the user asks what a term means, or uses vocabulary that might be a
-   platform concept (e.g. "what is a scenario?"), call lookup_glossary. You may also call it
-   first if you're unsure whether the user means a problem, proposal, or scenario.
+4. DEFINITIONS — if the user asks what a term means or uses vocabulary that might be a
+   platform concept (e.g. "what is a scenario?", "what is a territorial index?") — call
+   lookup_glossary. You may also call it first if you're unsure whether the user means a
+   problem, proposal, or scenario.
+
+4b. TERRITORIAL INDEXES — if the user asks what territorial indexes/indicators exist,
+   wants to browse or pick one by name, or needs an index's id/description/years covered
+   (e.g. "what indices are there?", "which territorial indices exist?", "is there an index
+   for X?") — call get_territorial_index_list. This is backend data, not static glossary
+   vocabulary, so lookup_glossary will NOT have it — do not use lookup_glossary for this.
 
 5. DETAILS ABOUT SOMETHING SPECIFIC — if the user refers to an existing problem, proposal, or
    scenario — whether by an explicit id, by its literal name, OR by a description that

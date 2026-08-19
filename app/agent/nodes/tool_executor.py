@@ -157,6 +157,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "get_data_from_link": execute_get_data_from_link,
         "get_base_scenario": execute_get_base_scenario,
         "get_configuration_parameters": execute_get_configuration_parameters,
+        "get_territorial_index_list": execute_get_territorial_index_list,
         # Interaction
         "analyze_scenario_results": execute_analyze_scenario_results,
         "comparison_plot": execute_comparison_plot,
@@ -181,7 +182,6 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "delete_scenario": execute_delete_scenario,
         # Utility
         "lookup_glossary": execute_lookup_glossary,
-        "lookup_territorial_index": execute_lookup_territorial_index,
     }
 
     return executors.get(tool_name)
@@ -603,6 +603,24 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
     }
 
     return {"widgets": cleaned}
+
+
+def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str, Any]:
+    """Execute get_territorial_index_list tool.
+
+    Fetches the live list of territorial indexes from the backend
+    (id/label/description/years covered) — see
+    app.tools.backend_tools.get_territorial_index_list. This is the
+    authoritative source for "what indices exist"; the glossary
+    (lookup_glossary) only covers the static Territorial Index framework
+    vocabulary, not the concrete, ever-changing list of indexes themselves.
+    """
+    from app.tools.backend_tools import get_territorial_index_list
+
+    logger.info("Executing get_territorial_index_list tool")
+    result = get_territorial_index_list.invoke({"tenant": state.tenant})
+
+    return {"indexes": result}
 
 
 def execute_analyze_scenario_results(
@@ -1611,7 +1629,7 @@ def execute_lookup_glossary(
     Matches the query tokens against: term name, aliases, and related_terms.
     Returns all matching entries with their full detail.
     """
-    from app.utils.terminology import GLOSSARY
+    from app.utils.knowledge import GLOSSARY
 
     logger.info(f"Executing lookup_glossary | query='{query}'")
 
@@ -1627,7 +1645,7 @@ def execute_lookup_glossary(
     for entry in GLOSSARY:
         term = entry["term"]
         # Build a flat list of strings to match against. "it" is included
-        # here (unlike in app.utils.terminology's text-matcher) because this
+        # here (unlike in app.knowledge's text-matcher) because this
         # tool is meant to resolve a user's query — including one phrased in
         # Italian — back to the right entry, not to decide what to generate.
         searchable = (
@@ -1671,68 +1689,4 @@ def execute_lookup_glossary(
         "success": True,
         "query": query,
         "matches": formatted,
-    }
-
-
-# =============================================================================
-# TERRITORIAL INDICES LOOKUP
-# =============================================================================
-
-
-def execute_lookup_territorial_index(
-    state: AgentState,
-    query: str | None = None,
-    **kwargs,
-) -> Dict[str, Any]:
-    """
-    Execute lookup_territorial_index tool.
-
-    With no query, returns the full territorial-indices documentation (the
-    Fenomeno/Indice/combinatore/macro area glossary plus every currently
-    available index) so broad questions like "what indices exist" or "what
-    is an index" can be answered directly. With a query, returns only the
-    matching section(s), verbatim (see app.utils.territorial_indices).
-    """
-    from app.utils.territorial_indices import (
-        get_full_document,
-        search_territorial_indices,
-    )
-
-    query = (query or "").strip()
-    logger.info(f"Executing lookup_territorial_index | query={query!r}")
-
-    if not query:
-        document = get_full_document()
-        if not document:
-            return {
-                "success": False,
-                "error": "Territorial indices documentation is currently unavailable.",
-                "matches": [],
-            }
-        return {
-            "success": True,
-            "query": None,
-            "document": document,
-        }
-
-    matches = search_territorial_indices(query)
-    if not matches:
-        return {
-            "success": True,
-            "message": (
-                f"No territorial index documentation found for '{query}'. "
-                "Try broader keywords (e.g. 'indice', 'fenomeno', 'formula'), "
-                "or omit the query to get the full document."
-            ),
-            "matches": [],
-        }
-
-    logger.info(
-        f"lookup_territorial_index found {len(matches)} section(s) for '{query}'"
-    )
-
-    return {
-        "success": True,
-        "query": query,
-        "matches": matches,
     }

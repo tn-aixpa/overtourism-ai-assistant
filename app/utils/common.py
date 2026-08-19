@@ -51,6 +51,13 @@ _LARGE_BUDGET_TOOLS = {
     # truncation in _truncate_json is the real backstop if it ever does.
     "get_configuration_parameters": 14000,
     "create_new_temp_scenario": 4000,
+    # Fixed, bounded catalog of territorial indexes (id/label/description/
+    # years). Measured ~3.1k chars for the current 5 indexes with full
+    # descriptions — the generic 1200-char default was cutting it off after
+    # ~1.5 items, which is exactly what produced the hallucinated/invented
+    # extra indexes seen in practice. Same reasoning as
+    # get_configuration_parameters above.
+    "get_territorial_index_list": 8000,
 }
 
 
@@ -256,7 +263,43 @@ def _truncate_json(obj: Any, max_chars: int, _note_reserve: int = 200) -> str:
             candidate_text = _dump({**kept, key: value})
             if len(candidate_text) <= budget:
                 kept[key] = value
-            else:
+                continue
+            # This key doesn't fit whole. Rather than dropping it outright —
+            # which silently discards the actual payload in envelopes like
+            # {"success": ..., "output": {...}, "error": ...} whenever the
+            # trivial sibling keys already fit — recurse into it so it can
+            # still contribute a partial (but real) value. Only if even a
+            # single-key rendering of it can't fit at all do we fall back to
+            # omitting it.
+            remaining_budget = max(budget - len(_dump(kept)), _note_reserve)
+            inner = _truncate_json(value, remaining_budget, _note_reserve=0)
+            try:
+                # Clean case: the recursed truncation stayed valid JSON
+                # (nothing inside it needed its own omission note), so it
+                # nests in as real structure.
+                kept[key] = json.loads(inner)
+            except (TypeError, ValueError):
+                # inner carries an appended non-JSON note (e.g. "... [N
+                # more items omitted]") — build this key's entry as raw
+                # text rather than JSON-string-encoding it, so the note and
+                # partial structure stay human/model-readable instead of
+                # turning into an escaped blob.
+                prefix = _dump(kept)[:-1] if kept else "{"
+                sep = ",\n" if kept else "\n"
+                result = f'{prefix}{sep}  "{key}": {inner}\n}}'
+                if len(result) <= budget + _note_reserve:
+                    # Represent as a marker the caller can detect; simplest
+                    # is to just return this partial text immediately for
+                    # the whole dict, since further keys after a note-laden
+                    # one add little value and risk exceeding budget again.
+                    if omitted_keys:
+                        result += (
+                            f"\n... [{len(omitted_keys)} more key(s) omitted "
+                            f"for space: {omitted_keys}. Data was NOT lost — "
+                            "say so if you summarize this, rather than "
+                            "presenting it as complete.]"
+                        )
+                    return result
                 omitted_keys.append(key)
         if not kept:
             # Not even the first key fits whole: recurse into it so we still

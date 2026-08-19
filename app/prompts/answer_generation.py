@@ -1,5 +1,5 @@
 from app.utils.llm import llm_interaction
-from app.utils.terminology import build_terminology_block
+from app.utils.knowledge import build_terminology_block
 from app.agent.state import AgentState
 
 # ---------------------------------------------------------------------------

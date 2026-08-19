@@ -267,6 +267,36 @@ def get_widgets(tenant: str) -> dict:
     return get_data(url)
 
 
+def _strong_html_to_markdown(text: str) -> str:
+    """The backend wraps emphasized terms in index descriptions with raw
+    <strong>...</strong> HTML. Convert those to markdown bold so the text
+    renders correctly wherever it ends up (chat, prompts) instead of
+    leaking HTML tags."""
+    if not text:
+        return text
+    return text.replace("<strong>", "**").replace("</strong>", "**")
+
+
+@tool
+def get_territorial_index_list(tenant: str) -> list:
+    """Fetch the list of available territorial indexes (with descriptions) from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get-index-list"
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "index_id": item["value"],
+            "label": item["label"],
+            "description": _strong_html_to_markdown(item["index_description"]),
+            "available_for_variation": item.get("availableForVariation", False),
+            "years_range": item.get("years_range", {}),
+        }
+        for item in extracted_data.get("indicators", [])
+    ]
+
+    return cleaned_data
+
+
 @tool
 def create_cration_session(tenant: str):
     """Create a creation session to handle temporary scenario(s)"""
