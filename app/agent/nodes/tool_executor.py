@@ -164,6 +164,7 @@ def get_tool_executor(tool_name: str) -> Callable | None:
         "kpi_comparison": execute_kpi_comparison,
         "show_capacity_plot": execute_show_capacity_plot,
         "show_load_plot": execute_show_load_plot,
+        "show_territorial_index_map": execute_show_territorial_index_map,
         # Internal-only (see create_summary_generation_tool)
         "summary_generation": execute_summary_generation,
         "report_generation": execute_report_generation,
@@ -1025,6 +1026,121 @@ def execute_show_capacity_plot(
         plot_payload,
         chart_summary,
     )
+
+
+def _summarize_map_features(features: list) -> Dict[str, Any]:
+    """Compact, LLM-safe summary of a choropleth's features — mirrors
+    summarize_plot's role for curves (app/utils/backend_entities_parsing.py):
+    give the reasoner real, grounded facts (area names, top/bottom values)
+    without ever handing it the raw per-feature geometry, which is only
+    ever meant to reach the frontend widget."""
+    entries = []
+    for f in features:
+        if not isinstance(f, dict):
+            continue
+        props = f.get("properties", {}) or {}
+        name = props.get("AREA_NAME")
+        value = props.get("INDICE")
+        if name is not None and isinstance(value, (int, float)):
+            entries.append({"area_name": name, "index_value": round(value, 4)})
+
+    entries_sorted = sorted(entries, key=lambda e: e["index_value"], reverse=True)
+    return {
+        "feature_count": len(features),
+        "areas_with_value": len(entries),
+        "top_areas": entries_sorted[:5],
+        "bottom_areas": list(reversed(entries_sorted[-5:])) if entries_sorted else [],
+    }
+
+
+def execute_show_territorial_index_map(
+    state: AgentState,
+    index_id: str,
+    start_date: str,
+    end_date: str,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Build the 'map' (choropleth) widget for a single territorial index over
+    a date range, from live backend geo data.
+
+    The backend returns geo_data.data as a JSON-encoded STRING (not a nested
+    object) containing full polygon geometry for every area — far too large
+    and useless to ever put in front of the reasoning LLM. It's parsed here
+    only to validate it and build a small "map_summary" (feature count,
+    top/bottom areas by value) for grounding, then re-serialized as
+    geojsonStr exactly the way the frontend widget expects it.
+
+    Field order matters: "success"/"response"/"map_summary" (small, always
+    useful) are set BEFORE "assistant_action_data" (which nests the full,
+    potentially large GeoJSON string). _format_scratchpad's truncation (see
+    app/prompts/react_reasoning.py / app/utils/common.py) keeps whole dict
+    keys in insertion order until it runs out of budget, so this ordering
+    is what keeps the grounded summary intact in the reasoner's prompt even
+    when the heavy geojsonStr has to be partially truncated or dropped.
+    """
+    import json
+
+    from app.tools.backend_tools import get_territorial_index_data
+
+    logger.info(
+        f"Executing show_territorial_index_map tool for index '{index_id}' "
+        f"({start_date} -> {end_date})"
+    )
+
+    raw = get_territorial_index_data.invoke(
+        {
+            "tenant": state.tenant,
+            "index": index_id,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    )
+
+    geo_data = raw.get("geo_data", {}) if isinstance(raw, dict) else {}
+    raw_geojson = geo_data.get("data")
+
+    try:
+        parsed = (
+            json.loads(raw_geojson) if isinstance(raw_geojson, str) else raw_geojson
+        )
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"Backend returned invalid GeoJSON for index '{index_id}': {e}"
+        )
+
+    features = parsed.get("features", []) if isinstance(parsed, dict) else []
+    min_value = geo_data.get("min_value")
+    max_value = geo_data.get("max_value")
+
+    map_summary = _summarize_map_features(features)
+    map_summary.update(
+        {
+            "index_id": index_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "min_value": min_value,
+            "max_value": max_value,
+        }
+    )
+
+    action = {
+        "type": "SHOW_WIDGET",
+        "payload": {
+            "widgetName": "map",
+            "data": {
+                "geojsonStr": json.dumps(parsed, ensure_ascii=False),
+                "minValue": min_value,
+                "maxValue": max_value,
+            },
+        },
+    }
+
+    return {
+        "success": True,
+        "response": "Ecco la mappa dell'indice richiesto:",
+        "map_summary": map_summary,
+        "assistant_action_data": [action],
+    }
 
 
 def execute_summary_generation(

@@ -116,6 +116,32 @@ GUIDELINES (apply in order — stop at the first that matches)
    for X?") — call get_territorial_index_list. This is backend data, not static glossary
    vocabulary, so lookup_glossary will NOT have it — do not use lookup_glossary for this.
 
+4c. VISUALIZE A TERRITORIAL INDEX ON THE MAP — if the user wants to see/visualize a
+   territorial index on the map, or asks which areas are more affected by it (e.g.
+   "mostrami sulla mappa l'indice di ricettività per il 2023", "dove è più alta la
+   turisticità a giugno 2023?") — call show_territorial_index_map:
+
+    - Resolve index_id first. If it hasn't been listed yet this session, call
+      get_territorial_index_list first and use the matching index's index_id — never
+      guess or type an id yourself.
+
+    - Convert whatever period the user gave into start_date/end_date, both formatted
+      YYYY-MM-DD:
+        * A full year (e.g. "2023") -> start_date is that year's January 1st, end_date
+          is that same year's December 1st (e.g. "2023-01-01" to "2023-12-01" — NOT
+          the 31st).
+        * A single month (e.g. "giugno 2023") -> start_date and end_date are both that
+          month's 1st (e.g. "2023-06-01").
+        * A range spanning several months/years -> start_date is the first day of the
+          first month, end_date is the first day of the last month.
+
+    - If the user hasn't specified any period at all, ask them which year/period they
+      want instead of guessing one.
+
+    - This tool returns a small "map_summary" (feature/area count, top and bottom areas
+      by value) alongside the widget — use ONLY those figures if you comment on specific
+      areas or values; never invent an area name or value that isn't in map_summary.
+
 5. DETAILS ABOUT SOMETHING SPECIFIC — if the user refers to an existing problem, proposal, or
    scenario — whether by an explicit id, by its literal name, OR by a description that
    plausibly matches an existing item's name/description (e.g. the user describes "an
@@ -164,8 +190,8 @@ GUIDELINES (apply in order — stop at the first that matches)
      "visualizza i KPI dei due scenari"). It may be called alone or alongside
      analyze_scenario_results, but never as a substitute for comparison_plot.
 
-    - All four widget tools (comparison_plot, kpi_comparison,
-     show_capacity_plot, show_load_plot) are only available in
+    - All widget tools (comparison_plot, kpi_comparison, show_capacity_plot,
+     show_load_plot, show_territorial_index_map) are only available in
      standalone mode. If they appear under "Tools that exist but are NOT available
      in this mode", treat them as absent and do not mention them.
 

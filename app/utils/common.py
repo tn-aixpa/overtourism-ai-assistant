@@ -54,8 +54,8 @@ _LARGE_BUDGET_TOOLS = {
     # Fixed, bounded catalog of territorial indexes (id/label/description/
     # years). Measured ~3.1k chars for the current 5 indexes with full
     # descriptions — the generic 1200-char default was cutting it off after
-    # ~1.5 items, which is exactly what produced the hallucinated/invented
-    # extra indexes seen in practice. Same reasoning as
+    # ~1.5 items, which is exactly what produced hallucinated/invented
+    # extra indexes in practice. Same reasoning as
     # get_configuration_parameters above.
     "get_territorial_index_list": 8000,
 }
@@ -78,7 +78,13 @@ def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
 # ...) that back the load/capacity plot widgets — see clean_scenario in
 # app/tools/backend_tools.py. It's only ever meant to be consumed
 # programmatically to build a SHOW_WIDGET payload, never shown to the LLM.
-_HEAVY_FIELDS = {"extras", "evaluation_data", "related_scenario_ids", "plot_data"}
+_HEAVY_FIELDS = {
+    "extras",
+    "evaluation_data",
+    "related_scenario_ids",
+    "plot_data",
+    "geojsonStr",
+}
 
 # Any single object's textual fields (name/description/...) get truncated to
 # this many characters when condensing a list for name/intent matching.
@@ -288,10 +294,6 @@ def _truncate_json(obj: Any, max_chars: int, _note_reserve: int = 200) -> str:
                 sep = ",\n" if kept else "\n"
                 result = f'{prefix}{sep}  "{key}": {inner}\n}}'
                 if len(result) <= budget + _note_reserve:
-                    # Represent as a marker the caller can detect; simplest
-                    # is to just return this partial text immediately for
-                    # the whole dict, since further keys after a note-laden
-                    # one add little value and risk exceeding budget again.
                     if omitted_keys:
                         result += (
                             f"\n... [{len(omitted_keys)} more key(s) omitted "
