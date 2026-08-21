@@ -176,27 +176,23 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
     extracted_data = get_data(url)
 
-    logger.info(f"AAAAAAA {extracted_data}")
-
     if not cleaned:
         return extracted_data
 
     cleaned_data = {
-        "problem_id": extracted_data["problem_id"],
-        "name": extracted_data["name"],
-        "description": extracted_data["description"],
-        "objective": extracted_data["extras"]["objective"],
-        "links": extracted_data["extras"]["links"],
+        "problem_id": extracted_data.get("problem_id", ""),
+        "name": extracted_data.get("name", ""),
+        "description": extracted_data.get("description", ""),
+        "objective": extracted_data.get("extras", {}).get("objective", ""),
+        "links": extracted_data.get("extras", {}).get("links", ""),
         "additional_data_available_on_specific_request": {
-            "version": extracted_data["version"],
-            "tenant": extracted_data["tenant"],
-            "created": extracted_data["created"],
-            "updated": extracted_data["updated"],
-            "related_subsystem": extracted_data["extras"]["groups"],
+            "version": extracted_data.get("version", ""),
+            "tenant": extracted_data.get("tenant", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
+            "related_subsystem": extracted_data.get("extras", {}).get("groups", ""),
         },
     }
-
-    logger.info(f"BBBBBBB {cleaned_data}")
 
     return cleaned_data
 
@@ -213,19 +209,17 @@ def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
         return extracted_data
 
     cleaned_data = {
-        "proposal_id": extracted_data["proposal_id"],
-        "problem_id": extracted_data["problem_id"],
-        "name": extracted_data["name"],
-        "description": extracted_data["description"],
-        "resources": extracted_data["extras"]["resources"],
-        "context": extracted_data["extras"]["context"],
-        "impact": extracted_data["extras"]["impact"],
+        "problem_id": extracted_data.get("problem_id", ""),
+        "name": extracted_data.get("name", ""),
+        "description": extracted_data.get("description", ""),
+        "objective": extracted_data.get("extras", {}).get("objective", ""),
+        "links": extracted_data.get("extras", {}).get("links", ""),
         "additional_data_available_on_specific_request": {
-            "version": 2,
-            "status": "draft",
-            "created": "2026-06-16T16:09:03.521471+02:00",
-            "updated": "2026-06-16T16:10:39.691952+02:00",
-            "related_scenario_ids": extracted_data["related_scenario_ids"],
+            "version": extracted_data.get("version", ""),
+            "tenant": extracted_data.get("tenant", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
+            "related_subsystem": extracted_data.get("extras", {}).get("groups", ""),
         },
     }
 
@@ -251,9 +245,9 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
         "description": extracted_data["description"],
         "changes_wrt_base_scenario": extracted_data["extras"]["index_diffs"],
         "additional_data_available_on_specific_request": {
-            "version": 1,
-            "created": "2026-06-16T16:09:44.825363+02:00",
-            "updated": "2026-06-16T16:09:44.825363+02:00",
+            "version": extracted_data.get("version", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
         },
     }
 

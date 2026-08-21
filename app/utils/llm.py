@@ -32,8 +32,8 @@ ANTHROPIC_MODELS = {
 # Azure OpenAI (or Azure AI Foundry "OpenAI-compatible") deployments.
 # Overridable via env in case deployment names differ between environments.
 AZURE_MODELS = {
-    "light": os.environ.get("AZURE_LIGHT_MODEL", "gpt-5.6-luna"),
-    "heavy": os.environ.get("AZURE_HEAVY_MODEL", "gpt-5.6-terra"),
+    "light": os.environ.get("AZURE_LIGHT_MODEL", "model-router"),
+    "heavy": os.environ.get("AZURE_HEAVY_MODEL", "model-router"),
 }
 
 AZURE_ENDPOINT = os.environ.get(
