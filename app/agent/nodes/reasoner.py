@@ -47,16 +47,27 @@ def initialize_tools(state: AgentState) -> Command:
 
     registry = _ensure_tool_registry()
 
-    # Widget tools are intentionally restricted to standalone mode only.
-    # Set enabled state BEFORE get_context_tools so the registry already
-    # reflects the correct mode when the allowlist is built below.
-    # In integrated mode the route already passed a curated allowlist and we
-    # must not expose them there.
-    for tool_name in WIDGET_TOOL_NAMES:
-        registry.set_tool_enabled(tool_name, not state.integrated_mode)
-
     allowlist = state.cognitive.known_tools or None
     known_tools = registry.get_context_tools(allowlist=allowlist)
+
+    # Widget tools are intentionally restricted to standalone mode only.
+    # A session's mode (integrated vs. standalone) is fixed for its whole
+    # lifetime, so this is computed fresh from state.integrated_mode on
+    # every call and applied only to THIS session's own known/enabled tool
+    # lists in AgentState. It must never mutate the ToolRegistry itself —
+    # that registry is a process-wide singleton (see get_tool_registry),
+    # and this node runs in a worker thread per request. Toggling a shared
+    # tool's `enabled` flag based on one request's state let concurrent
+    # requests in different modes race on and stomp each other's tool
+    # availability. Filtering a per-request copy of known_tools instead
+    # keeps this session-scoped with no shared mutation at all.
+    if state.integrated_mode:
+        known_tools = {
+            name: tool
+            for name, tool in known_tools.items()
+            if name not in WIDGET_TOOL_NAMES
+        }
+
     state.cognitive.known_tools = list(known_tools.keys())
 
     if state.integrated_mode:
