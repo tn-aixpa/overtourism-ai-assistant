@@ -38,14 +38,6 @@ def post_data(url, json=None, headers=None, params=None):
     return response.json()
 
 
-def check_authorization(token: str, tenant: str) -> bool:
-    """Check authorization against the backend."""
-    url = f"{BACKEND_URL}{tenant}/auth/me"
-    headers = {"Authorization": f"Bearer {token}"}
-    api_response = get_data(url, headers=headers)
-    return api_response.get("authenticated", False)
-
-
 def put_data(url, json=None, headers=None, params=None):
     logger.info(f"Putting data to URL: {url}")
     merged_headers = {

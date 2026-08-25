@@ -1,7 +1,7 @@
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Optional, Dict, Any, List, Set
+from datetime import datetime, timedelta
 from enum import StrEnum, Enum
 import json
 
@@ -12,6 +12,36 @@ DEFAULT_REASONING_CONTEXT_SIZE = 5
 # cannot loop forever. See react_reasoner_node in nodes/reasoner.py.
 DEFAULT_MAX_REACT_STEPS = 8
 
+# Agent tiers that require explicit, one-time user consent before a session
+# may use them at all (see CognitiveState.has_valid_tier_consent). This is
+# deliberately separate from CONFIRMATION_REQUIRED_TOOLS in tool_executor.py:
+# that one confirms specific data about to be submitted, every single time;
+# this one confirms permission to use a *capability*, rarely. Empty/absent
+# tiers here are always allowed with no consent step.
+TIERS_REQUIRING_CONSENT: Set[str] = {"exploitative"}
+# How long a granted consent stays valid before we ask again. Wall-clock
+# based (not turn-count based) so "ask again after a while" behaves the same
+# whether the user comes back an hour or a week later, regardless of how
+# many messages were exchanged in between.
+TIER_CONSENT_TTL = timedelta(hours=24)
+
+
+class AgentTier(StrEnum):
+    """The four capability tiers (see the architecture discussion this
+    implements). Values match ToolDefinition.visible_to strings exactly —
+    keep them in sync if either changes.
+
+    EXECUTOR is the only tier with a working ReAct loop today; the other
+    three exist as a destination for AgentState.active_agent and for tool
+    visibility tagging (ToolDefinition.visible_to) ahead of the top-level
+    router and delegate_to_<tier> tools that will actually populate them.
+    """
+
+    EXECUTOR = "executor"
+    OPERATIVE = "operative"
+    METHODOLOGICAL = "methodological"
+    EXPLOITATIVE = "exploitative"
+
 
 @dataclass
 class ConversationMessage:
@@ -19,6 +49,11 @@ class ConversationMessage:
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
     generated_by: Optional[str] = None
+    # Which agent tier produced this message (see AgentTier). Only set on
+    # assistant messages — mirrors `generated_by` (LLM provider) but tracks
+    # capability tier instead. None for older messages predating this field
+    # or for anything generated outside the tiered flow.
+    generated_by_agent: Optional[str] = None
     vote: Optional[str] = None
     comment: Optional[str] = None
 
@@ -155,6 +190,37 @@ class CognitiveState:
     # create_new_temp_scenario call.
     pending_temp_scenario: Optional[Dict[str, Any]] = None
 
+    # Per-tier consent grants for this session (tier name -> when it was
+    # granted). Persists across turns for the session's lifetime, unlike the
+    # scratchpad; see has_valid_tier_consent for the TTL check.
+    tier_consent: Dict[str, datetime] = field(default_factory=dict)
+    # "Pending tier-access request" slot, set by whichever node is about to
+    # enter/delegate into a gated tier without valid consent yet (today:
+    # tool_executor_node, for a delegate_to_<tier> tool call; later, also
+    # the top-level router when it wants to enter a gated tier directly).
+    # Kept separate from `selected_tool` so a router-level request — which
+    # may happen before any tool has been chosen — never collides with the
+    # create/edit/delete confirmation flow, which keys off selected_tool.
+    pending_tier_consent: Optional[str] = None
+    # Node to resume at once the user grants consent. tool_executor_node
+    # sets this to "tool_executor" (re-entering itself re-runs the gate,
+    # which now passes); the router will set it to whatever node actually
+    # starts that tier's reasoning loop once tiers exist as separate nodes.
+    tier_consent_resume_goto: Optional[str] = None
+
+    def has_valid_tier_consent(self, tier: str) -> bool:
+        """Whether `tier` may be used without asking the user again right
+        now. Tiers outside TIERS_REQUIRING_CONSENT are always allowed."""
+        if tier not in TIERS_REQUIRING_CONSENT:
+            return True
+        granted_at = self.tier_consent.get(tier)
+        return (
+            granted_at is not None and (datetime.now() - granted_at) < TIER_CONSENT_TTL
+        )
+
+    def grant_tier_consent(self, tier: str) -> None:
+        self.tier_consent[tier] = datetime.now()
+
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.
 
@@ -207,6 +273,14 @@ class AgentState:
     tenant: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
+    # Which capability tier is currently reasoning for this turn (see
+    # AgentTier). Defaults to EXECUTOR since that's the only tier with a
+    # real loop today; the top-level router will set this before entering
+    # a turn once it exists, and delegate_to_<tier> tools will change it
+    # for the duration of a nested call. Read by initialize_tools to filter
+    # ToolDefinition.visible_to, and stamped onto the outgoing message via
+    # add_assistant_message so callers can see which tier answered.
+    active_agent: AgentTier = AgentTier.EXECUTOR
 
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
@@ -220,6 +294,11 @@ class AgentState:
         SCENARIO_INPUT = "SCENARIO_INPUT"
         SCENARIO_CONFIRMATION = "SCENARIO_CONFIRMATION"
         CONTEXT_INPUT = "CONTEXT_INPUT"
+        # Asking whether the user consents to this session using a gated
+        # agent tier at all (see TIERS_REQUIRING_CONSENT) — distinct from
+        # *_CONFIRMATION above, which recap specific data about to be
+        # submitted rather than asking about capability access.
+        TIER_ACCESS_CONFIRMATION = "TIER_ACCESS_CONFIRMATION"
 
     waiting_for: Optional["AgentState.WaitingFor"] = None
     user_input: Optional[str] = None
@@ -263,7 +342,10 @@ class AgentState:
 
         self.conversation.add_message(
             ConversationMessage(
-                role="assistant", content=content, generated_by=generated_by
+                role="assistant",
+                content=content,
+                generated_by=generated_by,
+                generated_by_agent=str(self.active_agent),
             )
         )
 

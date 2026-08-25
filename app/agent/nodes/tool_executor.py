@@ -18,6 +18,7 @@ from app.agent.nodes.utils import (
     _missing_required_params,
     _trim_tool_results,
     _ensure_data_cached,
+    request_tier_consent,
 )
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolDefinition
@@ -237,6 +238,23 @@ def tool_executor_node(state: AgentState) -> Command:
             ]
             return Command(update=state, goto="generate_output_message")
 
+    # ---- Tier-access consent gate ----
+    # Distinct from the data-confirmation gate below: this asks permission
+    # to use a *capability* at all (e.g. the exploitative tier's
+    # unguarded strategy suggestions), not to confirm specific data.
+    # Checked first — deciding whether a capability may be used at all is
+    # logically prior to confirming what gets submitted with it — and
+    # persists across turns via CognitiveState.tier_consent, so unlike the
+    # gate below it does not need a one-shot "confirmed" flag: granting
+    # consent updates state directly, and re-entering this node re-checks
+    # has_valid_tier_consent, which now simply passes.
+    required_tier = (
+        getattr(tool_def, "requires_tier_consent", None) if tool_def else None
+    )
+    if required_tier and not state.cognitive.has_valid_tier_consent(required_tier):
+        logger.info(f"Pausing '{tool_name}' for tier-access consent ({required_tier})")
+        return request_tier_consent(state, required_tier, resume_goto="tool_executor")
+
     # ---- Confirmation gate ----
     # Creation/edit/delete tools must never run silently: the first time we
     # reach one of them, stop and ask the user to confirm a recap of the
@@ -345,7 +363,7 @@ def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, An
 
 def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_problems tool."""
-    from app.tools.backend_tools import get_all_problems
+    from app.tools.executor_backend_tools import get_all_problems
 
     logger.info("Executing list_available_problems tool")
     result = get_all_problems.invoke({"tenant": state.tenant})
@@ -355,7 +373,7 @@ def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, An
 
 def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_proposals tool."""
-    from app.tools.backend_tools import get_all_proposals
+    from app.tools.executor_backend_tools import get_all_proposals
 
     logger.info("Executing list_available_proposals tool")
     result = get_all_proposals.invoke({"tenant": state.tenant})
@@ -365,7 +383,7 @@ def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, A
 
 def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute list_available_scenarios tool."""
-    from app.tools.backend_tools import get_all_scenarios
+    from app.tools.executor_backend_tools import get_all_scenarios
 
     logger.info("Executing list_available_scenarios tool")
     result = get_all_scenarios.invoke({"tenant": state.tenant})
@@ -458,7 +476,10 @@ def execute_get_context_details(
     current_context["scenarios"] so downstream tools (e.g.
     summary_generation) pick it up without any further changes.
     """
-    from app.tools.backend_tools import get_data_from_context, get_temp_evaluation_data
+    from app.tools.executor_backend_tools import (
+        get_data_from_context,
+        get_temp_evaluation_data,
+    )
 
     current_context = state.cognitive.current_context
     cache = state.cognitive.context_cache
@@ -560,7 +581,7 @@ def execute_get_base_scenario(
     **kwargs,
 ) -> Dict[str, Any]:
     """Execute get_base_scenario tool."""
-    from app.tools.backend_tools import get_base_scenario
+    from app.tools.executor_backend_tools import get_base_scenario
 
     logger.info("Executing get_base_scenario tool")
     result = get_base_scenario.invoke({"tenant": state.tenant})
@@ -576,7 +597,7 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
     of a distribution when there's no single constant), and the allowed
     range/step.
     """
-    from app.tools.backend_tools import get_widgets
+    from app.tools.executor_backend_tools import get_widgets
 
     logger.info("Executing get_configuration_parameters tool")
 
@@ -616,7 +637,7 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
     (lookup_glossary) only covers the static Territorial Index framework
     vocabulary, not the concrete, ever-changing list of indexes themselves.
     """
-    from app.tools.backend_tools import get_territorial_index_list
+    from app.tools.executor_backend_tools import get_territorial_index_list
 
     logger.info("Executing get_territorial_index_list tool")
     result = get_territorial_index_list.invoke({"tenant": state.tenant})
@@ -774,7 +795,7 @@ def _get_plot_data_for_scenario(
     build a widget payload, never shown to the LLM directly (see
     clean_scenario in app/tools/backend_tools.py).
     """
-    from app.tools.backend_tools import get_temp_evaluation_data
+    from app.tools.executor_backend_tools import get_temp_evaluation_data
 
     cache = state.cognitive.context_cache
     pending = state.cognitive.pending_temp_scenario
@@ -1080,7 +1101,7 @@ def execute_show_territorial_index_map(
     """
     import json
 
-    from app.tools.backend_tools import get_territorial_index_data
+    from app.tools.executor_backend_tools import get_territorial_index_data
 
     logger.info(
         f"Executing show_territorial_index_map tool for index '{index_id}' "
@@ -1387,7 +1408,7 @@ def execute_create_new_problem(
     additional_data: str | None = None,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import create_new_problem
+    from app.tools.executor_backend_tools import create_new_problem
 
     result = create_new_problem.invoke(
         {
@@ -1413,7 +1434,7 @@ def execute_create_new_proposal(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import create_new_proposal
+    from app.tools.executor_backend_tools import create_new_proposal
 
     result = create_new_proposal.invoke(
         {
@@ -1449,7 +1470,7 @@ def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:
     unchanged rather than dropped, so the backend can surface the real
     error instead of this silently discarding the override.
     """
-    from app.tools.backend_tools import get_widgets
+    from app.tools.executor_backend_tools import get_widgets
 
     raw = get_widgets.invoke({"tenant": state.tenant})
     widgets = raw.get("widgets", raw) if isinstance(raw, dict) else raw
@@ -1486,7 +1507,7 @@ def execute_create_new_temp_scenario(
     Stashes the result on state.cognitive.pending_temp_scenario so a later
     create_new_scenario call (in this or a following turn) can promote it.
     """
-    from app.tools.backend_tools import (
+    from app.tools.executor_backend_tools import (
         create_temp_scenario,
         get_base_scenario,
         create_cration_session,
@@ -1565,7 +1586,7 @@ def execute_create_new_scenario(
 ) -> Dict[str, Any]:
     """Promote the pending temporary scenario (created and evaluated by
     create_new_temp_scenario) to a permanent, named scenario."""
-    from app.tools.backend_tools import promote_scenario
+    from app.tools.executor_backend_tools import promote_scenario
 
     pending = state.cognitive.pending_temp_scenario
     if not pending:
@@ -1611,7 +1632,7 @@ def execute_edit_problem(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import edit_problem
+    from app.tools.executor_backend_tools import edit_problem
 
     result = edit_problem.invoke(
         {
@@ -1639,7 +1660,7 @@ def execute_edit_proposal(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import edit_proposal
+    from app.tools.executor_backend_tools import edit_proposal
 
     result = edit_proposal.invoke(
         {
@@ -1666,7 +1687,7 @@ def execute_edit_scenario(
 ) -> Dict[str, Any]:
     """Stub executor for edit_scenario — feature not yet implemented."""
 
-    from app.tools.backend_tools import edit_scenario
+    from app.tools.executor_backend_tools import edit_scenario
 
     result = edit_scenario.invoke(
         {
@@ -1691,7 +1712,7 @@ def execute_delete_problem(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import delete_problem
+    from app.tools.executor_backend_tools import delete_problem
 
     result = delete_problem.invoke({"problem_id": problem_id, "tenant": state.tenant})
 
@@ -1704,7 +1725,7 @@ def execute_delete_proposal(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import delete_proposal
+    from app.tools.executor_backend_tools import delete_proposal
 
     result = delete_proposal.invoke(
         {"proposal_id": proposal_id, "tenant": state.tenant}
@@ -1719,7 +1740,7 @@ def execute_delete_scenario(
     **kwargs,
 ) -> Dict[str, Any]:
 
-    from app.tools.backend_tools import delete_scenario
+    from app.tools.executor_backend_tools import delete_scenario
 
     result = delete_scenario.invoke(
         {"scenario_id": scenario_id, "tenant": state.tenant}

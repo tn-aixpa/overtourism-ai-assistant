@@ -2,7 +2,7 @@ from langgraph.types import Command
 import logging
 import re
 
-from app.agent.state import AgentState
+from app.agent.state import AgentState, ReActStep
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,113 @@ _CONFIRMATION_WAITING_FOR = {
 }
 
 
+def _tier_consent_instructions(tier: str) -> str:
+    """Confirmation message for a gated-tier access request. Deliberately
+    generic (not a data recap like _wait_instructions) since what's being
+    confirmed is permission to use a capability, not specific field values.
+    """
+    label = tier.replace("_", " ")
+    return (
+        f"This would use the {label} capability, which goes beyond what I've "
+        "directly verified and may suggest things more freely than usual. "
+        "Want me to use it for this? I won't ask again for a while."
+    )
+
+
 def wait_user_input_node(state: AgentState):
+    """Wait node — dispatches between the two kinds of pause this graph can
+    be in: a gated-tier access request (pending_tier_consent set) or a
+    create/edit/delete data confirmation (the original, tool-keyed flow).
+    See _handle_tier_consent_wait / _handle_creation_confirmation_wait.
+    """
+    if state.cognitive.pending_tier_consent:
+        return _handle_tier_consent_wait(state)
+    return _handle_creation_confirmation_wait(state)
+
+
+def _handle_tier_consent_wait(state: AgentState):
+    """
+    Wait node for gated-tier access consent.
+
+    - If no user_input yet: ask permission and route to generate_output_message,
+      same persist/resume mechanics as the creation-confirmation flow below.
+    - If user confirms: grant consent (persisted on CognitiveState.tier_consent,
+      not just for this turn) and resume at tier_consent_resume_goto — for
+      today's only caller (tool_executor_node) that re-enters tool_executor,
+      whose gate now passes since consent was just granted.
+    - If user declines: do NOT end the turn like a creation-confirmation
+      cancellation does. Record an Observation on the scratchpad so the
+      calling agent sees the decline and can adapt (explain the limitation,
+      fall back to a grounded answer) on its own, then hand back to the
+      reasoner to keep going.
+    - Otherwise: ask again without discarding the pending request.
+    """
+    tier = state.cognitive.pending_tier_consent
+
+    if not state.user_input:
+        state.cognitive.messages_to_include = [_tier_consent_instructions(tier)]
+        state.waiting_for = AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION
+        state.add_trace(
+            "human_wait",
+            node="WAIT_USER_INPUT",
+            data={"pending_tier_consent": tier},
+        )
+        return Command(update=state, goto="generate_output_message")
+
+    user_input = state.user_input.strip()
+    logger.info(f"User replied to tier-consent request ('{tier}'): '{user_input}'")
+
+    if _is_confirmation(user_input):
+        logger.info(f"User granted access to tier '{tier}'")
+        state.cognitive.grant_tier_consent(tier)
+        resume_goto = state.cognitive.tier_consent_resume_goto or "tool_executor"
+        state.cognitive.pending_tier_consent = None
+        state.cognitive.tier_consent_resume_goto = None
+        state.waiting_for = None
+        state.user_input = None
+        return Command(update=state, goto=resume_goto)
+
+    if _is_cancellation(user_input):
+        logger.info(f"User declined access to tier '{tier}' — continuing without it")
+        state.cognitive.scratchpad.append(
+            ReActStep(
+                thought=state.cognitive.pending_thought,
+                tool_name=state.cognitive.selected_tool,
+                tool_arguments=state.cognitive.tool_arguments,
+                observation={
+                    "success": False,
+                    "error": f"User declined access to the '{tier}' tier for this turn.",
+                },
+                status="tier_access_declined",
+            )
+        )
+        state.cognitive.selected_tool = None
+        state.cognitive.tool_arguments = {}
+        state.cognitive.pending_thought = ""
+        state.cognitive.pending_tier_consent = None
+        state.cognitive.tier_consent_resume_goto = None
+        state.waiting_for = None
+        state.user_input = None
+        # Hand back to the reasoner (today's only loop) rather than ending
+        # the turn, so it can react to the decline instead of the turn
+        # dead-ending on a bare "I won't do that". Once tiers are separate
+        # nodes, this should resume whatever tier is actually still active
+        # (e.g. the tier that attempted the delegation), not always
+        # "react_reasoner".
+        return Command(update=state, goto="react_reasoner")
+
+    # Ambiguous reply: keep the pending request alive, ask for a clear
+    # yes/no, same pattern as the creation-confirmation flow.
+    state.cognitive.messages_to_include = [
+        "I’m not sure whether that’s a yes or no — could you confirm clearly "
+        "whether I should use it?"
+    ]
+    state.waiting_for = AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION
+    state.user_input = None
+    return Command(update=state, goto="generate_output_message")
+
+
+def _handle_creation_confirmation_wait(state: AgentState):
     """
     Wait node for tool confirmation.
 

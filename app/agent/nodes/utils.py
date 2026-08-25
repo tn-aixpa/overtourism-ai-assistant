@@ -1,10 +1,34 @@
 import logging
 from typing import Any, Dict
 
+from langgraph.types import Command
+
 from app.agent.state import AgentState
 from app.tools.tool_schema import ToolDefinition
 
 logger = logging.getLogger(__name__)
+
+
+def request_tier_consent(state: AgentState, tier: str, resume_goto: str) -> Command:
+    """Pause the turn to ask the user for one-time consent to use `tier`.
+
+    Call this from any node that is about to enter or delegate into a
+    gated tier (state.cognitive.has_valid_tier_consent(tier) is False) —
+    today that's tool_executor_node, when the reasoner selects a
+    delegate_to_<tier> tool; later, also the top-level router when it
+    wants to route a whole turn into a gated tier directly, before any
+    tool has been chosen.
+
+    `resume_goto` is the node WAIT_USER_INPUT should return control to once
+    the user confirms. tool_executor_node passes "tool_executor" (re-running
+    the same gate, which now passes since consent was just granted); a
+    router-driven request would pass whatever node starts that tier's own
+    reasoning loop.
+    """
+    state.cognitive.pending_tier_consent = tier
+    state.cognitive.tier_consent_resume_goto = resume_goto
+    return Command(update=state, goto="WAIT_USER_INPUT")
+
 
 _ID_RESOLUTION_MAP = {
     # parent references (create)
@@ -73,7 +97,10 @@ def _ensure_data_cached(
     """Make sure `state.cognitive.context_cache` has, for every problem_id,
     proposal_id, and scenario_id in `current_context`, the base details
     (and, for scenarios only, evaluation_data). Fetches only what's missing."""
-    from app.tools.backend_tools import get_data_from_context, get_evaluation_data
+    from app.tools.executor_backend_tools import (
+        get_data_from_context,
+        get_evaluation_data,
+    )
 
     cache = state.cognitive.context_cache
 

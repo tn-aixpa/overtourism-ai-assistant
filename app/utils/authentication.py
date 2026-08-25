@@ -1,7 +1,6 @@
 from fastapi import HTTPException
 import jwt
-
-from app.tools.backend_tools import check_authorization
+from app.utils.common import get_data, BACKEND_URL
 
 # ---------------------------------------------------------------------------
 # AUTH / SESSION-OWNERSHIP HELPERS
@@ -33,6 +32,14 @@ def _authorize_tenant(token: str, tenant: str) -> None:
         raise HTTPException(status_code=400, detail="tenant is required")
     if not check_authorization(token=token, tenant=tenant):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+
+def check_authorization(token: str, tenant: str) -> bool:
+    """Check authorization against the backend."""
+    url = f"{BACKEND_URL}{tenant}/auth/me"
+    headers = {"Authorization": f"Bearer {token}"}
+    api_response = get_data(url, headers=headers)
+    return api_response.get("authenticated", False)
 
 
 def get_user_id(token: str) -> str:

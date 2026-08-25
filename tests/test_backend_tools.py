@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.tools import backend_tools as bt
+from app.tools import executor_backend_tools as bt
+from app.utils.authentication import check_authorization
 from app.utils.common import set_token
 
 
@@ -128,15 +129,15 @@ class TestDeleteData:
 class TestCheckAuthorization:
     def test_returns_true_when_authenticated(self):
         with patch.object(bt, "get_data", return_value={"authenticated": True}):
-            assert bt.check_authorization("tok", "tenant1") is True
+            assert check_authorization("tok", "tenant1") is True
 
     def test_returns_false_when_not_authenticated(self):
         with patch.object(bt, "get_data", return_value={"authenticated": False}):
-            assert bt.check_authorization("tok", "tenant1") is False
+            assert check_authorization("tok", "tenant1") is False
 
     def test_returns_false_when_field_missing(self):
         with patch.object(bt, "get_data", return_value={}):
-            assert bt.check_authorization("tok", "tenant1") is False
+            assert check_authorization("tok", "tenant1") is False
 
 
 # ---------------------------------------------------------------------------

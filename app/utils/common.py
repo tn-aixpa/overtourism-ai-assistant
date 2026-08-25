@@ -3,11 +3,13 @@ import os
 from contextvars import ContextVar
 from typing import Optional, Dict, Any
 import json
+import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+BACKEND_URL = os.environ.get("BACKEND_URL")
 
 
 def _merge_auth_headers(headers: dict | None) -> dict:
@@ -19,6 +21,13 @@ def _merge_auth_headers(headers: dict | None) -> dict:
         merged["Authorization"] = f"Bearer {get_token()}"
 
     return merged
+
+
+def get_data(url, headers=None, params=None):
+    logger.info(f"Fetching data from URL: {url}")
+    response = requests.get(url, headers=_merge_auth_headers(headers), params=params)
+    response.raise_for_status()
+    return response.json()
 
 
 # =========================

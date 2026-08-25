@@ -45,17 +45,19 @@ class ToolRegistry:
             self._tools[tool_name].enabled = enabled
 
     def get_context_tools(
-        self, allowlist: Optional[List[str]] = None
+        self, allowlist: Optional[List[str]] = None, tier: Optional[str] = None
     ) -> Dict[str, ToolDefinition]:
         tools = self.get_all_known_tools()
+        if tier is not None:
+            tools = {name: t for name, t in tools.items() if tier in t.visible_to}
         if allowlist is not None:
             tools = {name: tool for name, tool in tools.items() if name in allowlist}
         return tools
 
     def get_tools_for_llm(
-        self, allowlist: Optional[List[str]] = None
+        self, allowlist: Optional[List[str]] = None, tier: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        tools = self.get_context_tools(allowlist=allowlist)
+        tools = self.get_context_tools(allowlist=allowlist, tier=tier)
         return [tool.to_tool_description() for tool in tools.values()]
 
 

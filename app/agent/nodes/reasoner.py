@@ -48,7 +48,9 @@ def initialize_tools(state: AgentState) -> Command:
     registry = _ensure_tool_registry()
 
     allowlist = state.cognitive.known_tools or None
-    known_tools = registry.get_context_tools(allowlist=allowlist)
+    known_tools = registry.get_context_tools(
+        allowlist=allowlist, tier=state.active_agent
+    )
 
     # Widget tools are intentionally restricted to standalone mode only.
     # A session's mode (integrated vs. standalone) is fixed for its whole
