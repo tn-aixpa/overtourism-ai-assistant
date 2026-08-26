@@ -21,6 +21,7 @@ from app.agent.nodes.utils import (
 )
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolDefinition
+from app.tools.executors.system_utility import execute_lookup_glossary
 
 logger = logging.getLogger(__name__)
 

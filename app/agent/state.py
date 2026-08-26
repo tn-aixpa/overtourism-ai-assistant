@@ -44,18 +44,28 @@ class AgentTier(StrEnum):
 
 
 @dataclass
-class ConversationMessage:
-    role: str  # "user" | "assistant"
+class ConversationMessageBase:
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class UserMessage(ConversationMessageBase):
+    role: str = field(default="user", init=False)
+
+
+@dataclass
+class AssistantMessage(ConversationMessageBase):
+    role: str = field(default="assistant", init=False)
     generated_by: Optional[str] = None
-    # Which agent tier produced this message (see AgentTier). Only set on
-    # assistant messages — mirrors `generated_by` (LLM provider) but tracks
-    # capability tier instead. None for older messages predating this field
-    # or for anything generated outside the tiered flow.
     generated_by_agent: Optional[str] = None
     vote: Optional[str] = None
     comment: Optional[str] = None
+
+
+ConversationMessage = (
+    UserMessage | AssistantMessage
+)  # kept as a type alias for existing annotations
 
 
 @dataclass
@@ -321,7 +331,7 @@ class AgentState:
         self.cognitive._add_trace(step_type=step_type, node=node, data=data)
 
     def add_user_message(self, content: str):
-        self.conversation.add_message(ConversationMessage(role="user", content=content))
+        self.conversation.add_message(UserMessage(content=content))
 
     def add_assistant_message(self, content: str):
         pipeline = self.cognitive.generation_pipeline
@@ -341,8 +351,7 @@ class AgentState:
             generated_by = "mixed"
 
         self.conversation.add_message(
-            ConversationMessage(
-                role="assistant",
+            AssistantMessage(
                 content=content,
                 generated_by=generated_by,
                 generated_by_agent=str(self.active_agent),
@@ -351,7 +360,7 @@ class AgentState:
 
     def get_last_user_message(self):
         for msg in reversed(self.conversation.messages):
-            if msg.role == "user":
+            if isinstance(msg, UserMessage):
                 return msg
         return None
 

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 from app.prompts.entity_parsing import get_relatet_context_ids
 from app.agent.nodes.utils import _ensure_data_cached
-from app.prompts.scanarios import generate_summary
+from app.prompts.scanarios import analyze_scenario, generate_summary
 from app.prompts.report import generate_report
 
 from app.tools.executors.system_utility import execute_lookup_glossary

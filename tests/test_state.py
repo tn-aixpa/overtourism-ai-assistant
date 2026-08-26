@@ -5,12 +5,13 @@ import pytest
 
 from app.agent.state import (
     AgentState,
+    AssistantMessage,
     CognitiveState,
     ConversationBuffer,
-    ConversationMessage,
     ReActStep,
     TraceBuffer,
     TraceStep,
+    UserMessage,
 )
 
 # ---------------------------------------------------------------------------
@@ -21,28 +22,28 @@ from app.agent.state import (
 class TestConversationBuffer:
     def test_add_message_appends(self):
         buf = ConversationBuffer()
-        buf.add_message(ConversationMessage(role="user", content="hi"))
+        buf.add_message(UserMessage(content="hi"))
         assert len(buf.messages) == 1
         assert buf.messages[0].content == "hi"
 
     def test_get_last_n_default_uses_max_window_size(self):
         buf = ConversationBuffer(max_window_size=2)
         for i in range(5):
-            buf.add_message(ConversationMessage(role="user", content=str(i)))
+            buf.add_message(UserMessage(content=str(i)))
         last = buf.get_last_n()
         assert [m.content for m in last] == ["3", "4"]
 
     def test_get_last_n_explicit_n(self):
         buf = ConversationBuffer()
         for i in range(5):
-            buf.add_message(ConversationMessage(role="user", content=str(i)))
+            buf.add_message(UserMessage(content=str(i)))
         last = buf.get_last_n(3)
         assert [m.content for m in last] == ["2", "3", "4"]
 
     def test_get_context_window_formats_for_llm(self):
         buf = ConversationBuffer()
-        buf.add_message(ConversationMessage(role="user", content="hello"))
-        buf.add_message(ConversationMessage(role="assistant", content="hi there"))
+        buf.add_message(UserMessage(content="hello"))
+        buf.add_message(AssistantMessage(content="hi there"))
         window = buf.get_context_window()
         assert window == [
             {"role": "user", "content": "hello"},
