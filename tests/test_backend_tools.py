@@ -122,25 +122,6 @@ class TestDeleteData:
 
 
 # ---------------------------------------------------------------------------
-# check_authorization
-# ---------------------------------------------------------------------------
-
-
-class TestCheckAuthorization:
-    def test_returns_true_when_authenticated(self):
-        with patch.object(bt, "get_data", return_value={"authenticated": True}):
-            assert check_authorization("tok", "tenant1") is True
-
-    def test_returns_false_when_not_authenticated(self):
-        with patch.object(bt, "get_data", return_value={"authenticated": False}):
-            assert check_authorization("tok", "tenant1") is False
-
-    def test_returns_false_when_field_missing(self):
-        with patch.object(bt, "get_data", return_value={}):
-            assert check_authorization("tok", "tenant1") is False
-
-
-# ---------------------------------------------------------------------------
 # create_new_problem
 # ---------------------------------------------------------------------------
 

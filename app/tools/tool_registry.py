@@ -6,9 +6,17 @@ from typing import Dict, List, Optional, Any
 import logging
 
 from app.tools.tool_schema import ToolDefinition
-from app.tools.agent_tools import get_all_agent_tools
+from app.tools.definitions import get_all_agent_tools
 
 logger = logging.getLogger(__name__)
+
+WIDGET_TOOL_NAMES = {
+    "comparison_plot",
+    "kpi_comparison",
+    "show_capacity_plot",
+    "show_load_plot",
+    "show_territorial_index_map",
+}
 
 
 class ToolRegistry:

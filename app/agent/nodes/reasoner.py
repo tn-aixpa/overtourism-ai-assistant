@@ -22,8 +22,11 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.agent.events import publish_thought
-from app.tools.tool_registry import get_tool_registry, _ensure_tool_registry
-from app.tools.agent_tools import WIDGET_TOOL_NAMES
+from app.tools.tool_registry import (
+    get_tool_registry,
+    _ensure_tool_registry,
+    WIDGET_TOOL_NAMES,
+)
 from app.prompts.react_reasoning import react_step
 
 logger = logging.getLogger(__name__)
