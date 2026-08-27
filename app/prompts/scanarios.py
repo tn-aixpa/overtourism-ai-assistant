@@ -90,8 +90,8 @@ what simulations are on this platform and what "sustainability" and "uncertainty
 
 <h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati generali simulazione</h6>
 <p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
-[fill in: Give a general, high-level summary of the overall sustainability and results of
-the simulation(s), explicitly citing the sustainability_index value(s) as percentages from the
+[fill in: Give a general, high-level summary of the overall overtourism level and results of
+the simulation(s), explicitly citing the overtourism_level value(s) as percentages from the
 evaluation data below. Also mention index_diffs if present (what changed from the base scenario, also as percentages).]
 </p>
 

@@ -85,26 +85,22 @@ def clean_scenario(raw_data):
     return {
         "scenario_id": raw_data["scenario_id"],
         "evaluation_id": raw_data["evaluation_id"],
-        "data": {
-            # "sustainable_area": ev["data"]["sustainable_area"],
-            "sustainability_index": data["sustainability_index"],
-            "sustainability_by_constraint": data["sustainability_by_constraint"],
-        },
+        "data": data.get("kpis", {}),
         "plot_data": {
-            "constraint_curves": data.get("constraint_curves", {}) or {},
-            "uncertainty": data.get("uncertainty", []) or [],
-            "uncertainty_by_constraint": data.get("uncertainty_by_constraint", {})
-            or {},
-            "usage": data.get("usage", []) or [],
-            "usage_by_constraint": data.get("usage_by_constraint", {}) or {},
-            "sample_x": data.get("sample_x", []) or [],
-            "sample_y": data.get("sample_y", []) or [],
-            "capacity_mean": data.get("capacity_mean"),
-            "capacity_mean_by_constraint": data.get("capacity_mean_by_constraint", {})
-            or {},
-            "x_max": data.get("x_max"),
-            "y_max": data.get("y_max"),
-            "kpis": data.get("kpis", {}) or {},
+            # "constraint_curves": data.get("constraint_curves", {}) or {},
+            # "uncertainty": data.get("uncertainty", []) or [],
+            # "uncertainty_by_constraint": data.get("uncertainty_by_constraint", {})
+            # or {},
+            # "usage": data.get("usage", []) or [],
+            # "usage_by_constraint": data.get("usage_by_constraint", {}) or {},
+            # "sample_x": data.get("sample_x", []) or [],
+            # "sample_y": data.get("sample_y", []) or [],
+            # "capacity_mean": data.get("capacity_mean"),
+            # "capacity_mean_by_constraint": data.get("capacity_mean_by_constraint", {})
+            # or {},
+            # "x_max": data.get("x_max"),
+            # "y_max": data.get("y_max"),
+            # "kpis": data.get("kpis", {}) or {},
         },
     }
 
