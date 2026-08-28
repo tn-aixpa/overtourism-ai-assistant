@@ -192,30 +192,7 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
 
     logger.info("Executing get_configuration_parameters tool")
 
-    raw = get_widgets.invoke({"tenant": state.tenant})
-    widgets = raw.get("widgets", raw) if isinstance(raw, dict) else raw
-
-    cleaned = {
-        group: [
-            {
-                "index_id": param["index_id"],
-                "index_name": param["index_name"],
-                "description": param.get("description"),
-                "group": param.get("group", group),
-                # "editable": param.get("editable", True),
-                "current_value": param.get("v")
-                or [param.get("loc"), param.get("scale")],
-                "unit": param.get("index_category"),
-                "min": param.get("min"),
-                "max": param.get("max"),
-                "step": param.get("step"),
-            }
-            for param in params
-        ]
-        for group, params in widgets.items()
-    }
-
-    return {"widgets": cleaned}
+    return get_widgets.invoke({"tenant": state.tenant})
 
 
 def execute_analyze_scenario_results(

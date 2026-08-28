@@ -27,8 +27,7 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
 
 
 def _summarize_map_features(features: list) -> Dict[str, Any]:
-    """Compact, LLM-safe summary of a choropleth's features — mirrors
-    summarize_plot's role for curves (app/utils/backend_entities_parsing.py):
+    """Compact, LLM-safe summary of a choropleth's features:
     give the reasoner real, grounded facts (area names, top/bottom values)
     without ever handing it the raw per-feature geometry, which is only
     ever meant to reach the frontend widget."""

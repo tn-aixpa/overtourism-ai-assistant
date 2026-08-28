@@ -86,22 +86,7 @@ def clean_scenario(raw_data):
         "scenario_id": raw_data["scenario_id"],
         "evaluation_id": raw_data["evaluation_id"],
         "data": data.get("kpis", {}),
-        "plot_data": {
-            # "constraint_curves": data.get("constraint_curves", {}) or {},
-            # "uncertainty": data.get("uncertainty", []) or [],
-            # "uncertainty_by_constraint": data.get("uncertainty_by_constraint", {})
-            # or {},
-            # "usage": data.get("usage", []) or [],
-            # "usage_by_constraint": data.get("usage_by_constraint", {}) or {},
-            # "sample_x": data.get("sample_x", []) or [],
-            # "sample_y": data.get("sample_y", []) or [],
-            # "capacity_mean": data.get("capacity_mean"),
-            # "capacity_mean_by_constraint": data.get("capacity_mean_by_constraint", {})
-            # or {},
-            # "x_max": data.get("x_max"),
-            # "y_max": data.get("y_max"),
-            # "kpis": data.get("kpis", {}) or {},
-        },
+        "plot_data": data,
     }
 
 
@@ -178,7 +163,6 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
             "tenant": extracted_data.get("tenant", ""),
             "created": extracted_data.get("created", ""),
             "updated": extracted_data.get("updated", ""),
-            "related_subsystem": extracted_data.get("extras", {}).get("groups", ""),
         },
     }
 
@@ -197,17 +181,20 @@ def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
         return extracted_data
 
     cleaned_data = {
+        "proposal_id": extracted_data.get("proposal_id", ""),
         "problem_id": extracted_data.get("problem_id", ""),
         "name": extracted_data.get("name", ""),
         "description": extracted_data.get("description", ""),
-        "objective": extracted_data.get("extras", {}).get("objective", ""),
-        "links": extracted_data.get("extras", {}).get("links", ""),
+        "related_scenario_ids": extracted_data.get("extras", {}).get("context", ""),
+        "resources": extracted_data.get("resources", ""),
+        "context": extracted_data.get("context", ""),
+        "impact": extracted_data.get("impact", ""),
         "additional_data_available_on_specific_request": {
             "version": extracted_data.get("version", ""),
             "tenant": extracted_data.get("tenant", ""),
             "created": extracted_data.get("created", ""),
             "updated": extracted_data.get("updated", ""),
-            "related_subsystem": extracted_data.get("extras", {}).get("groups", ""),
+            "status": extracted_data.get("status", ""),
         },
     }
 
@@ -245,49 +232,9 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
 @tool
 def get_widgets(tenant: str) -> dict:
     """Fetch all tunable configuration parameters (widgets) from the API."""
-    url = f"{BACKEND_URL}{tenant}/widgets"
-    return get_data(url)
-
-
-def _strong_html_to_markdown(text: str) -> str:
-    """The backend wraps emphasized terms in index descriptions with raw
-    <strong>...</strong> HTML. Convert those to markdown bold so the text
-    renders correctly wherever it ends up (chat, prompts) instead of
-    leaking HTML tags."""
-    if not text:
-        return text
-    return text.replace("<strong>", "**").replace("</strong>", "**")
-
-
-@tool
-def get_territorial_index_list(tenant: str) -> list:
-    """Fetch the list of available territorial indexes (with descriptions) from the API."""
-    url = f"{BACKEND_URL}{tenant}/indexes/get-index-list"
+    url = f"{BACKEND_URL}{tenant}/configuration"
     extracted_data = get_data(url)
-
-    cleaned_data = [
-        {
-            "index_id": item["value"],
-            "label": item["label"],
-            "description": _strong_html_to_markdown(item["index_description"]),
-            "available_for_variation": item.get("availableForVariation", False),
-            "years_range": item.get("years_range", {}),
-        }
-        for item in extracted_data.get("indicators", [])
-    ]
-
-    return cleaned_data
-
-
-@tool
-def get_territorial_index_data(
-    tenant: str, index: str, start_date: str, end_date: str
-) -> dict:
-    """Fetch the geo-referenced values (GeoJSON + value range) of a single
-    territorial index for the given date range from the API."""
-    url = f"{BACKEND_URL}{tenant}/indexes/get_index_data"
-    params = {"index": index, "start_date": start_date, "end_date": end_date}
-    return get_data(url, params=params)
+    return extracted_data.get("indexes", [])
 
 
 @tool
@@ -326,7 +273,7 @@ def create_temp_scenario(
 
     body = {
         "base_scenario_id": base_scenario_id,
-        "values": values,
+        "params_overrides": values,
     }
 
     params = {"base_scenario_id": base_scenario_id} if base_scenario_id else None
@@ -338,8 +285,6 @@ def create_temp_scenario(
     url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/"
     body = {
         "scenario_id": created_scenario["scenario_id"],
-        "ensemble_size": 20,
-        "kwargs": {},
     }
 
     created_eval = post_data(url, json=body, params=params)
@@ -767,3 +712,44 @@ def delete_scenario(scenario_id: str, tenant: str):
 
     delete_data(url)
     return {"success": True, "name": name}
+
+
+def _strong_html_to_markdown(text: str) -> str:
+    """The backend wraps emphasized terms in index descriptions with raw
+    <strong>...</strong> HTML. Convert those to markdown bold so the text
+    renders correctly wherever it ends up (chat, prompts) instead of
+    leaking HTML tags."""
+    if not text:
+        return text
+    return text.replace("<strong>", "**").replace("</strong>", "**")
+
+
+@tool
+def get_territorial_index_list(tenant: str) -> list:
+    """Fetch the list of available territorial indexes (with descriptions) from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get-index-list"
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "index_id": item["value"],
+            "label": item["label"],
+            "description": _strong_html_to_markdown(item["index_description"]),
+            "available_for_variation": item.get("availableForVariation", False),
+            "years_range": item.get("years_range", {}),
+        }
+        for item in extracted_data.get("indicators", [])
+    ]
+
+    return cleaned_data
+
+
+@tool
+def get_territorial_index_data(
+    tenant: str, index: str, start_date: str, end_date: str
+) -> dict:
+    """Fetch the geo-referenced values (GeoJSON + value range) of a single
+    territorial index for the given date range from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get_index_data"
+    params = {"index": index, "start_date": start_date, "end_date": end_date}
+    return get_data(url, params=params)

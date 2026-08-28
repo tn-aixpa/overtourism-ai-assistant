@@ -31,46 +31,59 @@ def execute_get_base_scenario(
 
 
 def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:
-    """Shape each override in `values` to match its widget's underlying
-    representation before it's sent to the backend.
+    """Normalize widget overrides to the format expected by the backend.
 
-    Widgets come in two flavors (see execute_get_configuration_parameters):
-      - constant widgets, keyed by "v" — a plain scalar. The override passed
-        in `values` is already correct as-is; nothing to do.
-      - distribution widgets, keyed by "loc"/"scale" — the backend expects a
-        [loc, scale] pair, not a bare scalar. Two cases:
-          * the caller already supplied both numbers (a 2-item list/tuple)
-            -> use them directly as [new_loc, new_scale].
-          * the caller supplied a single number -> that's treated as the
-            new scale, and the widget's original loc is kept unchanged:
-            [param.get("loc"), new_scale].
+    Current widget format:
+      - categorical widgets:
+          {"name": "...", "kind": "categorical", ...}
 
-    Widgets not found in the catalog (e.g. an id typo) are passed through
-    unchanged rather than dropped, so the backend can surface the real
-    error instead of this silently discarding the override.
+        Values are passed through unchanged.
+
+      - distribution widgets:
+          {
+              "name": "...",
+              "kind": "distribution",
+              "default_range": [min, max],
+              ...
+          }
+
+        A 2-item list/tuple is treated as the complete new range.
+        A single scalar preserves the original lower bound and replaces
+        the upper bound.
+
+    Unknown widget names are passed through unchanged.
     """
     from app.tools.executor_backend_tools import get_widgets
 
-    raw = get_widgets.invoke({"tenant": state.tenant})
-    widgets = raw.get("widgets", raw) if isinstance(raw, dict) else raw
-    by_id = {
-        param["index_id"]: param for params in widgets.values() for param in params
-    }
+    widgets = get_widgets.invoke({"tenant": state.tenant})
+
+    logger.info("WIDGETS: %s", widgets)
+    logger.info("values: %s", values)
+
+    # Widgets are now returned as a flat list and are identified by "name".
+    by_name = {widget["name"]: widget for widget in widgets}
 
     normalized = {}
-    for index_id, value in values.items():
-        param = by_id.get(index_id)
 
-        if not param or param.get("v") is not None:
-            # "v"-type (or unknown id): pass through unchanged.
-            normalized[index_id] = value
+    for name, value in values.items():
+        widget = by_name.get(name)
+
+        # Unknown widgets and categorical widgets: pass through unchanged.
+        if not widget or widget.get("kind") != "distribution":
+            normalized[name] = value
             continue
 
-        # "loc"/"scale"-type.
+        # Distribution widget.
         if isinstance(value, (list, tuple)) and len(value) == 2:
-            normalized[index_id] = [value[0], value[1]]
+            normalized[name] = [value[0], value[1]]
         else:
-            normalized[index_id] = [param.get("loc"), value]
+            default_range = widget.get("default_range")
+
+            if isinstance(default_range, (list, tuple)) and len(default_range) == 2:
+                normalized[name] = [default_range[0], value]
+            else:
+                # Fallback if the widget definition is malformed.
+                normalized[name] = value
 
     return normalized
 

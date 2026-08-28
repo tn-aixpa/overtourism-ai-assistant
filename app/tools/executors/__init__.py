@@ -3,7 +3,8 @@
 from typing import Any, Callable
 
 from app.tools.executors.analysis import EXECUTORS as _analysis
-from app.tools.executors.analysis_widgets import EXECUTORS as _analysis_widgets
+
+# from app.tools.executors.analysis_widgets import EXECUTORS as _analysis_widgets
 from app.tools.executors.indexes import EXECUTORS as _indexes
 from app.tools.executors.problem import EXECUTORS as _problem
 from app.tools.executors.proposal import EXECUTORS as _proposal
@@ -13,7 +14,7 @@ from app.tools.executors.system_utility import EXECUTORS as _system_utility
 EXECUTORS: dict[str, Callable[..., Any]] = {
     **_system_utility,
     **_analysis,
-    **_analysis_widgets,
+    #    **_analysis_widgets,
     **_indexes,
     **_problem,
     **_proposal,
