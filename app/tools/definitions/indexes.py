@@ -91,7 +91,6 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
             ),
         ],
         output_description="'map' widget (choropleth) to display in the interface, already formatted for assistant_action_data.",
-        enabled=False,
         tags=["widget", "map", "territorial-index", "integrated"],
     )
 
