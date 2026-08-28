@@ -15,6 +15,7 @@ def create_list_available_problems_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
+        agent_tier="executor",
     )
 
 
@@ -31,6 +32,7 @@ def create_new_problem_tool() -> ToolDefinition:
         parameters=PROBLEM_PARAMETERS,
         output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "problem"],
+        agent_tier="executor",
     )
 
 
@@ -43,6 +45,7 @@ def edit_problem_tool() -> ToolDefinition:
         parameters=PROBLEM_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "problem"],
+        agent_tier="executor",
     )
 
 
@@ -55,6 +58,7 @@ def delete_problem_tool() -> ToolDefinition:
         parameters=[],
         output_description="Acknowledgement of successful deletion or request for more details",
         tags=["write", "problem"],
+        agent_tier="executor",
     )
 
 

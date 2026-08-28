@@ -37,29 +37,32 @@ class ToolDefinition:
     enabled: bool = True
     requires_confirmation: bool = False
     tags: List[str] = field(default_factory=list)
-    # Set on delegate_to_<tier> tools (e.g. "exploitative") that require
-    # one-time user consent before a session may use that tier at all.
-    # Checked by tool_executor_node against
-    # CognitiveState.has_valid_tier_consent before the tool is allowed to
-    # run. None means no tier-level gate applies (the default for
-    # everything except delegation tools into gated tiers).
-    requires_tier_consent: Optional[str] = None
-    # Which agent tiers may see/select this tool at all (filtered in
-    # ToolRegistry.get_context_tools via the `tier` argument). Defaults to
-    # all four tiers, i.e. no restriction, so existing tools need no
-    # changes to keep working exactly as before. Values are plain strings
-    # rather than an import of app.agent.state.AgentTier to avoid a
-    # tools -> agent dependency; they must be kept in sync with
-    # AgentTier's values ("executor", "operative", "methodological",
-    # "exploitative").
-    visible_to: Set[str] = field(
-        default_factory=lambda: {
-            "executor",
-            "operative",
-            "methodological",
-            "exploitative",
-        }
-    )
+    # Which AgentTier this tool's response is generated under once selected
+    # (see AgentState.active_agent / _reasoning_policy in
+    # answer_generation.py). This is orthogonal to routing: the top-level
+    # router (app.agent.nodes.router) decides which SUBSET of tools the
+    # ReAct reasoner may pick from this turn; agent_tier instead decides
+    # the RESPONSE STYLE/POLICY once a tool from that subset is actually
+    # used, and — for tiers in TIERS_REQUIRING_CONSENT (see
+    # app.agent.state) — whether tool_executor_node must pause for
+    # one-time user consent before running it at all. A turn that calls
+    # several tools takes the highest tier reached across all of them (see
+    # tool_executor_node._bump_active_agent). Plain string rather than an
+    # import of app.agent.state.AgentTier to avoid a tools -> agent
+    # dependency; must be kept in sync with AgentTier's values
+    # ("executor", "operative", "methodological", "exploitative").
+    #
+    # NOTE: this used to also be filtered on for tool *selectability* via a
+    # separate `visible_to` field (checked in
+    # ToolRegistry.get_context_tools against AgentState.active_agent). That
+    # was removed: it created a chicken-and-egg problem where a tool tagged
+    # for a higher tier could never be selected in the first place, because
+    # active_agent only ever reaches that tier as a RESULT of selecting
+    # such a tool. Which tools are selectable this turn is now governed
+    # entirely by routing (app.agent.nodes.router /
+    # CognitiveState.enabled_tools); agent_tier only affects the response
+    # once a tool has actually run.
+    agent_tier: str = "executor"
 
     def to_tool_description(self) -> Dict[str, Any]:
         """Convert to format suitable for LLM tool calling."""

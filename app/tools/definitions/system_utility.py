@@ -46,6 +46,7 @@ def create_lookup_glossary_tool() -> ToolDefinition:
             "related terms, and examples."
         ),
         tags=["data", "read-only", "glossary", "utility"],
+        agent_tier="executor",
     )
 
 
@@ -62,6 +63,46 @@ def create_get_system_capabilities_tool() -> ToolDefinition:
         parameters=[],
         output_description="System description, context rules, and available tools per context",
         tags=["data", "read-only", "system", "navigation"],
+        agent_tier="operative",
+    )
+
+
+def create_general_question_response_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="general_question_response",
+        description=(
+            "Answer an on-topic question (tourism management, overtourism, mobility, or the platform's "
+            "subject matter) that isn't covered by platform data, the glossary, or any other tool. "
+            "Do NOT use this for questions outside that domain (e.g. weather, movies, general trivia) — "
+            "those should be declined per the on-topic check, not delegated here."
+        ),
+        category=ToolCategory.INTERACTION,
+        long_description=(
+            "Answers the current question with an unguarded, free-form reply that is not "
+            "checked against platform data, the glossary, or any other grounded source. Use "
+            "this only once other guidelines and tools don't apply — e.g. the user asks a "
+            "general-knowledge question with no connection to problems, proposals, scenarios, "
+            "or territorial indexes, and clearly expects a direct answer rather than a "
+            "refusal. This tool's agent_tier is 'exploitative' (see AgentTier), an unguarded "
+            "tier that requires explicit, one-time user consent before a session may use it "
+            "at all — the first use each session pauses for that consent automatically (see "
+            "TIERS_REQUIRING_CONSENT / tool_executor_node's tier-consent gate). Do not use "
+            "this to bypass a grounded tool that could answer the question instead."
+        ),
+        parameters=[
+            ToolParameter(
+                name="query",
+                description="The user's general question, restated if helpful for clarity.",
+                type="string",
+                required=True,
+            ),
+        ],
+        output_description=(
+            "A free-form answer to the general question, not grounded in platform "
+            "data, the glossary, or any other verified source."
+        ),
+        agent_tier="exploitative",
+        tags=["general", "ungrounded", "exploitative-tier"],
     )
 
 
@@ -87,6 +128,7 @@ def create_get_data_from_link_tool() -> ToolDefinition:
         ],
         output_description="URL fetch result with content summary or error details",
         tags=["data", "read-only", "link", "web"],
+        agent_tier="operative",
     )
 
 
@@ -94,4 +136,5 @@ __all__ = [
     "create_get_system_capabilities_tool",
     "create_lookup_glossary_tool",
     "create_get_data_from_link_tool",
+    "create_general_question_response_tool",
 ]

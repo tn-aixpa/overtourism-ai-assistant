@@ -16,6 +16,7 @@ def create_list_available_scenarios_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
+        agent_tier="executor",
     )
 
 
@@ -30,6 +31,7 @@ def create_get_base_scenario_tool() -> ToolDefinition:
         parameters=[],
         output_description="The base scenario ID",
         tags=["data", "read-only", "scenario", "base"],
+        agent_tier="executor",
     )
 
 
@@ -58,6 +60,7 @@ def create_new_temp_scenario_tool() -> ToolDefinition:
             "(sustainability index and per-constraint breakdown)."
         ),
         tags=["scenario", "simulation", "preview"],
+        agent_tier="executor",
     )
 
 
@@ -80,6 +83,7 @@ def create_new_scenario_tool() -> ToolDefinition:
         parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement of successful save with the final scenario_id.",
         tags=["write", "scenario"],
+        agent_tier="executor",
     )
 
 
@@ -92,6 +96,7 @@ def edit_scenario_tool() -> ToolDefinition:
         parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "scenario"],
+        agent_tier="executor",
     )
 
 
@@ -104,6 +109,7 @@ def delete_scenario_tool() -> ToolDefinition:
         parameters=[],
         output_description="Acknowledgement of successful deletetion or request for more details",
         tags=["write", "proposal"],
+        agent_tier="executor",
     )
 
 

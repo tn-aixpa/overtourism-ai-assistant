@@ -11,7 +11,7 @@ import logging
 from typing import Any, Dict, Callable
 from langgraph.types import Command
 
-from app.agent.state import AgentState, ReActStep
+from app.agent.state import AgentState, ReActStep, AgentTier, TIERS_REQUIRING_CONSENT
 from app.agent.events import publish_action
 from app.agent.nodes.utils import (
     _resolve_referenced_id,
@@ -60,6 +60,51 @@ _CACHE_INVALIDATION_MAP = {
     "edit_scenario": ("scenario_id", "scenarios"),
     "delete_scenario": ("scenario_id", "scenarios"),
 }
+
+# Ordinal ranking for AgentTier, lowest-license first — used only to decide
+# whether a tool's agent_tier should raise state.active_agent for the rest
+# of the turn (see _bump_active_agent). Matches AgentTier's own declaration
+# order in app.agent.state.
+_TIER_ORDER = [
+    AgentTier.EXECUTOR,
+    AgentTier.OPERATIVE,
+    AgentTier.METHODOLOGICAL,
+    AgentTier.EXPLOITATIVE,
+]
+
+
+def _bump_active_agent(state: AgentState, tool_def: ToolDefinition | None) -> None:
+    """
+    Raise state.active_agent to tool_def.agent_tier if that tier outranks
+    whatever active_agent already is this turn — never lowers it.
+
+    active_agent decides the RESPONSE persona/policy generate_answer()
+    uses when the turn finishes (see _reasoning_policy in
+    answer_generation.py), and — for tiers in TIERS_REQUIRING_CONSENT —
+    whether running the tool needs one-time user consent first (checked by
+    the caller before this is called). It is reset to the EXECUTOR
+    baseline once per turn in initialize_tools, then only ever raised here
+    as tools actually run, so a turn that calls e.g. list_available_*
+    (EXECUTOR) and then analyze_scenario_results (OPERATIVE) ends up with
+    active_agent=OPERATIVE for its final answer even if an EXECUTOR-tier
+    tool (like show_capacity_plot) also runs afterwards in the same turn.
+    """
+    if not tool_def:
+        return
+    try:
+        tool_tier = AgentTier(tool_def.agent_tier)
+    except ValueError:
+        logger.warning(
+            f"Unknown agent_tier '{tool_def.agent_tier}' on tool "
+            f"'{tool_def.name}', leaving active_agent unchanged"
+        )
+        return
+    if _TIER_ORDER.index(tool_tier) > _TIER_ORDER.index(state.active_agent):
+        logger.info(
+            f"Bumping active_agent {state.active_agent} -> {tool_tier} "
+            f"(tool '{tool_def.name}')"
+        )
+        state.active_agent = tool_tier
 
 
 def execute_selected_tool(
@@ -197,17 +242,20 @@ def tool_executor_node(state: AgentState) -> Command:
 
     # ---- Tier-access consent gate ----
     # Distinct from the data-confirmation gate below: this asks permission
-    # to use a *capability* at all (e.g. the exploitative tier's
-    # unguarded strategy suggestions), not to confirm specific data.
-    # Checked first — deciding whether a capability may be used at all is
-    # logically prior to confirming what gets submitted with it — and
-    # persists across turns via CognitiveState.tier_consent, so unlike the
-    # gate below it does not need a one-shot "confirmed" flag: granting
-    # consent updates state directly, and re-entering this node re-checks
+    # to use a *capability* at all (e.g. the exploitative tier's unguarded
+    # free-form answers), not to confirm specific data. Derived from the
+    # SELECTED TOOL's own agent_tier (see ToolDefinition.agent_tier) —
+    # any tool tagged with a tier in TIERS_REQUIRING_CONSENT is gated,
+    # there is no separate per-tool opt-in needed. Checked first —
+    # deciding whether a capability may be used at all is logically prior
+    # to confirming what gets submitted with it — and persists across
+    # turns via CognitiveState.tier_consent, so unlike the gate below it
+    # does not need a one-shot "confirmed" flag: granting consent updates
+    # state directly, and re-entering this node re-checks
     # has_valid_tier_consent, which now simply passes.
-    required_tier = (
-        getattr(tool_def, "requires_tier_consent", None) if tool_def else None
-    )
+    required_tier = tool_def.agent_tier if tool_def else None
+    if required_tier not in TIERS_REQUIRING_CONSENT:
+        required_tier = None
     if required_tier and not state.cognitive.has_valid_tier_consent(required_tier):
         logger.info(f"Pausing '{tool_name}' for tier-access consent ({required_tier})")
         return request_tier_consent(state, required_tier, resume_goto="tool_executor")
@@ -226,6 +274,11 @@ def tool_executor_node(state: AgentState) -> Command:
     # Confirmation (if it was required) has been consumed for this step.
     state.cognitive.tool_confirmed = False
     state.cognitive.tool_confirmation_needed = False
+
+    # Both gates passed (or didn't apply) — the tool is actually about to
+    # run, so this is the point where its declared tier takes effect for
+    # the rest of the turn's response.
+    _bump_active_agent(state, tool_def)
 
     publish_action(state.session_id, tool_name)
 

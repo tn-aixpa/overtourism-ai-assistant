@@ -83,6 +83,38 @@ def execute_lookup_glossary(
     }
 
 
+def execute_general_question_response(
+    state: AgentState,
+    query: str,
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Execute general_question_response tool.
+
+    Answers a general question with a free-form LLM call — not grounded in
+    platform data, the glossary, or any other verified source.
+
+    This tool's ToolDefinition.agent_tier is "exploitative": an unguarded
+    tier that (a) requires one-time user consent before a session may use
+    it at all (enforced upstream by tool_executor_node's tier-consent gate)
+    and (b) determines the response persona/policy generate_answer() below
+    uses (see _reasoning_policy in answer_generation.py). Both effects come
+    from tool_executor_node bumping state.active_agent to this tool's
+    agent_tier before running it — nothing tool-specific needed here.
+    """
+    from app.prompts.answer_generation import generate_answer
+
+    logger.info(f"Executing general_question_response | query='{query}'")
+
+    answer = generate_answer(state)
+
+    return {
+        "success": True,
+        "query": query,
+        "answer": answer,
+    }
+
+
 def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute get_system_capabilities tool."""
     from app.utils.system_capabilities import SYSTEM_DESCRIPTION
@@ -119,5 +151,6 @@ def execute_get_data_from_link(
 EXECUTORS = {
     "lookup_glossary": execute_lookup_glossary,
     "get_system_capabilities": execute_get_system_capabilities,
+    "general_question_response": execute_general_question_response,
     "get_data_from_link": execute_get_data_from_link,
 }

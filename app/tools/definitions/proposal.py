@@ -15,6 +15,7 @@ def create_list_available_proposals_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
+        agent_tier="executor",
     )
 
 
@@ -30,6 +31,7 @@ def create_new_proposal_tool() -> ToolDefinition:
         parameters=PROPOSAL_PARAMETERS,
         output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "proposal"],
+        agent_tier="executor",
     )
 
 
@@ -42,6 +44,7 @@ def edit_proposal_tool() -> ToolDefinition:
         parameters=PROPOSAL_PARAMETERS,
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "proposal"],
+        agent_tier="executor",
     )
 
 
@@ -54,6 +57,7 @@ def delete_proposal_tool() -> ToolDefinition:
         parameters=[],
         output_description="Acknowledgement of successful deletetion or request for more details",
         tags=["write", "proposal"],
+        agent_tier="executor",
     )
 
 

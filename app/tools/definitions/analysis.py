@@ -39,6 +39,7 @@ def create_get_context_ids_tool() -> ToolDefinition:
         ],
         output_description="Dict with keys 'problems', 'proposals', 'scenarios', each a list of matching IDs.",
         tags=["data", "read-only", "navigation", "resolution"],
+        agent_tier="executor",
     )
 
 
@@ -61,6 +62,7 @@ def create_get_context_tool() -> ToolDefinition:
         parameters=[],
         output_description="Dictionary with retrieved details for all items in the current context",
         tags=["data", "read-only"],
+        agent_tier="executor",
     )
 
 
@@ -87,6 +89,7 @@ def create_get_configuration_parameters_tool() -> ToolDefinition:
             "current value, min, max, and step."
         ),
         tags=["data", "read-only", "scenario", "parameters"],
+        agent_tier="executor",
     )
 
 
@@ -115,7 +118,7 @@ def create_analyze_scenario_results_tool() -> ToolDefinition:
         ],
         output_description="Answer or analysis based on the retrieved context data",
         tags=["interaction", "read-only"],
-        visible_to=["operative", "methodological", "exploitative"],
+        agent_tier="operative",
     )
 
 
@@ -161,7 +164,7 @@ def create_summary_generation_tool() -> ToolDefinition:
         ),
         enabled=False,
         tags=["interaction", "read-only", "internal"],
-        visible_to=["operative", "methodological", "exploitative"],
+        agent_tier="operative",
     )
 
 
@@ -211,7 +214,7 @@ def create_report_generation_tool() -> ToolDefinition:
         ),
         enabled=False,
         tags=["interaction", "read-only", "internal"],
-        visible_to=["operative", "methodological", "exploitative"],
+        agent_tier="operative",
     )
 
 

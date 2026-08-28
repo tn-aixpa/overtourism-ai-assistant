@@ -27,6 +27,7 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
             "whether it supports variation analysis, and its available year range."
         ),
         tags=["data", "read-only", "territorial-index", "navigation"],
+        agent_tier="executor",
     )
 
 
@@ -82,8 +83,8 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
             ToolParameter(
                 name="end_date",
                 description=(
-                    "End of the period, format YYYY-MM-DD, always the 1st of a month — "
-                    "for a full year this is that year's December 1st, NOT the 31st (see "
+                    "End of the period, format YYYY-MM-DD. For full months get the last day"
+                    "of the month, while for a full year it's December 31st (see "
                     "tool description for the full conversion rules)."
                 ),
                 type="string",
@@ -91,7 +92,9 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
             ),
         ],
         output_description="'map' widget (choropleth) to display in the interface, already formatted for assistant_action_data.",
+        enabled=True,
         tags=["widget", "map", "territorial-index", "integrated"],
+        agent_tier="executor",
     )
 
 

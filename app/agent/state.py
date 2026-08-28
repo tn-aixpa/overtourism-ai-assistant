@@ -27,14 +27,16 @@ TIER_CONSENT_TTL = timedelta(hours=24)
 
 
 class AgentTier(StrEnum):
-    """The four capability tiers (see the architecture discussion this
-    implements). Values match ToolDefinition.visible_to strings exactly —
-    keep them in sync if either changes.
+    """The four capability tiers, ordered lowest-license to highest.
 
-    EXECUTOR is the only tier with a working ReAct loop today; the other
-    three exist as a destination for AgentState.active_agent and for tool
-    visibility tagging (ToolDefinition.visible_to) ahead of the top-level
-    router and delegate_to_<tier> tools that will actually populate them.
+    Orthogonal to routing (app.agent.nodes.router / route_groups.py, which
+    decide which tools are SELECTABLE this turn): AgentTier instead decides
+    the RESPONSE style/policy once a tool has actually been used (see
+    ToolDefinition.agent_tier, tool_executor_node._bump_active_agent, and
+    _reasoning_policy in answer_generation.py), and — for tiers in
+    TIERS_REQUIRING_CONSENT — gates that tool behind one-time user consent.
+    EXECUTOR is the baseline every turn starts at; a turn's active_agent is
+    raised to the highest tier reached by any tool it actually calls.
     """
 
     EXECUTOR = "executor"
@@ -231,6 +233,23 @@ class CognitiveState:
     def grant_tier_consent(self, tier: str) -> None:
         self.tier_consent[tier] = datetime.now()
 
+    # ---- Multi-level topic routing ----------------------------------
+    # Which top-level domain (see app.agent.nodes.router.ROUTE_GROUPS) the
+    # session is currently reasoning in, and — for domains that have a
+    # second level (LOCATION, INDEXES) — which sub-group within it.
+    # Persists across turns exactly like tier_consent above: once resolved,
+    # a session stays routed to the same domain until top_level_router_node
+    # detects the user has actually changed topic, so an ongoing
+    # conversation about e.g. proposals doesn't re-ask "which of the 4
+    # areas do you mean?" on every single message.
+    top_level_route: Optional[str] = None
+    second_level_route: Optional[str] = None
+    # Set by top_level_router_node while it is paused waiting for the user
+    # to pick an option from an ambiguous routing prompt. "top" or
+    # "second" — tells WAIT_USER_INPUT which menu (and matching logic) to
+    # resume with. None the rest of the time.
+    pending_route_clarification: Optional[str] = None
+
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.
 
@@ -283,13 +302,15 @@ class AgentState:
     tenant: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
-    # Which capability tier is currently reasoning for this turn (see
-    # AgentTier). Defaults to EXECUTOR since that's the only tier with a
-    # real loop today; the top-level router will set this before entering
-    # a turn once it exists, and delegate_to_<tier> tools will change it
-    # for the duration of a nested call. Read by initialize_tools to filter
-    # ToolDefinition.visible_to, and stamped onto the outgoing message via
-    # add_assistant_message so callers can see which tier answered.
+    # Which capability tier this turn's response is generated under (see
+    # AgentTier). Reset to the EXECUTOR baseline at the start of every
+    # fresh turn (see initialize_tools), then raised at most, never
+    # lowered, as tools actually run this turn (see
+    # tool_executor_node._bump_active_agent and ToolDefinition.agent_tier)
+    # — NOT persisted across turns, unlike top_level_route/second_level_
+    # route or tier_consent on CognitiveState. Stamped onto the outgoing
+    # message via add_assistant_message so callers can see which tier
+    # answered.
     active_agent: AgentTier = AgentTier.EXECUTOR
 
     # Interface layer
@@ -309,6 +330,10 @@ class AgentState:
         # *_CONFIRMATION above, which recap specific data about to be
         # submitted rather than asking about capability access.
         TIER_ACCESS_CONFIRMATION = "TIER_ACCESS_CONFIRMATION"
+        # Waiting for the user to pick a domain/sub-area from an ambiguous
+        # top-level or second-level routing prompt (see
+        # app.agent.nodes.router.top_level_router_node).
+        ROUTE_CLARIFICATION = "ROUTE_CLARIFICATION"
 
     waiting_for: Optional["AgentState.WaitingFor"] = None
     user_input: Optional[str] = None
