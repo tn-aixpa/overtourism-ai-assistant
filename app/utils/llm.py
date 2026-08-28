@@ -218,7 +218,12 @@ def _call_primary_azure(
         max_tokens=max_tokens,
     )
 
-    result = response.choices[0].message.content.strip()
+    result = (response.choices[0].message.content or "").strip()
+    if not result:
+        finish_reason = getattr(response.choices[0], "finish_reason", None)
+        raise RequestHandlingException(
+            f"LLM returned an empty completion (finish_reason={finish_reason!r})"
+        )
     _log_costs(
         response.usage.prompt_tokens,
         response.usage.completion_tokens,
@@ -232,7 +237,7 @@ def _call_primary_azure(
 # MAIN LLM INTERFACE
 # =========================
 def llm_interaction(
-    state: AgentState, prompt: str, max_tokens: int = 1024, lightweight_llm: bool = True
+    state: AgentState, prompt: str, max_tokens: int = 2024, lightweight_llm: bool = True
 ) -> str:
     # Last line of defense: every individual injection point (tool results,
     # matching data, retrieved context, ...) is already truncated at the
