@@ -4,7 +4,7 @@ from typing import List
 
 from app.tools.tool_schema import ToolDefinition
 
-# from app.tools.definitions.analysis_widgets import *
+from app.tools.definitions.analysis_widgets import *
 from app.tools.definitions.analysis import *
 from app.tools.definitions.indexes import *
 from app.tools.definitions.problem import *
@@ -28,10 +28,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_configuration_parameters_tool(),
         create_get_territorial_index_list_tool(),
         create_analyze_scenario_results_tool(),
-        # create_comparison_plot_tool(),
-        # create_kpi_comparison_tool(),
-        # create_show_capacity_plot_tool(),
-        # create_show_load_plot_tool(),
+        create_analysis_widget_tool(),
         create_show_territorial_index_map_tool(),
         create_summary_generation_tool(),
         create_report_generation_tool(),

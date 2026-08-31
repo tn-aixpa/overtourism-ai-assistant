@@ -11,10 +11,7 @@ from app.tools.definitions import get_all_agent_tools
 logger = logging.getLogger(__name__)
 
 WIDGET_TOOL_NAMES = {
-    "comparison_plot",
-    "kpi_comparison",
-    "show_capacity_plot",
-    "show_load_plot",
+    "show_analysis_widget",
     "show_territorial_index_map",
 }
 

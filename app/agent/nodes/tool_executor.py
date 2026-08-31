@@ -87,7 +87,7 @@ def _bump_active_agent(state: AgentState, tool_def: ToolDefinition | None) -> No
     as tools actually run, so a turn that calls e.g. list_available_*
     (EXECUTOR) and then analyze_scenario_results (OPERATIVE) ends up with
     active_agent=OPERATIVE for its final answer even if an EXECUTOR-tier
-    tool (like show_capacity_plot) also runs afterwards in the same turn.
+    tool (like show_analysis_widget) also runs afterwards in the same turn.
     """
     if not tool_def:
         return

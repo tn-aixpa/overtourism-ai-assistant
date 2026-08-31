@@ -229,30 +229,36 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "  - Do not use analyze_scenario_results when the user only wants "
             "general information about a scenario; answer directly from the data "
             "returned by get_context_details.\n\n"
-            "  - When calling analyze_scenario_results for a COMPARISON between two "
-            "scenarios, you MUST also call comparison_plot in the same turn (before "
-            "or after analyze_scenario_results, not instead of it). comparison_plot "
-            "produces the histogram widget; analyze_scenario_results produces the "
-            "text — both are needed.\n\n"
-            "  - When calling analyze_scenario_results to EVALUATE a single "
-            "scenario (not a comparison), you MUST also call show_capacity_plot in "
-            "the same turn. This produces the sustainability chart that always "
-            "accompanies an evaluation. Do NOT call show_capacity_plot for "
+            "  - show_analysis_widget builds ONE of four widgets, chosen via its "
+            "widget_type argument: 'kpi_comparison', 'comparison_plot', "
+            "'load_plot', or 'capacity_plot'. Selection rules:\n\n"
+            "    * When calling analyze_scenario_results for a COMPARISON between "
+            "two scenarios, you MUST also call show_analysis_widget with "
+            "widget_type='comparison_plot' in the same turn (before or after "
+            "analyze_scenario_results, not instead of it). This produces the "
+            "histogram widget; analyze_scenario_results produces the text — both "
+            "are needed.\n\n"
+            "    * When calling analyze_scenario_results to EVALUATE or retrieve "
+            "data for a SINGLE scenario (not a comparison), you MUST also call "
+            "show_analysis_widget with widget_type='load_plot' in the same turn. "
+            "This is the general-purpose graphical result that always accompanies "
+            "a single-scenario evaluation. Do NOT use widget_type='load_plot' for "
             "comparisons.\n\n"
-            "  - Call show_load_plot ONLY if the user explicitly asks for the load "
-            'graph of a single scenario (e.g. "mostrami il grafico del carico", '
-            '"visualizza il grafico di carico turistico"). It may be called alone '
-            "or alongside analyze_scenario_results, but never for comparisons and "
-            "never as a substitute for show_capacity_plot.\n\n"
-            "  - Call kpi_comparison ONLY if the user explicitly asks for a visual "
-            'KPI comparison between two scenarios (e.g. "mostrami i KPI a '
-            'confronto", "visualizza i KPI dei due scenari"). It may be called '
-            "alone or alongside analyze_scenario_results, but never as a substitute "
-            "for comparison_plot.\n\n"
-            "  - comparison_plot, kpi_comparison, show_capacity_plot, and "
-            "show_load_plot are only available in standalone mode. If they appear "
-            'under "Tools that exist but are NOT available in this execution '
-            'mode", treat them as absent and do not mention them.',
+            "    * Call show_analysis_widget with widget_type='capacity_plot' "
+            "ONLY if the user explicitly and specifically asks for the "
+            'capacity/sustainability chart (e.g. "mostrami il grafico di '
+            'sostenibilità"). It may be called alone or alongside '
+            "analyze_scenario_results, but never for comparisons and never as a "
+            "substitute for widget_type='load_plot'.\n\n"
+            "    * Call show_analysis_widget with widget_type='kpi_comparison' "
+            "ONLY if the user explicitly asks for a visual KPI comparison between "
+            'two scenarios (e.g. "mostrami i KPI a confronto", "visualizza i KPI '
+            'dei due scenari"). It may be called alone or alongside '
+            "analyze_scenario_results, but never as a substitute for "
+            "widget_type='comparison_plot'.\n\n"
+            "  - show_analysis_widget is only available in standalone mode. If it "
+            'appears under "Tools that exist but are NOT available in this '
+            'execution mode", treat it as absent and do not mention it.',
         ),
         (
             'EVALUATE A NEW / "WHAT-IF" SCENARIO',

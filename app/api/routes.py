@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+from typing import Any, Dict
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -380,6 +381,26 @@ async def run_selected_tools(
             {"tool_name": "get_context_details", "arguments": {}},
             {"tool_name": "report_generation", "arguments": {}},
         ]
+    elif body.key == "widget":
+        if not body.current_context:
+            raise HTTPException(
+                status_code=400,
+                detail="current_context (the scenario(s) to build the widget for) is required when key == 'widget'",
+            )
+        if not body.widget_arguments or not body.widget_arguments.get("widget_type"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "widget_arguments.widget_type is required when key == "
+                    "'widget' (one of: kpi_comparison, comparison_plot, "
+                    "load_plot, capacity_plot)"
+                ),
+            )
+        state.cognitive.current_context = body.current_context
+        steps = [
+            {"tool_name": "get_context_details", "arguments": {}},
+            {"tool_name": "show_analysis_widget", "arguments": body.widget_arguments},
+        ]
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
 
@@ -408,7 +429,18 @@ async def run_selected_tools(
     if not last["success"]:
         raise HTTPException(status_code=500, detail=last["error"])
 
-    return {"message": last["output"]["message"]}
+    output = last["output"] or {}
+    # show_analysis_widget (unlike summary_generation/report_generation)
+    # returns "response" + "assistant_action_data" rather than "message" —
+    # surface whichever the last step actually produced, plus the widget
+    # action itself when present, so this pipeline is actually useful for
+    # inspecting the built widget.
+    response_body: Dict[str, Any] = {
+        "message": output.get("message", output.get("response"))
+    }
+    if output.get("assistant_action_data"):
+        response_body["assistant_action_data"] = output["assistant_action_data"]
+    return response_body
 
 
 @router.get("/agent/usage_stats")
