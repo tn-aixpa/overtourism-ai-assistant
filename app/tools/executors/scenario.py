@@ -22,12 +22,32 @@ def execute_get_base_scenario(
     state: AgentState,
     **kwargs,
 ) -> Dict[str, Any]:
-    """Execute get_base_scenario tool."""
+    """Execute get_base_scenario tool.
+
+    Unlike get_context_ids (the usual way current_context gets resolved),
+    there's no list to reason over here — the base scenario id comes
+    straight from the backend. But downstream tools that only look at
+    state.cognitive.current_context (get_context_details,
+    analyze_scenario_results — unlike show_analysis_widget/
+    summary_generation, neither takes scenario_ids as an argument) need it
+    populated the same way get_context_ids populates it, or they'll see an
+    empty context and report no data is available even though the id was
+    just resolved. So mirror get_context_ids here: set current_context to
+    just this scenario and prune the cache for the topic change.
+    """
     from app.tools.executor_backend_tools import get_base_scenario
 
     logger.info("Executing get_base_scenario tool")
-    result = get_base_scenario.invoke({"tenant": state.tenant})
-    return result
+    scenario_id = get_base_scenario.invoke({"tenant": state.tenant})
+
+    state.cognitive.current_context = {
+        "problems": [],
+        "proposals": [],
+        "scenarios": [scenario_id],
+    }
+    state.cognitive.prune_context_cache()
+
+    return scenario_id
 
 
 def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:

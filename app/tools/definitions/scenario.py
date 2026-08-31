@@ -26,7 +26,12 @@ def create_get_base_scenario_tool() -> ToolDefinition:
         description="Retrieve the base scenario ID from the backend.",
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
-            "Fetch the ID of the base scenario from the backend, using the same backend tool as the platform's get_base_scenario helper."
+            "Fetch the ID of the base scenario from the backend, using the "
+            "same backend tool as the platform's get_base_scenario helper. "
+            "Like get_context_ids, this also resolves current_context to "
+            "just this scenario, so a plain call to get_context_details "
+            "afterwards is enough to fetch its data — you do NOT need to "
+            "also call get_context_ids for the base scenario."
         ),
         parameters=[],
         output_description="The base scenario ID",

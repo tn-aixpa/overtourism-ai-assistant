@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from app.utils.llm import llm_interaction
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = None):
     context_block = state.cognitive.context_cache
+    cleaned_context_block = copy.deepcopy(context_block)
+
+    for scenario in cleaned_context_block.values():
+        scenario.get("evaluation_data", {}).pop("plot_data", None)
 
     visual_note = (
         f"\n    A {widget_hint} will be displayed to the user automatically alongside "
@@ -36,7 +41,7 @@ def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = No
     Question: {query}
     
     Context data:
-    {context_block}
+    {cleaned_context_block}
     
     Answer:"""
 
