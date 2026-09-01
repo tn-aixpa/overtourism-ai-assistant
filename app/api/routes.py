@@ -161,9 +161,10 @@ async def run_agent_endpoint(
                 integrated_mode=integrated_mode,
                 tenant=tenant,
             )
-        elif state.tenant != tenant:
-            # Don't reveal whether the session exists under another tenant.
-            raise HTTPException(status_code=404, detail="Session not found")
+
+        if state.tenant != tenant:
+            state.cognitive.prune_context_cache()
+            state.tenant = tenant
 
         state.add_user_message(message)
 
