@@ -272,7 +272,10 @@ class TestGenerateOutputMessageNode:
         with patch.object(gn, "generate_answer", side_effect=fake_generate_answer):
             gn.generate_output_message_node(fresh_state)
 
-        assert captured["messages"] == ["Please confirm to proceed.", "No glossary entries found."]
+        assert captured["messages"] == [
+            "Please confirm to proceed.",
+            "No glossary entries found.",
+        ]
 
     def test_scratchpad_reset_when_turn_concludes(self, fresh_state: AgentState):
         fresh_state.cognitive.scratchpad = [ReActStep(tool_name="x")]
