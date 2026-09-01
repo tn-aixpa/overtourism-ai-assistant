@@ -88,6 +88,7 @@ _SCENARIO_ANALYSIS_TOOLS: Set[str] = {
     "delete_scenario",
     "analyze_scenario_results",
     "show_analysis_widget",
+    "explain_widget",
 }
 
 _LOCATION_SUBGROUPS: Dict[str, Set[str]] = {

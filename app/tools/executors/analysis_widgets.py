@@ -108,7 +108,9 @@ def execute_analysis_widget(
         )
 
     try:
-        resolved_ids = _resolve_scenario_ids(state, scenario_ids, spec["scenario_count"])
+        resolved_ids = _resolve_scenario_ids(
+            state, scenario_ids, spec["scenario_count"]
+        )
     except ValueError:
         return None
 
@@ -131,6 +133,57 @@ def execute_analysis_widget(
     )
 
 
+# widget_type -> fixed, hand-written explanation of how to read that widget.
+# Kept alongside _WIDGET_SPECS/_RESPONSE_TEXT above since it's the same
+# widget_type vocabulary, but explain_widget itself makes no backend call
+# and doesn't touch context_cache/current_context at all.
+_WIDGET_EXPLANATIONS: Dict[str, str] = {
+    "comparison_plot": (
+        "The comparison plot is a bar plot showing the difference in a "
+        "system KPI between two scenarios, with one bar per scenario. For "
+        "each bar, the confidence interval is also reported, shown in "
+        "yellow."
+    ),
+    "capacity_plot": (
+        "In the capacity plot, each line represents a relevant subsystem. "
+        "The x and y axes represent the two main sustainability axes. Each "
+        "point on the plot is a single simulated day: its color shows "
+        "whether that day is sustainable (green), partially sustainable "
+        "(yellow), or not sustainable (red), and its opacity shows the "
+        "level of uncertainty for that point."
+    ),
+    "load_plot": (
+        "The load plot is shown for a single resource. Each point "
+        "represents a simulated day, and points are ordered from low to "
+        "high usage of the selected resource. A point's color shows "
+        "the probability of a day to exceed the load capacity of that "
+        "resource: 0% probability of exceeding (green), 50% probability of "
+        "exceeding (yellow), 100% probability exceeding (red)."
+    ),
+}
+
+
+def execute_explain_widget(
+    state: AgentState, widget_type: str, **kwargs
+) -> Dict[str, Any]:
+    """Return a fixed, plain-language explanation of how to read the given
+    widget type (see _WIDGET_EXPLANATIONS). Purely explanatory: no backend
+    call, no dependency on context_cache/current_context, unlike
+    execute_analysis_widget above.
+    """
+    logger.info(f"Executing explain_widget tool (widget_type={widget_type!r})")
+
+    explanation = _WIDGET_EXPLANATIONS.get(widget_type)
+    if explanation is None:
+        raise ValueError(
+            f"Unknown widget_type {widget_type!r} for explain_widget. Must "
+            f"be one of {sorted(_WIDGET_EXPLANATIONS)}."
+        )
+
+    return {"success": True, "message": explanation}
+
+
 EXECUTORS = {
     "show_analysis_widget": execute_analysis_widget,
+    "explain_widget": execute_explain_widget,
 }

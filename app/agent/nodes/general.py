@@ -183,6 +183,9 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "analyze_scenario_results":
             return [output.get("message", "No answer could be generated.")]
 
+        case "explain_widget":
+            return [output.get("message", "No explanation could be generated.")]
+
         case "show_analysis_widget":
             # The widget's own payload is the raw evaluation dataset behind
             # the chart (see execute_analysis_widget) — large, numeric, and
