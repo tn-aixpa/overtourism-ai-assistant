@@ -63,7 +63,7 @@ class TestInitializeTools:
         fresh_state.integrated_mode = False
         result = reasoner_module.initialize_tools(fresh_state)
         assert set(fresh_state.cognitive.enabled_tools) == {"a", "b"}
-        assert result.goto == "react_reasoner"
+        assert result.goto == "top_level_router"
 
     def test_integrated_mode_preserves_preset_enabled_tools(
         self, fresh_state: AgentState
@@ -164,7 +164,7 @@ class TestInitializeTools:
         fresh_state.waiting_for = AgentState.WaitingFor.PROBLEM_CONFIRMATION
         fresh_state.user_input = None
         result = reasoner_module.initialize_tools(fresh_state)
-        assert result.goto == "react_reasoner"
+        assert result.goto == "top_level_router"
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +253,7 @@ class TestReactReasonerToolSelection:
 
     def test_finish_action_sets_message_and_ends_turn(self, fresh_state: AgentState):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         raw = react_step_response(action="finish", message="Here's your answer.")
 
         with patch.object(reasoner_module, "react_step", return_value=raw):
@@ -263,6 +264,7 @@ class TestReactReasonerToolSelection:
 
     def test_finish_action_without_message_uses_fallback(self, fresh_state: AgentState):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         raw = json.dumps({"thought": "t", "action": "finish"})
 
         with patch.object(reasoner_module, "react_step", return_value=raw):
@@ -274,6 +276,7 @@ class TestReactReasonerToolSelection:
 
     def test_unrecognized_action_value_finishes_safely(self, fresh_state: AgentState):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         raw = react_step_response(action="do_a_backflip", message="n/a")
 
         with patch.object(reasoner_module, "react_step", return_value=raw):
@@ -295,6 +298,7 @@ class TestReactReasonerToolSelection:
         self, fresh_state: AgentState
     ):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         fresh_state.cognitive.scratchpad = [
             ReActStep(tool_name=f"step_{i}")
             for i in range(fresh_state.cognitive.max_react_steps)
@@ -312,6 +316,7 @@ class TestReactReasonerToolSelection:
 
     def test_malformed_llm_json_routes_to_error(self, fresh_state: AgentState):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         with patch.object(
             reasoner_module, "react_step", return_value="not valid json {{{"
         ):
@@ -343,6 +348,7 @@ class TestReactReasonerToolSelection:
 
     def test_trace_step_recorded_for_each_decision(self, fresh_state: AgentState):
         register_tool("lookup_glossary")
+        fresh_state.cognitive.enabled_tools = ["lookup_glossary"]
         raw = react_step_response(action="finish", message="done")
 
         with patch.object(reasoner_module, "react_step", return_value=raw):
