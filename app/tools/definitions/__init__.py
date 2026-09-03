@@ -17,6 +17,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
     return [
         create_lookup_glossary_tool(),
         create_get_system_capabilities_tool(),
+        create_explain_workflow_tool(),
         create_general_question_response_tool(),
         create_list_available_problems_tool(),
         create_list_available_proposals_tool(),

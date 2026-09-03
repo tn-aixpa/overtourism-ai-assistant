@@ -148,9 +148,34 @@ def execute_get_data_from_link(
     return result
 
 
+def execute_explain_workflow(state: AgentState, **kwargs) -> Dict[str, Any]:
+    """Execute explain_workflow tool.
+
+    Returns the full workflow reference document (knowledge/workflow.md,
+    read once at import via app.utils.workflow_knowledge) as-is. No parsing
+    or matching against the query happens here — unlike lookup_glossary,
+    this tool is meant to ground a broader, methodological answer (see this
+    tool's agent_tier="methodological" and _reasoning_policy in
+    app.prompts.answer_generation), so the reasoning over the document is
+    left entirely to that downstream answer-generation step.
+    """
+    from app.utils.workflow_knowledge import WORKFLOW_DOCUMENT
+
+    logger.info("Executing explain_workflow tool")
+
+    if not WORKFLOW_DOCUMENT:
+        return {
+            "success": False,
+            "error": "The workflow reference document is currently unavailable.",
+        }
+
+    return {"success": True, "workflow_document": WORKFLOW_DOCUMENT}
+
+
 EXECUTORS = {
     "lookup_glossary": execute_lookup_glossary,
     "get_system_capabilities": execute_get_system_capabilities,
     "general_question_response": execute_general_question_response,
     "get_data_from_link": execute_get_data_from_link,
+    "explain_workflow": execute_explain_workflow,
 }

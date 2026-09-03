@@ -85,6 +85,25 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "index?\") — call lookup_glossary. You may also call it first if you're "
             "unsure whether the user means a problem, proposal, or scenario.",
         ),
+        (
+            "WORKFLOW / METHODOLOGY / PROCEDURE",
+            "If the user asks about process or methodology — how to approach or "
+            "structure the analysis of an overtourism/touristic-crowding problem, "
+            "what steps to follow, whether there are predefined/standard "
+            "strategies or approaches for modelling such a problem, or how the "
+            "platform's Problem/Proposal/Scenario concepts relate to each other "
+            "end to end — call explain_workflow. This applies even if the "
+            'question is phrased in general terms (e.g. "ci sono strategie '
+            'predefinite per modellare un problema di affollamento turistico?") '
+            "rather than using the platform's own vocabulary, and even if it "
+            "opens with a greeting — a greeting plus an on-topic methodology "
+            "question is NOT the greeting/small-talk case above. Prefer "
+            "explain_workflow over general_question_response whenever the "
+            "question is about methodology/process/strategy-for-modelling-a-"
+            "problem, since it is grounded in the workflow reference document; "
+            "only fall back to general_question_response if explain_workflow's "
+            "document turns out not to cover what was asked.",
+        ),
     ],
     "indexes": [
         (
@@ -229,30 +248,36 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "  - Do not use analyze_scenario_results when the user only wants "
             "general information about a scenario; answer directly from the data "
             "returned by get_context_details.\n\n"
-            "  - When calling analyze_scenario_results for a COMPARISON between two "
-            "scenarios, you MUST also call comparison_plot in the same turn (before "
-            "or after analyze_scenario_results, not instead of it). comparison_plot "
-            "produces the histogram widget; analyze_scenario_results produces the "
-            "text — both are needed.\n\n"
-            "  - When calling analyze_scenario_results to EVALUATE a single "
-            "scenario (not a comparison), you MUST also call show_capacity_plot in "
-            "the same turn. This produces the sustainability chart that always "
-            "accompanies an evaluation. Do NOT call show_capacity_plot for "
+            "  - show_analysis_widget builds ONE of four widgets, chosen via its "
+            "widget_type argument: 'kpi_comparison', 'comparison_plot', "
+            "'load_plot', or 'capacity_plot'. Selection rules:\n\n"
+            "    * When calling analyze_scenario_results for a COMPARISON between "
+            "two scenarios, you MUST also call show_analysis_widget with "
+            "widget_type='comparison_plot' in the same turn (before or after "
+            "analyze_scenario_results, not instead of it). This produces the "
+            "histogram widget; analyze_scenario_results produces the text — both "
+            "are needed.\n\n"
+            "    * When calling analyze_scenario_results to EVALUATE or retrieve "
+            "data for a SINGLE scenario (not a comparison), you MUST also call "
+            "show_analysis_widget with widget_type='load_plot' in the same turn. "
+            "This is the general-purpose graphical result that always accompanies "
+            "a single-scenario evaluation. Do NOT use widget_type='load_plot' for "
             "comparisons.\n\n"
-            "  - Call show_load_plot ONLY if the user explicitly asks for the load "
-            'graph of a single scenario (e.g. "mostrami il grafico del carico", '
-            '"visualizza il grafico di carico turistico"). It may be called alone '
-            "or alongside analyze_scenario_results, but never for comparisons and "
-            "never as a substitute for show_capacity_plot.\n\n"
-            "  - Call kpi_comparison ONLY if the user explicitly asks for a visual "
-            'KPI comparison between two scenarios (e.g. "mostrami i KPI a '
-            'confronto", "visualizza i KPI dei due scenari"). It may be called '
-            "alone or alongside analyze_scenario_results, but never as a substitute "
-            "for comparison_plot.\n\n"
-            "  - comparison_plot, kpi_comparison, show_capacity_plot, and "
-            "show_load_plot are only available in standalone mode. If they appear "
-            'under "Tools that exist but are NOT available in this execution '
-            'mode", treat them as absent and do not mention them.',
+            "    * Call show_analysis_widget with widget_type='capacity_plot' "
+            "ONLY if the user explicitly and specifically asks for the "
+            'capacity/sustainability chart (e.g. "mostrami il grafico di '
+            'sostenibilità"). It may be called alone or alongside '
+            "analyze_scenario_results, but never for comparisons and never as a "
+            "substitute for widget_type='load_plot'.\n\n"
+            "    * Call show_analysis_widget with widget_type='kpi_comparison' "
+            "ONLY if the user explicitly asks for a visual KPI comparison between "
+            'two scenarios (e.g. "mostrami i KPI a confronto", "visualizza i KPI '
+            'dei due scenari"). It may be called alone or alongside '
+            "analyze_scenario_results, but never as a substitute for "
+            "widget_type='comparison_plot'.\n\n"
+            "  - show_analysis_widget is only available in standalone mode. If it "
+            'appears under "Tools that exist but are NOT available in this '
+            'execution mode", treat it as absent and do not mention it.',
         ),
         (
             'EVALUATE A NEW / "WHAT-IF" SCENARIO',
@@ -325,7 +350,10 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "GENERAL / UNGROUNDED QUESTION",
             "When the user wants an answer that cannot be grounded on platform "
             "data or anything retrievable from the available tools, call "
-            "general_question_response.",
+            "general_question_response. Before doing so, double-check it isn't "
+            "actually a methodology/process question (explain_workflow) or a "
+            "term definition (lookup_glossary) — those are grounded and should "
+            "be preferred whenever they apply.",
         ),
     ],
 }

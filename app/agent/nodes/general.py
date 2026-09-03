@@ -150,6 +150,9 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
+        case "explain_workflow":
+            return [output.get("workflow_document", "Workflow document unavailable.")]
+
         case (
             "list_available_problems"
             | "list_available_proposals"

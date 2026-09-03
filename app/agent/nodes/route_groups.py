@@ -36,7 +36,7 @@ TOP_INDEXES = "indexes"
 TOP_GENERAL = "general"
 
 TOP_LEVEL_LABELS: Dict[str, str] = {
-    TOP_SYSTEM_INFO: "General system information (what the platform can do, glossary/terminology)",
+    TOP_SYSTEM_INFO: "General system information (what the platform can do, glossary/terminology, analysis workflow/methodology)",
     TOP_LOCATION: "Problems, proposals, scenarios and analysis for a specific location (Molveno, Altipiano di Fazzon)",
     TOP_INDEXES: "Territorial indexes/indicators for the whole region",
     TOP_GENERAL: "A general, on-topic question not covered by platform data or any other tool",
@@ -46,6 +46,7 @@ TOP_LEVEL_LABELS: Dict[str, str] = {
 _SYSTEM_INFO_TOOLS: Set[str] = {
     "get_system_capabilities",
     "lookup_glossary",
+    "explain_workflow",
 }
 
 # ---- Level 1: GENERAL (delegate to the exploitative tier) -----------------

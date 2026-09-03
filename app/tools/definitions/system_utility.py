@@ -132,9 +132,66 @@ def create_get_data_from_link_tool() -> ToolDefinition:
     )
 
 
+def create_explain_workflow_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="explain_workflow",
+        description=(
+            "Answer questions about the platform's overall analysis "
+            "methodology/workflow: how to identify a territorial problem "
+            "and its stakeholders, how the Digital Twin models the As-is "
+            "situation, and how Problems, Proposals, and Scenarios relate "
+            "to each other and get evaluated/compared end to end. Also use "
+            "this for the general, platform-agnostic procedure for mapping "
+            "overtourism and touristic-crowding problems in a location — "
+            "e.g. how to identify the relevant territorial elements and "
+            "stakeholders behind a crowding/overtourism issue, how to model "
+            "the current (As-is) situation, and how to define and compare "
+            "candidate interventions — even if the question doesn't mention "
+            "the platform's own concepts by name. Use this for 'how does "
+            "this work', 'what's the process for...', 'how would I go about "
+            "analysing overtourism/crowding in a place', or 'what's the "
+            "difference between a Proposal and a Scenario in this workflow' "
+            "style questions. Do NOT use this to look up a single term's "
+            "definition (use lookup_glossary instead) or to fetch a "
+            "specific problem/proposal/scenario's actual data (use the "
+            "relevant data-retrieval tool instead) — this tool only covers "
+            "the general methodology, not live platform content."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Returns the platform's full workflow reference document — "
+            "covering both the general territorial-analysis methodology for "
+            "mapping overtourism/touristic-crowding problems (identifying "
+            "elements/stakeholders, modelling the As-is scenario, defining "
+            "and evaluating changes) and how that maps onto the platform's "
+            "own concepts (Problem -> Proposal -> Scenario) and the overall "
+            "step-by-step procedure — so the answer can be grounded in it. "
+            "This tool's agent_tier is 'methodological' (see AgentTier): "
+            "unlike the plain data-report style of most other tools, the "
+            "response may reason more broadly about *why* a step matters "
+            "and may suggest a procedural sequence of next steps, while "
+            "still not inventing the concrete content of a specific "
+            "strategy/proposal — see _reasoning_policy in "
+            "app.prompts.answer_generation. Call this whenever the user's "
+            "question is about process/methodology — whether phrased in "
+            "terms of the platform's own concepts or more generally about "
+            "how to approach an overtourism/crowding problem — rather than "
+            "about a single term or a specific piece of live data."
+        ),
+        parameters=[],
+        output_description=(
+            "The full text of the workflow reference document, used as "
+            "grounding for a methodological answer."
+        ),
+        tags=["data", "read-only", "workflow", "methodology", "system"],
+        agent_tier="methodological",
+    )
+
+
 __all__ = [
     "create_get_system_capabilities_tool",
     "create_lookup_glossary_tool",
     "create_get_data_from_link_tool",
     "create_general_question_response_tool",
+    "create_explain_workflow_tool",
 ]
