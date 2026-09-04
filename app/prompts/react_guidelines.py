@@ -82,7 +82,7 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "DEFINITIONS",
             "If the user asks what a term means or uses vocabulary that might be a "
             'platform concept (e.g. "what is a scenario?", "what is a territorial '
-            "index?\") — call lookup_glossary, passing the query in the SAME "
+            'index?") — call lookup_glossary, passing the query in the SAME '
             "language the user wrote in (the glossary is bilingual and indexes "
             "Italian terms directly — translating an Italian query to English "
             "before calling can make an otherwise-matching term look missing). "
@@ -144,9 +144,16 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "and bottom areas by value) alongside the widget — use ONLY those "
             "figures if you comment on specific areas or values; never invent an "
             "area name or value that isn't in map_summary.\n\n"
-            "  - show_territorial_index_map is only available in standalone mode. "
-            'If it appears under "Tools that exist but are NOT available in this '
-            'execution mode", treat it as absent and do not mention it.',
+            "  - show_territorial_index_map is disabled outside standalone mode. "
+            'This means ONLY: if it appears under "Tools that exist but are NOT '
+            'available in this execution mode" below, treat it as genuinely absent '
+            "and do not mention it or its standalone-only nature at all. If it "
+            "does NOT appear there, it is not a mode restriction — do not tell "
+            'the user it\'s "only available in standalone mode" (that claim is '
+            "only ever true when the tool is in that not-available list). If it "
+            "simply isn't in \"Tools available\" either, that's a routing/scope "
+            "matter (see TOOL AVAILABILITY guideline), not a mode one — ask rather "
+            "than inventing a mode explanation.",
         ),
     ],
     "problem": [
@@ -279,9 +286,16 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             'dei due scenari"). It may be called alone or alongside '
             "analyze_scenario_results, but never as a substitute for "
             "widget_type='comparison_plot'.\n\n"
-            "  - show_analysis_widget is only available in standalone mode. If it "
-            'appears under "Tools that exist but are NOT available in this '
-            'execution mode", treat it as absent and do not mention it.',
+            "  - show_analysis_widget is disabled outside standalone mode. This "
+            'means ONLY: if it appears under "Tools that exist but are NOT '
+            'available in this execution mode" below, treat it as genuinely absent '
+            "and do not mention it or its standalone-only nature at all. If it "
+            "does NOT appear there, it is not a mode restriction — do not tell "
+            'the user it\'s "only available in standalone mode" (that claim is '
+            "only ever true when the tool is in that not-available list). If it "
+            "simply isn't in \"Tools available\" either, that's a routing/scope "
+            "matter (see TOOL AVAILABILITY guideline), not a mode one — ask rather "
+            "than inventing a mode explanation.",
         ),
         (
             'EVALUATE A NEW / "WHAT-IF" SCENARIO',

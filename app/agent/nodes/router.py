@@ -127,9 +127,11 @@ def _pause_for_clarification(
 ) -> Command:
     state.cognitive.pending_route_clarification = level
     state.cognitive.messages_to_include = [
-        ("I didn't quite catch which one you meant — " + message)
-        if is_retry
-        else message
+        (
+            ("I didn't quite catch which one you meant — " + message)
+            if is_retry
+            else message
+        )
     ]
     state.waiting_for = AgentState.WaitingFor.ROUTE_CLARIFICATION
     state.user_input = None
@@ -216,7 +218,9 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
         # the sub-area menu — re-route instead of forcing a fit.
         state.cognitive.pending_route_clarification = None
         state.waiting_for = None
-        return continue_from_resolved_top_level(state, classified_top, second_level_hint=None)
+        return continue_from_resolved_top_level(
+            state, classified_top, second_level_hint=None
+        )
 
     second_level = classification["second_level"]
     if current_top and second_level in rg.sublevel_options(current_top):
@@ -305,6 +309,21 @@ def top_level_router_node(state: AgentState) -> Command:
         second_level_hint = second_level
     else:
         resolved_top = current_top
-        second_level_hint = current_second
+        # Even though the DOMAIN hasn't changed, the sub-area within it
+        # might have: e.g. "quali indici esistono?" (index_list) followed
+        # by "mostrami l'indice X sulla mappa" (index_map) is "indexes"
+        # both times, so topic_changed is correctly False, but it's a
+        # different second_level. classify_route already computed a fresh
+        # second_level guess for THIS message above — prefer that over the
+        # stale persisted one whenever it actually resolves to a valid
+        # sub-group for this domain, so a within-domain sub-area switch
+        # isn't stuck on whatever sub-area the session first happened to
+        # land on. Fall back to the persisted current_second only when
+        # this turn's classification didn't confidently name a sub-area
+        # (e.g. "unclear", or a genuinely sub-area-agnostic follow-up).
+        if second_level in rg.sublevel_options(current_top):
+            second_level_hint = second_level
+        else:
+            second_level_hint = current_second
 
     return continue_from_resolved_top_level(state, resolved_top, second_level_hint)

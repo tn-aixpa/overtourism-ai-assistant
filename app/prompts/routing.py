@@ -140,6 +140,16 @@ Rules:
   just because the message is short (e.g. "yes", "the parking one", plain
   follow-ups answering a question you asked are NOT unclear if the
   current route makes the intent obvious).
+- A follow-up that asks whether concrete instances/records already exist
+  on the platform ("are there scenarios/problems/proposals already
+  defined?", "what problems exist?", "show me the current X") is ALWAYS
+  "location" (or "indexes" for index data) — set "topic_changed" to true
+  for this, even if the current route is "system_info" and even if the
+  previous turn discussed the same concept abstractly. Explaining what a
+  scenario *is* (system_info) and asking whether scenarios *already
+  exist* (location) are different domains that happen to share
+  vocabulary; a request for real platform data is a topic change even
+  when the noun stays the same.
 - "second_level" must be null when top_level is "system_info" or "general"
   (they have no sub-areas).
 - Never invent a key that isn't listed above.
@@ -169,5 +179,11 @@ Return ONLY valid JSON.
             "second_level": parsed.get("second_level"),
         }
     except Exception as e:
-        logger.warning(f"Failed to parse route classification response: {e} | raw={raw!r}")
-        return {"top_level": "unclear", "topic_changed": True, "second_level": "unclear"}
+        logger.warning(
+            f"Failed to parse route classification response: {e} | raw={raw!r}"
+        )
+        return {
+            "top_level": "unclear",
+            "topic_changed": True,
+            "second_level": "unclear",
+        }
