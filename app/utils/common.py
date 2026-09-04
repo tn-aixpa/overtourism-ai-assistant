@@ -70,6 +70,39 @@ _LARGE_BUDGET_TOOLS = {
 }
 
 
+def strip_plot_data(eval_data: Any) -> Any:
+    """Drop the heavy 'plot_data' field from a clean_scenario()-shaped
+    evaluation dict (see app/tools/executor_backend_tools.py) before it is
+    written into any LONG-LIVED state — state.cognitive.context_cache,
+    pending_temp_scenario, tool_results, etc.
+
+    plot_data holds raw per-sample arrays (constraint curves, per-sample
+    uncertainty/usage, capacity thresholds — potentially hundreds of
+    points) that exist solely to feed the load/capacity plot widgets. Those
+    widget tools are currently disabled (see
+    app/tools/executors/analysis_widgets.py, entirely commented out), so
+    nothing reads plot_data once it's cached: it just sits in
+    context_cache for the rest of the session (context_cache is only
+    pruned by topic change, not by size — see
+    CognitiveState.prune_context_cache), gets duplicated by reference into
+    tool_results / retrieved_context whenever get_context_details runs,
+    and gets fully re-serialized (independently, once per place it's
+    referenced) every time AgentState.dump_to_file runs. This is the
+    single biggest source of avoidable memory growth in this app.
+
+    Call this at the point data is WRITTEN into long-lived state, not at
+    fetch time — a caller that genuinely needs plot_data for one immediate,
+    transient use (e.g. building a widget payload right after fetching) can
+    still read it off the raw dict returned by get_evaluation_data /
+    get_temp_evaluation_data before this strips it. If the plot widgets are
+    ever re-enabled, they should fetch plot_data fresh for that one call
+    rather than expect it to have survived in context_cache.
+    """
+    if not isinstance(eval_data, dict) or "plot_data" not in eval_data:
+        return eval_data
+    return {k: v for k, v in eval_data.items() if k != "plot_data"}
+
+
 def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
     """Look up the prompt-injection char budget for a given tool/result key,
     stripping any '__N' collision suffix (see tool_executor's result_key)."""
@@ -213,6 +246,16 @@ def build_prior_results_block(
     only, so the LLM still knows a tool already ran this session (and can
     decide to skip re-running it) without the full payload bloating every
     subsequent prompt forever.
+
+    IMPORTANT: a tool_results entry can be a FAILURE (result["success"] is
+    False — see tool_executor_node, which stores failed attempts here too,
+    not just successful ones). The omitted-keys note below must never tell
+    the model a failed call "already ran successfully", or the reasoner
+    reads that as "don't call it again" and silently refuses to retry a
+    failed operation even when the user explicitly asks it to try again —
+    that was a real bug: failed and successful prior results were described
+    identically, so retry requests were being treated as already-satisfied.
+    Failed keys are called out separately and explicitly marked retryable.
     """
     if not tool_results:
         return "None"
@@ -223,11 +266,24 @@ def build_prior_results_block(
 
     lines = []
     if omitted_keys:
-        lines.append(
-            f"[{len(omitted_keys)} older result(s) omitted for brevity: "
-            f"{', '.join(omitted_keys)}. These tools already ran successfully "
-            "earlier in this session — only re-run them if you need fresh data.]"
-        )
+        succeeded = [
+            k for k in omitted_keys if (tool_results.get(k) or {}).get("success", True)
+        ]
+        failed = [k for k in omitted_keys if k not in succeeded]
+        if succeeded:
+            lines.append(
+                f"[{len(succeeded)} older SUCCESSFUL result(s) omitted for brevity: "
+                f"{', '.join(succeeded)}. These tools already ran successfully "
+                "earlier in this session — only re-run them if you need fresh data.]"
+            )
+        if failed:
+            lines.append(
+                f"[{len(failed)} older FAILED result(s) omitted for brevity: "
+                f"{', '.join(failed)}. These tools did NOT succeed earlier — "
+                "do not treat them as already done. If the user is asking to "
+                "retry/try again, call the same tool again with the same "
+                "(or corrected) arguments.]"
+            )
 
     for key in shown_keys:
         # Condense (item-aware) BEFORE the char-level safety cut below. Doing
@@ -238,9 +294,17 @@ def build_prior_results_block(
         # complete and undercounts/hallucinates. condense_for_matching keeps
         # items whole and, if it does need to drop any, says so explicitly
         # via a "note" field instead of silently truncating mid-structure.
-        condensed = condense_for_matching(tool_results[key])
+        entry = tool_results[key]
+        status = (
+            "FAILED — do not treat as already done; retry if the user asks"
+            if isinstance(entry, dict) and entry.get("success") is False
+            else "succeeded"
+        )
+        condensed = condense_for_matching(entry)
         entry_max_chars = _max_chars_for_tool(key, max_chars_per_entry)
-        lines.append(f"### {key}\n{_truncate_json(condensed, entry_max_chars)}")
+        lines.append(
+            f"### {key} [{status}]\n{_truncate_json(condensed, entry_max_chars)}"
+        )
 
     return "\n\n".join(lines)
 

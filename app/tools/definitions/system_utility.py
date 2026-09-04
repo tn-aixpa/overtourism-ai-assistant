@@ -35,7 +35,13 @@ def create_lookup_glossary_tool() -> ToolDefinition:
                 name="query",
                 description=(
                     "One or more space-separated keywords to look up in the glossary. "
-                    "Example: 'scenario simulation' or 'overtourism carrying capacity'."
+                    "IMPORTANT: pass the keywords in the SAME language the user used — "
+                    "do not translate them to English first. The glossary is bilingual "
+                    "and is also indexed on each entry's Italian terms/aliases, so an "
+                    "Italian query (e.g. 'ambito di analisi', 'proposta') matches "
+                    "directly and searching in English would miss it. "
+                    "Example: 'scenario simulation' or 'overtourism carrying capacity' "
+                    "(English), or 'ambito di analisi' or 'gemello digitale' (Italian)."
                 ),
                 type="string",
                 required=True,

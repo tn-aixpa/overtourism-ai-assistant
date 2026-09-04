@@ -82,8 +82,12 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "DEFINITIONS",
             "If the user asks what a term means or uses vocabulary that might be a "
             'platform concept (e.g. "what is a scenario?", "what is a territorial '
-            "index?\") — call lookup_glossary. You may also call it first if you're "
-            "unsure whether the user means a problem, proposal, or scenario.",
+            "index?\") — call lookup_glossary, passing the query in the SAME "
+            "language the user wrote in (the glossary is bilingual and indexes "
+            "Italian terms directly — translating an Italian query to English "
+            "before calling can make an otherwise-matching term look missing). "
+            "You may also call it first if you're unsure whether the user means a "
+            "problem, proposal, or scenario.",
         ),
         (
             "WORKFLOW / METHODOLOGY / PROCEDURE",

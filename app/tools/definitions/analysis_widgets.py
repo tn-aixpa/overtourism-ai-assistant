@@ -1,110 +1,101 @@
-"""Analysis Widgets tool definitions."""
+"""Analysis Widgets tool definitions.
+
+This used to be four separate tools (comparison_plot, kpi_comparison,
+show_load_plot, show_capacity_plot). They're now a single tool
+(show_analysis_widget) that takes a `widget_type` parameter, so the
+reasoner picks ONE tool and tells it which widget to build instead of
+picking between four similarly-shaped tools. See
+app.tools.executors.analysis_widgets for the implementation — the payload
+data is always the same (the raw result of get_evaluation_data for the
+resolved scenario(s)); only the resulting widgetName differs per
+widget_type.
+"""
 
 from app.tools.tool_schema import ToolDefinition, ToolParameter, ToolCategory
 
+WIDGET_TYPES = ["kpi_comparison", "comparison_plot", "load_plot", "capacity_plot"]
 
-def create_comparison_plot_tool() -> ToolDefinition:
+# Subset of WIDGET_TYPES that explain_widget can describe. kpi_comparison is
+# deliberately excluded — it's a plain side-by-side KPI table, not a chart
+# with axes/points/colors that benefit from an explanation.
+EXPLAINABLE_WIDGET_TYPES = ["comparison_plot", "capacity_plot", "load_plot"]
+
+
+def create_analysis_widget_tool() -> ToolDefinition:
     return ToolDefinition(
-        name="comparison_plot",
+        name="show_analysis_widget",
         description=(
-            "Show the sustainability index histogram comparing two scenarios. "
-            "MUST always be called when the user asks for a comparison between two scenarios, "
-            "TOGETHER with analyze_scenario_results (not instead of it). "
+            "Show an analysis widget (KPI comparison, comparison plot, load "
+            "plot, or capacity plot) for one or two scenarios. Pick "
+            "`widget_type` according to the request:\n"
+            "  - 'kpi_comparison': ONLY on an explicit, specific request to "
+            "visually compare the KPIs of two scenarios (e.g. 'show me the "
+            "KPIs side by side').\n"
+            "  - 'comparison_plot': on a request for a visual comparison, and "
+            "it MUST ALWAYS be called (together with analyze_scenario_results) "
+            "whenever two scenarios are being compared.\n"
+            "  - 'load_plot': on a general request for a graphical result of a "
+            "single scenario, and it MUST ALWAYS be called (together with "
+            "analyze_scenario_results) whenever data is retrieved/evaluated "
+            "for a single scenario.\n"
+            "  - 'capacity_plot': ONLY on an explicit, specific request for "
+            "the capacity/sustainability plot.\n"
             "The result is automatically appended to assistant_action_data."
         ),
         category=ToolCategory.INTERACTION,
         long_description=(
-            "Builds the histogramComparison widget using evaluation data already cached "
-            "for the two scenarios in the current context, or mock values if data is unavailable. "
-            "INVOCATION RULE: this call must be included in the same turn as "
-            "analyze_scenario_results for a scenario comparison — it is not an alternative to it. "
-            "Do NOT call this tool for single scenarios or for requests that do not explicitly "
-            "involve a comparison between two scenarios. "
-            "The SHOW_WIDGET result is appended to assistant_action_data."
+            "Single entry point for all four analysis widgets, replacing the "
+            "former separate comparison_plot / kpi_comparison / "
+            "show_load_plot / show_capacity_plot tools. The widget's payload "
+            "data is always the same regardless of widget_type — the raw "
+            "result of get_evaluation_data for the resolved scenario(s), read "
+            "from the shared context cache — only the resulting widgetName "
+            "(and how many scenario_ids are required) differs per "
+            "widget_type:\n\n"
+            "  - widget_type='comparison_plot' -> histogramComparison widget. "
+            "INVOCATION RULE: must be included in the same turn as "
+            "analyze_scenario_results whenever the user is comparing two "
+            "scenarios — it is not an alternative to it. Requires two "
+            "scenario_ids.\n\n"
+            "  - widget_type='kpi_comparison' -> indexComparison widget. Use "
+            "ONLY when the user explicitly asks to see the KPIs of two "
+            "scenarios side by side (e.g. 'show me the KPIs side by side', "
+            "'compare the KPIs of the two scenarios'). Requires two "
+            "scenario_ids. Never a substitute for comparison_plot.\n\n"
+            "  - widget_type='load_plot' -> loadPlot widget. Use for a "
+            "general request to see a single scenario's result graphically, "
+            "and ALWAYS call it (together with analyze_scenario_results) "
+            "whenever scenario data is being retrieved/evaluated for one "
+            "scenario. Requires one scenario_id.\n\n"
+            "  - widget_type='capacity_plot' -> capacityPlot widget. Use "
+            "ONLY on an explicit, specific request for the "
+            "capacity/sustainability plot (e.g. 'mostrami il grafico di "
+            "sostenibilità'). Requires one scenario_id.\n\n"
+            "If scenario_ids is omitted, the tool uses the scenario(s) "
+            "already resolved in current_context. The SHOW_WIDGET result is "
+            "appended to assistant_action_data, with widgetName set "
+            "according to widget_type."
         ),
         parameters=[
             ToolParameter(
-                name="scenario_ids",
+                name="widget_type",
                 description=(
-                    "IDs of the two scenarios to compare. If omitted, the tool "
-                    "uses the scenarios already resolved in current_context."
+                    "Which widget to build: 'kpi_comparison', "
+                    "'comparison_plot', 'load_plot', or 'capacity_plot'. See "
+                    "the tool description for the selection rule for each."
                 ),
-                type="array",
-                required=False,
-                schema={"items": {"type": "string"}},
+                type="string",
+                required=True,
+                schema={"enum": WIDGET_TYPES},
             ),
-        ],
-        output_description="histogramComparison widget to display in the interface, already formatted for assistant_action_data.",
-        enabled=False,
-        tags=["widget", "compare", "integrated", "scenario"],
-        agent_tier="executor",
-    )
-
-
-def create_kpi_comparison_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="kpi_comparison",
-        description=(
-            "Show the visual KPI comparison view between two scenarios. "
-            "Call ONLY if the user EXPLICITLY asks for a visual representation of the KPIs "
-            "of two scenarios (e.g. 'show me the KPIs side by side', 'compare the KPIs of the two scenarios'). "
-            "The result is automatically appended to assistant_action_data."
-        ),
-        category=ToolCategory.INTERACTION,
-        long_description=(
-            "Builds the index comparison widget with the KPIs of two scenarios. "
-            "INVOCATION RULE: use only when the user explicitly requests a visual representation "
-            "of the KPIs of two scenarios — NOT for a generic scenario comparison "
-            "(use comparison_plot for that). "
-            "May be called alone or together with analyze_scenario_results. "
-            "Do NOT call this tool for single scenarios or for generic comparison requests. "
-            "The SHOW_WIDGET result is appended to assistant_action_data."
-        ),
-        parameters=[
             ToolParameter(
                 name="scenario_ids",
                 description=(
-                    "IDs of the two scenarios to compare. If omitted, the tool "
-                    "uses the scenarios already resolved in current_context."
-                ),
-                type="array",
-                required=False,
-                schema={"items": {"type": "string"}},
-            )
-        ],
-        output_description="indexComparison widget to display in the interface, already formatted for assistant_action_data.",
-        enabled=False,
-        tags=["widget", "kpi", "compare", "integrated"],
-        agent_tier="executor",
-    )
-
-
-def create_show_load_plot_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="show_load_plot",
-        description=(
-            "Show the load plot for a single scenario. "
-            "Call ONLY if the user EXPLICITLY asks for the load graph/plot of a single scenario "
-            "(e.g. 'show me the load plot', 'display the tourist load chart'). "
-            "The result is automatically appended to assistant_action_data."
-        ),
-        category=ToolCategory.INTERACTION,
-        long_description=(
-            "Generates the load plot widget for a single scenario. "
-            "INVOCATION RULE: use only when the user explicitly requests the load "
-            "graph of a single scenario. Do NOT call for scenario comparisons "
-            "(use comparison_plot for those) and do NOT call for generic scenario evaluation "
-            "(use show_capacity_plot for that). "
-            "May be called alone or together with analyze_scenario_results. "
-            "The SHOW_WIDGET result is appended to assistant_action_data."
-        ),
-        parameters=[
-            ToolParameter(
-                name="scenario_ids",
-                description=(
-                    "List containing the ID of the scenarios to analyze. If omitted, the "
-                    "tool uses the scenario already resolved in current_context (or, "
-                    "failing that, the most recently previewed temporary scenario)."
+                    "IDs of the scenario(s) the widget is about. "
+                    "'comparison_plot' and 'kpi_comparison' need two; "
+                    "'load_plot' and 'capacity_plot' need one. If omitted, "
+                    "the tool uses the scenario(s) already resolved in "
+                    "current_context."
                 ),
                 type="array",
                 required=False,
@@ -113,73 +104,93 @@ def create_show_load_plot_tool() -> ToolDefinition:
             ToolParameter(
                 name="subsystem",
                 description=(
-                    "Which constraint/subsystem to plot the load for (e.g. 'parcheggi', "
-                    "'spiaggia', 'alberghi', 'ristoranti'). Defaults to 'default', which "
-                    "plots the overall destination load across all constraints."
+                    "Only used by 'load_plot' and 'capacity_plot'. Which "
+                    "constraint/subsystem to plot (e.g. 'parcheggi', "
+                    "'spiaggia', 'alberghi', 'ristoranti'). Defaults to "
+                    "'default', which plots the overall/every-constraint "
+                    "result."
                 ),
                 type="string",
                 required=False,
             ),
         ],
-        output_description="Turistic load plot widget to display in the interface, already formatted for assistant_action_data.",
-        enabled=False,
-        tags=["widget", "plot", "turistic load", "integrated"],
+        output_description=(
+            "One of the analysis widgets (indexComparison, "
+            "histogramComparison, loadPlot, capacityPlot) to display in the "
+            "interface, already formatted for assistant_action_data."
+        ),
+        enabled=True,
+        tags=["widget", "plot", "compare", "kpi", "integrated", "scenario"],
         agent_tier="executor",
     )
 
 
-def create_show_capacity_plot_tool() -> ToolDefinition:
+def create_explain_widget_tool() -> ToolDefinition:
     return ToolDefinition(
-        name="show_capacity_plot",
+        name="explain_widget",
         description=(
-            "Show the capacity plot (sustainability chart) for a scenario evaluation. "
-            "MUST always be called when the user asks for an evaluation of a scenario, "
-            "TOGETHER with analyze_scenario_results. "
-            "The result is automatically appended to assistant_action_data."
+            "Explain, in plain language, how to read one of the analysis "
+            "widgets/plots ('comparison_plot', 'capacity_plot', or "
+            "'load_plot') — what its axes, lines, points, and colors mean. "
+            "Use this when the user asks what a chart shows, how to "
+            "interpret it, or what its colors/axes mean (e.g. 'cosa "
+            "rappresenta il grafico di sostenibilità?', 'what do the colors "
+            "in the load plot mean?'). This tool does NOT fetch or display "
+            "any scenario data — it only explains the widget's visual "
+            "encoding. To actually show a widget with real data, use "
+            "show_analysis_widget instead (both may be called in the same "
+            "turn if the user asks to see AND understand a chart)."
         ),
         category=ToolCategory.INTERACTION,
         long_description=(
-            "Generates the capacity plot widget (limit curve and scenario points). "
-            "INVOCATION RULE: must be called in every turn where analyze_scenario_results is called "
-            "for a scenario evaluation — it is not an alternative to it. "
-            "Do NOT call for comparisons between two scenarios (use comparison_plot for those) and "
-            "do NOT call when the user explicitly asks for the load graph "
-            "(use show_load_plot for that). "
-            "The SHOW_WIDGET result is appended to assistant_action_data."
+            "Purely explanatory tool: returns a fixed, hand-written "
+            "description of how to read the requested widget type. It makes "
+            "no backend call and does not depend on current_context or "
+            "context_cache, so it may be called even if no scenario has "
+            "been resolved yet. Pick `widget_type` according to which plot "
+            "the user is asking about:\n\n"
+            "  - 'comparison_plot' (histogramComparison widget): a bar plot "
+            "showing the difference in a system KPI between two scenarios, "
+            "one bar per scenario. For each bar, the confidence interval is "
+            "also reported, shown in yellow.\n\n"
+            "  - 'capacity_plot' (capacityPlot widget): each line represents "
+            "a relevant subsystem. The x and y axes represent the two main "
+            "sustainability axes. Each point is a simulated day; its color "
+            "shows whether that day is sustainable (green), partially "
+            "sustainable (yellow), or not sustainable (red); its opacity "
+            "shows the level of uncertainty.\n\n"
+            "  - 'load_plot' (loadPlot widget): shown for a single resource. "
+            "Points represent simulated days, ordered from low to high "
+            "usage of the selected resource. A point's color shows whether "
+            "that day is sustainable (green), partially sustainable "
+            "(yellow), or not sustainable (red)."
         ),
         parameters=[
             ToolParameter(
-                name="scenario_ids",
+                name="widget_type",
                 description=(
-                    "List containing the ID of the scenarios to analyze. If omitted, the "
-                    "tool uses the scenario already resolved in current_context (or, "
-                    "failing that, the most recently previewed temporary scenario)."
-                ),
-                type="array",
-                required=False,
-                schema={"items": {"type": "string"}},
-            ),
-            ToolParameter(
-                name="subsystem",
-                description=(
-                    "Which constraint/subsystem to plot capacity for (e.g. 'parcheggi', "
-                    "'spiaggia', 'alberghi', 'ristoranti'). Defaults to 'default', which "
-                    "plots every constraint curve together."
+                    "Which widget to explain: 'comparison_plot', "
+                    "'capacity_plot', or 'load_plot'. See the tool "
+                    "description for what each one covers."
                 ),
                 type="string",
-                required=False,
+                required=True,
+                schema={"enum": EXPLAINABLE_WIDGET_TYPES},
             ),
         ],
-        output_description="Sustainability plot widget to display in the interface, already formatted for assistant_action_data.",
-        enabled=False,
-        tags=["widget", "plot", "sustainability", "integrated"],
+        output_description=(
+            "A plain-language explanation of the requested widget's axes, "
+            "lines/points/bars, and color/opacity encoding."
+        ),
+        enabled=True,
+        tags=["widget", "plot", "explain", "help", "scenario"],
         agent_tier="executor",
     )
 
 
 __all__ = [
-    "create_comparison_plot_tool",
-    "create_kpi_comparison_tool",
-    "create_show_load_plot_tool",
-    "create_show_capacity_plot_tool",
+    "create_analysis_widget_tool",
+    "create_explain_widget_tool",
+    "WIDGET_TYPES",
+    "EXPLAINABLE_WIDGET_TYPES",
 ]

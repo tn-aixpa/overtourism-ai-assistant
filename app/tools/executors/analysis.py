@@ -11,6 +11,7 @@ from app.prompts.entity_parsing import get_relatet_context_ids
 from app.agent.nodes.utils import _ensure_data_cached
 from app.prompts.scanarios import analyze_scenario, generate_summary
 from app.prompts.report import generate_report
+from app.utils.common import strip_plot_data
 
 from app.tools.executors.system_utility import execute_lookup_glossary
 
@@ -154,7 +155,16 @@ def execute_get_context_details(
                 }
             )
             scenario_id = cleaned["scenario_id"]
-            cache[f"scenarios {scenario_id}"] = {**cleaned, "evaluation_data": cleaned}
+            # Strip the heavy raw plot arrays before this enters the
+            # long-lived cache (see strip_plot_data). This also fixes a
+            # duplication bug: `cleaned` used to be spread into the cache
+            # entry AND nested again under "evaluation_data", so plot_data
+            # ended up stored twice for the same scenario.
+            cached_entry = strip_plot_data(cleaned)
+            cache[f"scenarios {scenario_id}"] = {
+                **cached_entry,
+                "evaluation_data": cached_entry,
+            }
             # Remember which scenario_id this (session, evaluation) pair
             # resolved to, so a repeat call is a cache hit too.
             cache[cache_key_temp] = {"scenario_id": scenario_id}

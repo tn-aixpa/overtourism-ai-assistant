@@ -65,14 +65,15 @@ def clean_scenario(raw_data):
     """Strip a raw `.../evaluations/{id}/data` backend payload down to what
     the rest of the app needs, split into two buckets:
 
-    - "data": the tiny sustainability/KPI summary (used by _parse_kpis for
-      the histogramComparison / indexComparison widgets). Unchanged from
-      before — anything reading `["data"]` keeps working exactly as-is.
+    - "data": the tiny sustainability/KPI summary. Read directly (as the
+      "data" sub-key of get_evaluation_data's output) by
+      analyze_scenario_results/generate_summary for prompt text, and by
+      show_analysis_widget as part of the widget payload it hands to the
+      frontend (see app.tools.executors.analysis_widgets).
     - "plot_data": the additional raw fields needed to build the load and
       capacity plots (constraint curves, per-sample uncertainty/usage,
       capacity thresholds, x/y ranges). This used to be discarded entirely,
-      which is why show_load_plot/show_capacity_plot could only ever
-      return mocks.
+      which is why the plot widgets could only ever return mocks.
 
     IMPORTANT: "plot_data" is intentionally kept separate from "data" and
     is NEVER meant to be dumped wholesale into an LLM prompt — it can hold
@@ -80,6 +81,11 @@ def clean_scenario(raw_data):
     payload (sent straight to the frontend) or a small derived summary, the
     same way `_HEAVY_FIELDS` in app/utils/common.py keeps other bulky
     backend fields (extras, evaluation_data, ...) out of prompt injection.
+    It must also never be written into state.cognitive.context_cache — see
+    app.utils.common.strip_plot_data, applied wherever evaluation data
+    enters that (long-lived) cache — since show_analysis_widget is the only
+    consumer and it fetches plot_data fresh for its own transient use
+    rather than reading it back out of long-lived state.
     """
     data = raw_data["data"]
     return {

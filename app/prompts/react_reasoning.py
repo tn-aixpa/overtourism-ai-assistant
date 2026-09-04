@@ -173,7 +173,12 @@ these, finish per the TOOL AVAILABILITY guideline):
 {json.dumps(mode_unavailable_tool_names, indent=2) if mode_unavailable_tool_names else "None"}
 
 Prior tool results from earlier in this session (long-term memory — use for argument
-resolution, skip re-running a tool if its result is already here):
+resolution; skip re-running a tool ONLY if it already SUCCEEDED and you don't need fresh
+data. A result marked FAILED means that attempt did NOT complete — never treat a failed
+attempt as "already done". If the user is asking to retry/try again/redo the last thing,
+that refers to the most recent FAILED action: call the same tool again (same arguments,
+unless the user or the failure reason implies they should change) rather than finishing
+without acting:
 {prior_results_block}
 
 Conversation so far:

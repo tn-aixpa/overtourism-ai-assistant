@@ -73,11 +73,12 @@ LOCATION_SUBLEVEL_LABELS: Dict[str, str] = {
 # evaluating/comparing a scenario (analyze_scenario_results, in the
 # "analysis" bucket conceptually) is required by the reasoning prompt to
 # always be paired with its charting tool in the same turn
-# (show_capacity_plot / comparison_plot, "scenario" bucket) — see
-# react_reasoning.py's scenario-analysis guideline. Splitting them into
-# disjoint tool sets would silently break that pairing depending on which
-# of the two menu labels the user happened to pick, even though both
-# describe the same underlying capability from the user's point of view.
+# (show_analysis_widget with widget_type="capacity_plot"/"comparison_plot",
+# "scenario" bucket) — see react_reasoning.py's scenario-analysis
+# guideline. Splitting them into disjoint tool sets would silently break
+# that pairing depending on which of the two menu labels the user happened
+# to pick, even though both describe the same underlying capability from
+# the user's point of view.
 _SCENARIO_ANALYSIS_TOOLS: Set[str] = {
     "list_available_scenarios",
     "get_base_scenario",
@@ -87,10 +88,8 @@ _SCENARIO_ANALYSIS_TOOLS: Set[str] = {
     "edit_scenario",
     "delete_scenario",
     "analyze_scenario_results",
-    "comparison_plot",
-    "kpi_comparison",
-    "show_load_plot",
-    "show_capacity_plot",
+    "show_analysis_widget",
+    "explain_widget",
 }
 
 _LOCATION_SUBGROUPS: Dict[str, Set[str]] = {

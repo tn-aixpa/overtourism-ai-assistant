@@ -87,7 +87,7 @@ def _bump_active_agent(state: AgentState, tool_def: ToolDefinition | None) -> No
     as tools actually run, so a turn that calls e.g. list_available_*
     (EXECUTOR) and then analyze_scenario_results (OPERATIVE) ends up with
     active_agent=OPERATIVE for its final answer even if an EXECUTOR-tier
-    tool (like show_capacity_plot) also runs afterwards in the same turn.
+    tool (like show_analysis_widget) also runs afterwards in the same turn.
     """
     if not tool_def:
         return
@@ -308,10 +308,21 @@ def tool_executor_node(state: AgentState) -> Command:
             )
         )
 
+        # Store a reference (result_key) + a cheap status flag only — NOT
+        # the full result again. The full result already lives in
+        # state.cognitive.tool_results[result_key] (bounded by
+        # MAX_STORED_TOOL_RESULTS / _trim_tool_results). Duplicating it
+        # here defeated that cap: TraceBuffer keeps up to 1000 steps with
+        # no per-entry size limit, and nothing ever reads step.data.result
+        # back (grep confirms it — trace is write-only, consulted only via
+        # AgentState.last_node and dump_to_file). That made every tool
+        # result live in memory (and get independently re-serialized by
+        # dump_to_file) twice for as long as the trace step survived,
+        # regardless of the tool_results cap.
         state.add_trace(
             "tool_execution",
             tool_name,
-            {"result_key": result_key, "result": result},
+            {"result_key": result_key, "success": result.get("success")},
         )
 
         logger.info(f"Tool '{tool_name}' result stored as '{result_key}'")

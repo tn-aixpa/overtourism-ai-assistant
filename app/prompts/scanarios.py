@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = None):
-    context_block = state.cognitive.context_cache
+    # Bounded the same way generate_summary/generate_report (below and in
+    # app/prompts/report.py) already treat context_cache — this used to
+    # f-string the RAW cache dict in unbounded, which (a) had no size cap
+    # at all (unlike every other context_cache injection site in this
+    # codebase) and (b) rendered as a Python dict repr rather than JSON.
+    # Bounding it here is defense-in-depth: context_cache should no longer
+    # contain plot_data at all (see app.utils.common.strip_plot_data), but
+    # other fields (extras, related_scenario_ids, ...) can still be sizable.
+    context_block = truncate_for_prompt(
+        state.cognitive.context_cache, max_chars=MAX_CONTEXT_BLOCK_CHARS
+    )
 
     visual_note = (
         f"\n    A {widget_hint} will be displayed to the user automatically alongside "

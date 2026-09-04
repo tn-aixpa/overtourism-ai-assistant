@@ -24,13 +24,44 @@ def execute_lookup_glossary(
 
     logger.info(f"Executing lookup_glossary | query='{query}'")
 
-    tokens = [t.strip().lower() for t in query.split() if t.strip()]
+    # Common short function words (English + Italian) that carry no
+    # search meaning on their own — without filtering these, a token like
+    # "di"/"un"/"the"/"of" can match as a substring inside all sorts of
+    # unrelated glossary strings (e.g. "di" inside "digital"), producing
+    # false-positive matches that have nothing to do with what the user
+    # asked. Real search terms are never this short, so dropping them only
+    # removes noise, never a legitimate match.
+    _STOPWORDS = {
+        "a", "an", "the", "is", "are", "of", "what", "what's",
+        "il", "lo", "la", "i", "gli", "le", "un", "uno", "una",
+        "di", "che", "cosa", "cos'è", "è", "e",
+    }
+    raw_tokens = [t.strip().lower() for t in query.split() if t.strip()]
+    tokens = [t for t in raw_tokens if t not in _STOPWORDS] or raw_tokens
     if not tokens:
         return {
             "success": False,
             "error": "Empty query — please provide at least one search term.",
             "matches": [],
         }
+
+    def _token_matches(token: str, searchable_lower: str) -> bool:
+        if token in searchable_lower:
+            return True
+        # Tolerate simple Italian singular/plural mismatches between the
+        # query and the glossary entry (e.g. "ambiti" vs. the entry's
+        # "ambito", "problemi" vs. "problema") — Italian plurals change the
+        # final vowel rather than appending a suffix, so a straight
+        # substring check misses them even though a human would call it an
+        # obvious match. Only applied to longer words (>=5 chars) sharing a
+        # long shared prefix (>=5 chars) with some word in the searchable
+        # text, to keep this from matching short, generic words too loosely.
+        if len(token) < 5:
+            return False
+        for word in searchable_lower.split():
+            if len(word) >= 5 and word[:5] == token[:5]:
+                return True
+        return False
 
     matches = {}
     for entry in GLOSSARY:
@@ -47,7 +78,7 @@ def execute_lookup_glossary(
         )
         searchable_lower = " ".join(s.lower() for s in searchable)
 
-        if any(tok in searchable_lower for tok in tokens):
+        if any(_token_matches(tok, searchable_lower) for tok in tokens):
             matches[term] = entry
 
     if not matches:

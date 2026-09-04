@@ -5,6 +5,7 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.tools.tool_schema import ToolDefinition
+from app.utils.common import strip_plot_data
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,10 @@ def _ensure_data_cached(
         )
         for key, eval_data in fetched_evals.items():
             if key in cache:
-                cache[key]["evaluation_data"] = eval_data
+                # Never let the heavy raw plot arrays enter long-lived
+                # state — see strip_plot_data's docstring. Nothing in the
+                # current codebase reads plot_data back out of the cache.
+                cache[key]["evaluation_data"] = strip_plot_data(eval_data)
 
     state.cognitive.context_cache = cache
     return cache
