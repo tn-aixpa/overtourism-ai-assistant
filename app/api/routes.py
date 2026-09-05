@@ -139,11 +139,6 @@ async def run_agent_endpoint(
     if not message or not message.strip():
         raise HTTPException(status_code=400, detail="No message provided")
 
-    if integrated_mode and len(context) == 0:
-        raise HTTPException(
-            status_code=400, detail="Context is required in integrated mode"
-        )
-
     # Get status and proceed with the request
     lock = _get_lock(session_id)
 
@@ -164,6 +159,20 @@ async def run_agent_endpoint(
             # Don't reveal whether the session exists under another tenant.
             raise HTTPException(status_code=404, detail="Session not found")
 
+        # A session's mode is fixed for its whole lifetime (set once, above,
+        # when the session is first created) — see reasoner.initialize_tools.
+        # Always branch on the PERSISTED state.integrated_mode from here on,
+        # never on this request's raw `integrated_mode` form field: a
+        # follow-up call that simply omits/defaults that field (e.g. the
+        # frontend only sends it on the first turn) must not silently make
+        # an integrated session behave as standalone for the rest of the
+        # conversation — that was dropping `context` on every turn after
+        # the first instead of re-resolving it.
+        if state.integrated_mode and len(context) == 0:
+            raise HTTPException(
+                status_code=400, detail="Context is required in integrated mode"
+            )
+
         state.add_user_message(message)
 
         if state.waiting_for:
@@ -171,23 +180,27 @@ async def run_agent_endpoint(
         else:
             state.user_input = None
 
-        if integrated_mode:
+        if state.integrated_mode:
             logger.info(f"Running in integrated mode with context: {context}")
+
+            def _extract(prefix: str) -> list[str]:
+                return [c.split(":", 1)[1] for c in context if c.startswith(prefix)]
+
             state.cognitive.current_context = {
-                "problems": [],
-                "proposals": [],
-                "scenarios": context,
+                "problems": _extract("problem:"),
+                "proposals": _extract("proposal:"),
+                "scenarios": _extract("scenario:"),
             }
-            state.cognitive.enabled_tools = [
-                "get_context_details",
-                "analyze_scenario_results",
-                "lookup_glossary",
-            ]
-        else:
-            # Non-integrated mode: all tools are available.
-            # enabled_tools is intentionally left empty here; initialize_tools will
-            # populate it with the full known_tools list once the registry is ready.
-            state.cognitive.enabled_tools = []
+
+        # Both modes leave enabled_tools empty here; initialize_tools
+        # populates it fresh from the full known_tools list once the
+        # registry is ready. Integrated sessions get every tool a
+        # standalone session gets EXCEPT widget tools (show_analysis_widget,
+        # show_territorial_index_map) — that exclusion is applied in
+        # initialize_tools via WIDGET_TOOL_NAMES, not hardcoded here, so the
+        # two modes can't silently drift apart on which non-widget tools
+        # are available.
+        state.cognitive.enabled_tools = []
 
         save_state(state)
 
