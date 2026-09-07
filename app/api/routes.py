@@ -14,6 +14,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
+import queue
 
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
@@ -281,24 +282,53 @@ async def stream_events(
     authorization: str | None = Header(default=None),
 ):
     if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
+        # Native browser EventSource cannot set arbitrary request headers, so
+        # accept the token from the query string as a fallback. Prefer the
+        # Authorization header when the client can provide it.
+        auth_header = authorization
+        if not auth_header and token:
+            auth_header = f"Bearer {token}"
+        token = _require_bearer_token(auth_header)
         _authorize_tenant(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    queue = get_queue(session_id)
+    event_queue = get_queue(session_id)
 
     async def event_generator():
+        # Never leave an SSE connection blocked forever. Periodic comments keep
+        # proxies/load-balancers from considering the response idle, while the
+        # timeout also lets us recover cleanly if the client connects after the
+        # completion event has already been published. The final response is
+        # available through /agent/result/{session_id}.
         while True:
-            event = await asyncio.to_thread(queue.get)
-            logger.info(f"Sending SSE event: {event}")
+            try:
+                event = await asyncio.to_thread(event_queue.get, True, 30)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                continue
+            except Exception as exc:
+                logger.exception(f"SSE queue failure for session {session_id}: {exc}")
+                break
+
+            logger.info(f"Sending SSE event for session {session_id}: {event}")
+
             if event == "__done__":
                 yield "event: done\ndata: \n\n"
                 break
+
             yield f"event: status\ndata: {event}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/agent/feedback")
