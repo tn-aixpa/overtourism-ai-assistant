@@ -25,7 +25,6 @@ from app.agent.events import publish_thought
 from app.tools.tool_registry import (
     get_tool_registry,
     _ensure_tool_registry,
-    WIDGET_TOOL_NAMES,
 )
 from app.prompts.react_reasoning import react_step
 
@@ -55,35 +54,35 @@ def initialize_tools(state: AgentState) -> Command:
     # governed entirely by routing (top_level_router_node scopes
     # enabled_tools further down below), not by the tier a tool's response
     # would be generated under (see ToolDefinition.agent_tier).
-    known_tools = registry.get_context_tools(allowlist=allowlist)
-
-    # Widget tools are intentionally restricted to standalone mode only.
-    # A session's mode (integrated vs. standalone) is fixed for its whole
-    # lifetime, so this is computed fresh from state.integrated_mode on
-    # every call and applied only to THIS session's own known/enabled tool
-    # lists in AgentState. It must never mutate the ToolRegistry itself —
-    # that registry is a process-wide singleton (see get_tool_registry),
-    # and this node runs in a worker thread per request. Toggling a shared
-    # tool's `enabled` flag based on one request's state let concurrent
-    # requests in different modes race on and stomp each other's tool
-    # availability. Filtering a per-request copy of known_tools instead
-    # keeps this session-scoped with no shared mutation at all.
-    if state.integrated_mode:
-        known_tools = {
-            name: tool
-            for name, tool in known_tools.items()
-            if name not in WIDGET_TOOL_NAMES
-        }
+    #
+    # role/mode filtering (ToolDefinition.allowed_roles / allowed_modes,
+    # see app.tools.tool_schema) IS applied here, via state.user_role /
+    # state.session_mode — e.g. this is what keeps widget tools
+    # (show_analysis_widget, show_territorial_index_map, both declared
+    # allowed_modes={"standalone"}) out of integrated-mode sessions, now
+    # declaratively on the tools themselves instead of a hardcoded
+    # WIDGET_TOOL_NAMES exclusion list here. Computed fresh from THIS
+    # session's state on every call and only ever narrows a per-request
+    # copy of known_tools/enabled_tools in AgentState — it must never
+    # mutate the ToolRegistry itself, which is a process-wide singleton
+    # (see get_tool_registry) shared by every session's worker thread.
+    known_tools = registry.get_context_tools(
+        allowlist=allowlist,
+        role=state.user_role,
+        mode=state.session_mode,
+    )
 
     state.cognitive.known_tools = list(known_tools.keys())
 
     if state.integrated_mode:
         if not state.cognitive.enabled_tools:
             state.cognitive.enabled_tools = state.cognitive.known_tools
+        # Re-narrow to known_tools rather than re-checking role/mode here:
+        # known_tools has already had the same role/mode filter applied
+        # above, so intersecting against it (instead of duplicating the
+        # is_allowed_for check) keeps this in sync with it by construction.
         state.cognitive.enabled_tools = [
-            name
-            for name in state.cognitive.enabled_tools
-            if name not in WIDGET_TOOL_NAMES
+            name for name in state.cognitive.enabled_tools if name in known_tools
         ]
     else:
         state.cognitive.enabled_tools = list(state.cognitive.known_tools)
@@ -124,8 +123,21 @@ def react_reasoner_node(state: AgentState) -> Command:
     logger.info(f"Entering react_reasoner (step {len(state.cognitive.scratchpad) + 1})")
 
     registry = get_tool_registry()
+    # role/mode must be passed here too, not just in initialize_tools:
+    # enabled_tools (the allowlist below) was already narrowed by routing
+    # and is names-only, it carries no role/mode information of its own.
+    # get_tools_for_llm -> get_context_tools re-applies is_allowed_for
+    # against whatever role/mode it's given, and is_allowed_for fails
+    # CLOSED for role=None/mode=None on any tool that declares a
+    # restriction (see ToolDefinition.is_allowed_for) — which by now is
+    # nearly every tool. Omitting these here doesn't just skip a filter,
+    # it flips it to "reject everything", silently emptying
+    # tools_for_llm_enabled even though enabled_tools/known_tools are
+    # completely correct.
     tools_for_llm_enabled = registry.get_tools_for_llm(
-        allowlist=state.cognitive.enabled_tools
+        allowlist=state.cognitive.enabled_tools,
+        role=state.user_role,
+        mode=state.session_mode,
     )
 
     # Tools genuinely absent this session for an execution-mode reason

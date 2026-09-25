@@ -137,6 +137,20 @@ def execute_selected_tool(
     if not tool_def.enabled and not allow_disabled:
         raise ValueError(f"Tool '{tool_name}' is disabled")
 
+    # Role/mode gating is enforced here too, not just at selection time
+    # (ToolRegistry.get_context_tools, consulted by initialize_tools /
+    # react_reasoner_node) — this function is also reachable directly,
+    # bypassing that selection step entirely, from the /agent/tool
+    # pipeline endpoint (see app.api.routes.run_selected_tools). Checked
+    # unconditionally (not gated behind allow_disabled): allow_disabled
+    # only ever means "bypass the enabled flag", never "bypass who/where
+    # this tool may run".
+    if not tool_def.is_allowed_for(state.user_role, state.session_mode):
+        raise PermissionError(
+            f"Tool '{tool_name}' is not allowed for role='{state.user_role}' "
+            f"mode='{state.session_mode}'"
+        )
+
     validate_tool_arguments(tool_def, tool_arguments)
 
     # Get the executor function for this tool

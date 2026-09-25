@@ -28,6 +28,7 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
         ),
         tags=["data", "read-only", "territorial-index", "navigation"],
         agent_tier="executor",
+        allowed_modes=("standalone", "internal"),
     )
 
 
@@ -95,6 +96,7 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
         enabled=True,
         tags=["widget", "map", "territorial-index", "integrated"],
         agent_tier="executor",
+        allowed_modes=("standalone",),
     )
 
 

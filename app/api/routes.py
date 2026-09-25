@@ -19,7 +19,15 @@ import queue
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
-from app.agent.memory import load_state, save_state, delete_state, _get_lock
+from app.agent.memory import (
+    load_state,
+    save_state,
+    delete_state,
+    _get_lock,
+    is_in_flight,
+    mark_in_flight,
+    clear_in_flight,
+)
 from app.agent.events import get_queue, publish_done, get_result, clear_session
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
@@ -27,6 +35,7 @@ from app.utils.authentication import (
     _require_bearer_token,
     _authorize_tenant,
     get_user_id,
+    get_user_role,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +100,10 @@ def _run_agent(key: str, state: AgentState, token: str):
 
     finally:
         publish_done(key, result)
+        # Must be cleared even on the exception path above, or a session
+        # that errors once would stay "in flight" forever and every
+        # subsequent /agent call for it would 409 permanently.
+        clear_in_flight(key)
 
 
 @router.post("/agent", status_code=202)
@@ -111,6 +124,8 @@ async def run_agent_endpoint(
             user_id="system",
             integrated_mode=True,
             tenant=tenant,
+            user_role="standard",
+            session_mode="internal",
         )
 
         save_state(state)
@@ -144,6 +159,25 @@ async def run_agent_endpoint(
     lock = _get_lock(session_id)
 
     async with lock:
+        # Reject a second message for this session while the previous one's
+        # background turn is still running, instead of silently racing on
+        # it (see the long comment on _IN_FLIGHT in memory.py for exactly
+        # what that race does: shared-object corruption, a non-atomically
+        # overwritten JSON dump, and a completed response that's generated
+        # but never reaches the frontend because the SSE stream already
+        # closed after the OTHER turn's "__done__"). Checked/marked inside
+        # this same lock so two requests arriving back-to-back can't both
+        # pass the check before either sets the flag.
+        if is_in_flight(session_id):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A previous message for this session is still being "
+                    "processed. Wait for it to finish before sending "
+                    "another."
+                ),
+            )
+
         state = load_state(session_id)
 
         if state is None:
@@ -155,6 +189,12 @@ async def run_agent_endpoint(
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
                 tenant=tenant,
+                user_role=get_user_role(token),
+                # Fixed for the session's whole lifetime, same as
+                # integrated_mode itself (see the note below on why every
+                # later turn must branch on persisted state, not the raw
+                # form field).
+                session_mode="internal" if integrated_mode else "standalone",
             )
         elif state.tenant != tenant:
             # Don't reveal whether the session exists under another tenant.
@@ -197,13 +237,15 @@ async def run_agent_endpoint(
         # populates it fresh from the full known_tools list once the
         # registry is ready. Integrated sessions get every tool a
         # standalone session gets EXCEPT widget tools (show_analysis_widget,
-        # show_territorial_index_map) — that exclusion is applied in
-        # initialize_tools via WIDGET_TOOL_NAMES, not hardcoded here, so the
-        # two modes can't silently drift apart on which non-widget tools
-        # are available.
+        # show_territorial_index_map) — that exclusion is declared on the
+        # tools themselves (ToolDefinition.allowed_modes={"standalone"})
+        # and enforced generically by ToolRegistry.get_context_tools via
+        # state.session_mode, not hardcoded here, so the two modes can't
+        # silently drift apart on which non-widget tools are available.
         state.cognitive.enabled_tools = []
 
         save_state(state)
+        mark_in_flight(session_id)
 
     background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
     return {"session_id": session_id}
@@ -241,6 +283,11 @@ async def reset_session(
 
         delete_state(session_id)
         clear_session(session_id)
+        # delete_state() already clears this, but stated explicitly here
+        # too: a reset must never leave a session permanently 409-ing on
+        # every future /agent call because it happened to fire while a
+        # turn was still in flight.
+        clear_in_flight(session_id)
 
     logger.info(f"Session {session_id} reset")
     return {"session_id": session_id, "status": "reset"}
@@ -399,7 +446,17 @@ async def run_selected_tools(
 
     # Stateless, session-less scratch state — intentionally never saved.
     user_id = get_user_id(token) + "-system"
-    state = AgentState(tenant=tenant, user_id=user_id)
+    state = AgentState(
+        tenant=tenant,
+        user_id=user_id,
+        user_role=get_user_role(token),
+        # This pipeline runs outside the normal chat surface entirely —
+        # not "standalone" or "internal" — so it gets its own SessionMode
+        # value. Tools that should ONLY ever be reachable through this
+        # pipeline (summary_generation, report_generation) declare
+        # allowed_modes={"system"} accordingly (see below).
+        session_mode="system",
+    )
 
     if body.key == "summary":
         if not body.current_context:
@@ -426,10 +483,13 @@ async def run_selected_tools(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
 
-    # summary_generation (and any other internal-only tool) is disabled in
-    # the registry so it never appears in normal chat's tool allowlist, but
-    # this endpoint is an explicit, admin-style pipeline — so it's allowed
-    # to run disabled tools deliberately.
+    # summary_generation / report_generation are disabled in the registry
+    # (enabled=False) so they never appear in normal chat's tool allowlist,
+    # AND declare allowed_modes={"system"} so they can only ever be
+    # selected/executed from this pipeline. allow_disabled=True below
+    # deliberately bypasses only the `enabled` flag — the allowed_modes
+    # check in execute_selected_tool still applies and passes here because
+    # state.session_mode is "system" (set above).
     results = []
     for step in steps:
         outcome = await asyncio.to_thread(

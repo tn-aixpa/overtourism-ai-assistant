@@ -302,6 +302,30 @@ class AgentState:
     tenant: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
+    # Coarse-grained role this session is authenticated as — "admin",
+    # "standard", or "viewer" (see app.tools.tool_schema.UserRole). Kept
+    # as a plain string rather than importing UserRole here, for the same
+    # tools->agent circular-import reason agent_tier is a plain string on
+    # ToolDefinition (see AgentTier's docstring below). Resolved once, from
+    # the auth token, when the session is first created (see
+    # app.utils.authentication.get_user_role / app.api.routes) and left
+    # untouched for the rest of the session's lifetime — a role change
+    # mid-session should start a new session, not silently reinterpret an
+    # in-flight one. Consulted by ToolDefinition.allowed_roles via
+    # ToolRegistry.get_context_tools (tool *selection*, in
+    # initialize_tools) and again by execute_selected_tool (tool
+    # *execution*, so a direct/explicit call — e.g. the /agent/tool
+    # pipeline — can't bypass the same rule).
+    user_role: str = "standard"
+    # Which surface this session is running under — "standalone",
+    # "internal", or "system" (see app.tools.tool_schema.SessionMode).
+    # Same plain-string rationale as user_role above. Derived once at
+    # session creation from integrated_mode (True -> "internal", False ->
+    # "standalone") for the two chat entry points, or set explicitly to
+    # "system" for the stateless /agent/tool pipeline's throwaway state
+    # (see app.api.routes) — that pipeline never sets integrated_mode at
+    # all, so it needs its own explicit value rather than being derived.
+    session_mode: str = "standalone"
     # Which capability tier this turn's response is generated under (see
     # AgentTier). Reset to the EXECUTOR baseline at the start of every
     # fresh turn (see initialize_tools), then raised at most, never
@@ -426,5 +450,15 @@ class AgentState:
 
         os.makedirs("logs", exist_ok=True)
         serialized = self._serialize(self.__dict__)
-        with open(filepath, "w", encoding="utf-8") as f:
+        # Write to a temp file and rename over the target, rather than
+        # writing filepath directly: a plain open(filepath, "w") is
+        # truncate-then-write, so any interruption mid-write (process
+        # killed, disk full) — or, previously, two overlapping saves for
+        # the same session_id racing on this same path (see _IN_FLIGHT in
+        # app.agent.memory) — could leave a half-written/corrupt JSON file
+        # on disk. os.replace is atomic on POSIX and Windows: readers only
+        # ever see the fully-old or fully-new content, never a partial write.
+        tmp_path = f"{filepath}.tmp-{os.getpid()}-{id(self)}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(serialized, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, filepath)

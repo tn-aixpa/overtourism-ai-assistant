@@ -53,6 +53,7 @@ def create_lookup_glossary_tool() -> ToolDefinition:
         ),
         tags=["data", "read-only", "glossary", "utility"],
         agent_tier="executor",
+        allowed_modes=("standalone", "internal"),
     )
 
 
@@ -70,6 +71,7 @@ def create_get_system_capabilities_tool() -> ToolDefinition:
         output_description="System description, context rules, and available tools per context",
         tags=["data", "read-only", "system", "navigation"],
         agent_tier="operative",
+        allowed_modes=("standalone", "internal"),
     )
 
 
@@ -109,6 +111,8 @@ def create_general_question_response_tool() -> ToolDefinition:
         ),
         agent_tier="exploitative",
         tags=["general", "ungrounded", "exploitative-tier"],
+        allowed_modes=("standalone", "internal"),
+        allowed_roles=("admin", "standard"),
     )
 
 
@@ -135,6 +139,7 @@ def create_get_data_from_link_tool() -> ToolDefinition:
         output_description="URL fetch result with content summary or error details",
         tags=["data", "read-only", "link", "web"],
         agent_tier="operative",
+        allowed_modes=("standalone", "internal"),
     )
 
 
@@ -191,6 +196,8 @@ def create_explain_workflow_tool() -> ToolDefinition:
         ),
         tags=["data", "read-only", "workflow", "methodology", "system"],
         agent_tier="methodological",
+        allowed_modes=("standalone", "internal"),
+        allowed_roles=("admin", "standard"),
     )
 
 

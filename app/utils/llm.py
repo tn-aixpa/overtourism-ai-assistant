@@ -33,7 +33,7 @@ ANTHROPIC_MODELS = {
 # Overridable via env in case deployment names differ between environments.
 AZURE_MODELS = {
     "light": os.environ.get("AZURE_LIGHT_MODEL", "model-router"),
-    "heavy": os.environ.get("AZURE_HEAVY_MODEL", "model-router"),
+    "heavy": os.environ.get("AZURE_HEAVY_MODEL", "gpt-5.6-sol"),
 }
 
 AZURE_ENDPOINT = os.environ.get(

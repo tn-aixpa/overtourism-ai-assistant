@@ -122,6 +122,7 @@ def create_analysis_widget_tool() -> ToolDefinition:
         enabled=True,
         tags=["widget", "plot", "compare", "kpi", "integrated", "scenario"],
         agent_tier="executor",
+        allowed_modes=("standalone",),
     )
 
 
@@ -185,6 +186,7 @@ def create_explain_widget_tool() -> ToolDefinition:
         enabled=True,
         tags=["widget", "plot", "explain", "help", "scenario"],
         agent_tier="executor",
+        allowed_modes=("standalone", "internal"),
     )
 
 
