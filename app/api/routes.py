@@ -14,11 +14,20 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
+import queue
 
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
-from app.agent.memory import load_state, save_state, delete_state, _get_lock
+from app.agent.memory import (
+    load_state,
+    save_state,
+    delete_state,
+    _get_lock,
+    is_in_flight,
+    mark_in_flight,
+    clear_in_flight,
+)
 from app.agent.events import get_queue, publish_done, get_result, clear_session
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
@@ -26,11 +35,13 @@ from app.utils.authentication import (
     _require_bearer_token,
     _authorize_tenant,
     get_user_id,
+    get_user_role,
 )
 
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "true"
 
 router = APIRouter()
 
@@ -89,6 +100,10 @@ def _run_agent(key: str, state: AgentState, token: str):
 
     finally:
         publish_done(key, result)
+        # Must be cleared even on the exception path above, or a session
+        # that errors once would stay "in flight" forever and every
+        # subsequent /agent call for it would 409 permanently.
+        clear_in_flight(key)
 
 
 @router.post("/agent", status_code=202)
@@ -103,6 +118,28 @@ async def run_agent_endpoint(
     authorization: str | None = Header(default=None),
     tenant: str = Query(...),
 ):
+    if integrated_mode and DISABLE_INTEGRATED:
+        state = AgentState(
+            session_id=session_id,
+            user_id="system",
+            integrated_mode=True,
+            tenant=tenant,
+            user_role="standard",
+            session_mode="internal",
+        )
+
+        save_state(state)
+
+        result = {
+            "response": "Al momento l'assistente integrato non è disponibile",
+            "session_id": session_id,
+            "assistant_action_data": None,
+        }
+
+        # Whatever mechanism your frontend expects for completion:
+        publish_done(session_id, result)
+
+        return {"session_id": session_id}
 
     # Verify authorization
     if AUTH_ENABLED:
@@ -118,15 +155,29 @@ async def run_agent_endpoint(
     if not message or not message.strip():
         raise HTTPException(status_code=400, detail="No message provided")
 
-    if integrated_mode and len(context) == 0:
-        raise HTTPException(
-            status_code=400, detail="Context is required in integrated mode"
-        )
-
     # Get status and proceed with the request
     lock = _get_lock(session_id)
 
     async with lock:
+        # Reject a second message for this session while the previous one's
+        # background turn is still running, instead of silently racing on
+        # it (see the long comment on _IN_FLIGHT in memory.py for exactly
+        # what that race does: shared-object corruption, a non-atomically
+        # overwritten JSON dump, and a completed response that's generated
+        # but never reaches the frontend because the SSE stream already
+        # closed after the OTHER turn's "__done__"). Checked/marked inside
+        # this same lock so two requests arriving back-to-back can't both
+        # pass the check before either sets the flag.
+        if is_in_flight(session_id):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A previous message for this session is still being "
+                    "processed. Wait for it to finish before sending "
+                    "another."
+                ),
+            )
+
         state = load_state(session_id)
 
         if state is None:
@@ -138,10 +189,30 @@ async def run_agent_endpoint(
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
                 tenant=tenant,
+                user_role=get_user_role(token),
+                # Fixed for the session's whole lifetime, same as
+                # integrated_mode itself (see the note below on why every
+                # later turn must branch on persisted state, not the raw
+                # form field).
+                session_mode="internal" if integrated_mode else "standalone",
             )
         elif state.tenant != tenant:
             # Don't reveal whether the session exists under another tenant.
             raise HTTPException(status_code=404, detail="Session not found")
+
+        # A session's mode is fixed for its whole lifetime (set once, above,
+        # when the session is first created) — see reasoner.initialize_tools.
+        # Always branch on the PERSISTED state.integrated_mode from here on,
+        # never on this request's raw `integrated_mode` form field: a
+        # follow-up call that simply omits/defaults that field (e.g. the
+        # frontend only sends it on the first turn) must not silently make
+        # an integrated session behave as standalone for the rest of the
+        # conversation — that was dropping `context` on every turn after
+        # the first instead of re-resolving it.
+        if state.integrated_mode and len(context) == 0:
+            raise HTTPException(
+                status_code=400, detail="Context is required in integrated mode"
+            )
 
         state.add_user_message(message)
 
@@ -150,25 +221,31 @@ async def run_agent_endpoint(
         else:
             state.user_input = None
 
-        if integrated_mode:
+        if state.integrated_mode:
             logger.info(f"Running in integrated mode with context: {context}")
+
+            def _extract(prefix: str) -> list[str]:
+                return [c.split(":", 1)[1] for c in context if c.startswith(prefix)]
+
             state.cognitive.current_context = {
-                "problems": [],
-                "proposals": [],
-                "scenarios": context,
+                "problems": _extract("problem:"),
+                "proposals": _extract("proposal:"),
+                "scenarios": _extract("scenario:"),
             }
-            state.cognitive.enabled_tools = [
-                "get_context_details",
-                "analyze_scenario_results",
-                "lookup_glossary",
-            ]
-        else:
-            # Non-integrated mode: all tools are available.
-            # enabled_tools is intentionally left empty here; initialize_tools will
-            # populate it with the full known_tools list once the registry is ready.
-            state.cognitive.enabled_tools = []
+
+        # Both modes leave enabled_tools empty here; initialize_tools
+        # populates it fresh from the full known_tools list once the
+        # registry is ready. Integrated sessions get every tool a
+        # standalone session gets EXCEPT widget tools (show_analysis_widget,
+        # show_territorial_index_map) — that exclusion is declared on the
+        # tools themselves (ToolDefinition.allowed_modes={"standalone"})
+        # and enforced generically by ToolRegistry.get_context_tools via
+        # state.session_mode, not hardcoded here, so the two modes can't
+        # silently drift apart on which non-widget tools are available.
+        state.cognitive.enabled_tools = []
 
         save_state(state)
+        mark_in_flight(session_id)
 
     background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
     return {"session_id": session_id}
@@ -206,6 +283,11 @@ async def reset_session(
 
         delete_state(session_id)
         clear_session(session_id)
+        # delete_state() already clears this, but stated explicitly here
+        # too: a reset must never leave a session permanently 409-ing on
+        # every future /agent call because it happened to fire while a
+        # turn was still in flight.
+        clear_in_flight(session_id)
 
     logger.info(f"Session {session_id} reset")
     return {"session_id": session_id, "status": "reset"}
@@ -247,24 +329,53 @@ async def stream_events(
     authorization: str | None = Header(default=None),
 ):
     if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
+        # Native browser EventSource cannot set arbitrary request headers, so
+        # accept the token from the query string as a fallback. Prefer the
+        # Authorization header when the client can provide it.
+        auth_header = authorization
+        if not auth_header and token:
+            auth_header = f"Bearer {token}"
+        token = _require_bearer_token(auth_header)
         _authorize_tenant(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    queue = get_queue(session_id)
+    event_queue = get_queue(session_id)
 
     async def event_generator():
+        # Never leave an SSE connection blocked forever. Periodic comments keep
+        # proxies/load-balancers from considering the response idle, while the
+        # timeout also lets us recover cleanly if the client connects after the
+        # completion event has already been published. The final response is
+        # available through /agent/result/{session_id}.
         while True:
-            event = await asyncio.to_thread(queue.get)
-            logger.info(f"Sending SSE event: {event}")
+            try:
+                event = await asyncio.to_thread(event_queue.get, True, 30)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                continue
+            except Exception as exc:
+                logger.exception(f"SSE queue failure for session {session_id}: {exc}")
+                break
+
+            logger.info(f"Sending SSE event for session {session_id}: {event}")
+
             if event == "__done__":
                 yield "event: done\ndata: \n\n"
                 break
+
             yield f"event: status\ndata: {event}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/agent/feedback")
@@ -335,7 +446,17 @@ async def run_selected_tools(
 
     # Stateless, session-less scratch state — intentionally never saved.
     user_id = get_user_id(token) + "-system"
-    state = AgentState(tenant=tenant, user_id=user_id)
+    state = AgentState(
+        tenant=tenant,
+        user_id=user_id,
+        user_role=get_user_role(token),
+        # This pipeline runs outside the normal chat surface entirely —
+        # not "standalone" or "internal" — so it gets its own SessionMode
+        # value. Tools that should ONLY ever be reachable through this
+        # pipeline (summary_generation, report_generation) declare
+        # allowed_modes={"system"} accordingly (see below).
+        session_mode="system",
+    )
 
     if body.key == "summary":
         if not body.current_context:
@@ -362,10 +483,13 @@ async def run_selected_tools(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
 
-    # summary_generation (and any other internal-only tool) is disabled in
-    # the registry so it never appears in normal chat's tool allowlist, but
-    # this endpoint is an explicit, admin-style pipeline — so it's allowed
-    # to run disabled tools deliberately.
+    # summary_generation / report_generation are disabled in the registry
+    # (enabled=False) so they never appear in normal chat's tool allowlist,
+    # AND declare allowed_modes={"system"} so they can only ever be
+    # selected/executed from this pipeline. allow_disabled=True below
+    # deliberately bypasses only the `enabled` flag — the allowed_modes
+    # check in execute_selected_tool still applies and passes here because
+    # state.session_mode is "system" (set above).
     results = []
     for step in steps:
         outcome = await asyncio.to_thread(

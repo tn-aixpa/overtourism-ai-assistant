@@ -3,11 +3,13 @@ import os
 from contextvars import ContextVar
 from typing import Optional, Dict, Any
 import json
+import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
+BACKEND_URL = os.environ.get("BACKEND_URL")
 
 
 def _merge_auth_headers(headers: dict | None) -> dict:
@@ -19,6 +21,13 @@ def _merge_auth_headers(headers: dict | None) -> dict:
         merged["Authorization"] = f"Bearer {get_token()}"
 
     return merged
+
+
+def get_data(url, headers=None, params=None):
+    logger.info(f"Fetching data from URL: {url}")
+    response = requests.get(url, headers=_merge_auth_headers(headers), params=params)
+    response.raise_for_status()
+    return response.json()
 
 
 # =========================
@@ -51,7 +60,47 @@ _LARGE_BUDGET_TOOLS = {
     # truncation in _truncate_json is the real backstop if it ever does.
     "get_configuration_parameters": 14000,
     "create_new_temp_scenario": 4000,
+    # Fixed, bounded catalog of territorial indexes (id/label/description/
+    # years). Measured ~3.1k chars for the current 5 indexes with full
+    # descriptions — the generic 1200-char default was cutting it off after
+    # ~1.5 items, which is exactly what produced hallucinated/invented
+    # extra indexes in practice. Same reasoning as
+    # get_configuration_parameters above.
+    "get_territorial_index_list": 8000,
 }
+
+
+def strip_plot_data(eval_data: Any) -> Any:
+    """Drop the heavy 'plot_data' field from a clean_scenario()-shaped
+    evaluation dict (see app/tools/executor_backend_tools.py) before it is
+    written into any LONG-LIVED state — state.cognitive.context_cache,
+    pending_temp_scenario, tool_results, etc.
+
+    plot_data holds raw per-sample arrays (constraint curves, per-sample
+    uncertainty/usage, capacity thresholds — potentially hundreds of
+    points) that exist solely to feed the load/capacity plot widgets. Those
+    widget tools are currently disabled (see
+    app/tools/executors/analysis_widgets.py, entirely commented out), so
+    nothing reads plot_data once it's cached: it just sits in
+    context_cache for the rest of the session (context_cache is only
+    pruned by topic change, not by size — see
+    CognitiveState.prune_context_cache), gets duplicated by reference into
+    tool_results / retrieved_context whenever get_context_details runs,
+    and gets fully re-serialized (independently, once per place it's
+    referenced) every time AgentState.dump_to_file runs. This is the
+    single biggest source of avoidable memory growth in this app.
+
+    Call this at the point data is WRITTEN into long-lived state, not at
+    fetch time — a caller that genuinely needs plot_data for one immediate,
+    transient use (e.g. building a widget payload right after fetching) can
+    still read it off the raw dict returned by get_evaluation_data /
+    get_temp_evaluation_data before this strips it. If the plot widgets are
+    ever re-enabled, they should fetch plot_data fresh for that one call
+    rather than expect it to have survived in context_cache.
+    """
+    if not isinstance(eval_data, dict) or "plot_data" not in eval_data:
+        return eval_data
+    return {k: v for k, v in eval_data.items() if k != "plot_data"}
 
 
 def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
@@ -71,7 +120,13 @@ def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
 # ...) that back the load/capacity plot widgets — see clean_scenario in
 # app/tools/backend_tools.py. It's only ever meant to be consumed
 # programmatically to build a SHOW_WIDGET payload, never shown to the LLM.
-_HEAVY_FIELDS = {"extras", "evaluation_data", "related_scenario_ids", "plot_data"}
+_HEAVY_FIELDS = {
+    "extras",
+    "evaluation_data",
+    "related_scenario_ids",
+    "plot_data",
+    "geojsonStr",
+}
 
 # Any single object's textual fields (name/description/...) get truncated to
 # this many characters when condensing a list for name/intent matching.
@@ -191,6 +246,16 @@ def build_prior_results_block(
     only, so the LLM still knows a tool already ran this session (and can
     decide to skip re-running it) without the full payload bloating every
     subsequent prompt forever.
+
+    IMPORTANT: a tool_results entry can be a FAILURE (result["success"] is
+    False — see tool_executor_node, which stores failed attempts here too,
+    not just successful ones). The omitted-keys note below must never tell
+    the model a failed call "already ran successfully", or the reasoner
+    reads that as "don't call it again" and silently refuses to retry a
+    failed operation even when the user explicitly asks it to try again —
+    that was a real bug: failed and successful prior results were described
+    identically, so retry requests were being treated as already-satisfied.
+    Failed keys are called out separately and explicitly marked retryable.
     """
     if not tool_results:
         return "None"
@@ -201,11 +266,24 @@ def build_prior_results_block(
 
     lines = []
     if omitted_keys:
-        lines.append(
-            f"[{len(omitted_keys)} older result(s) omitted for brevity: "
-            f"{', '.join(omitted_keys)}. These tools already ran successfully "
-            "earlier in this session — only re-run them if you need fresh data.]"
-        )
+        succeeded = [
+            k for k in omitted_keys if (tool_results.get(k) or {}).get("success", True)
+        ]
+        failed = [k for k in omitted_keys if k not in succeeded]
+        if succeeded:
+            lines.append(
+                f"[{len(succeeded)} older SUCCESSFUL result(s) omitted for brevity: "
+                f"{', '.join(succeeded)}. These tools already ran successfully "
+                "earlier in this session — only re-run them if you need fresh data.]"
+            )
+        if failed:
+            lines.append(
+                f"[{len(failed)} older FAILED result(s) omitted for brevity: "
+                f"{', '.join(failed)}. These tools did NOT succeed earlier — "
+                "do not treat them as already done. If the user is asking to "
+                "retry/try again, call the same tool again with the same "
+                "(or corrected) arguments.]"
+            )
 
     for key in shown_keys:
         # Condense (item-aware) BEFORE the char-level safety cut below. Doing
@@ -216,9 +294,17 @@ def build_prior_results_block(
         # complete and undercounts/hallucinates. condense_for_matching keeps
         # items whole and, if it does need to drop any, says so explicitly
         # via a "note" field instead of silently truncating mid-structure.
-        condensed = condense_for_matching(tool_results[key])
+        entry = tool_results[key]
+        status = (
+            "FAILED — do not treat as already done; retry if the user asks"
+            if isinstance(entry, dict) and entry.get("success") is False
+            else "succeeded"
+        )
+        condensed = condense_for_matching(entry)
         entry_max_chars = _max_chars_for_tool(key, max_chars_per_entry)
-        lines.append(f"### {key}\n{_truncate_json(condensed, entry_max_chars)}")
+        lines.append(
+            f"### {key} [{status}]\n{_truncate_json(condensed, entry_max_chars)}"
+        )
 
     return "\n\n".join(lines)
 
@@ -256,7 +342,39 @@ def _truncate_json(obj: Any, max_chars: int, _note_reserve: int = 200) -> str:
             candidate_text = _dump({**kept, key: value})
             if len(candidate_text) <= budget:
                 kept[key] = value
-            else:
+                continue
+            # This key doesn't fit whole. Rather than dropping it outright —
+            # which silently discards the actual payload in envelopes like
+            # {"success": ..., "output": {...}, "error": ...} whenever the
+            # trivial sibling keys already fit — recurse into it so it can
+            # still contribute a partial (but real) value. Only if even a
+            # single-key rendering of it can't fit at all do we fall back to
+            # omitting it.
+            remaining_budget = max(budget - len(_dump(kept)), _note_reserve)
+            inner = _truncate_json(value, remaining_budget, _note_reserve=0)
+            try:
+                # Clean case: the recursed truncation stayed valid JSON
+                # (nothing inside it needed its own omission note), so it
+                # nests in as real structure.
+                kept[key] = json.loads(inner)
+            except (TypeError, ValueError):
+                # inner carries an appended non-JSON note (e.g. "... [N
+                # more items omitted]") — build this key's entry as raw
+                # text rather than JSON-string-encoding it, so the note and
+                # partial structure stay human/model-readable instead of
+                # turning into an escaped blob.
+                prefix = _dump(kept)[:-1] if kept else "{"
+                sep = ",\n" if kept else "\n"
+                result = f'{prefix}{sep}  "{key}": {inner}\n}}'
+                if len(result) <= budget + _note_reserve:
+                    if omitted_keys:
+                        result += (
+                            f"\n... [{len(omitted_keys)} more key(s) omitted "
+                            f"for space: {omitted_keys}. Data was NOT lost — "
+                            "say so if you summarize this, rather than "
+                            "presenting it as complete.]"
+                        )
+                    return result
                 omitted_keys.append(key)
         if not kept:
             # Not even the first key fits whole: recurse into it so we still

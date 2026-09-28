@@ -15,6 +15,7 @@ from langgraph.types import Command
 
 from app.agent.nodes import reasoner as reasoner_module
 from app.agent.state import AgentState, ReActStep
+from app.tools.definitions.indexes import create_show_territorial_index_map_tool
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
 
@@ -103,6 +104,22 @@ class TestInitializeTools:
             "show_capacity_plot",
             "show_load_plot",
         } & set(fresh_state.cognitive.enabled_tools)
+
+    def test_territorial_index_map_is_available_in_standalone_mode(
+        self, fresh_state: AgentState
+    ):
+        get_tool_registry().register_tool(create_show_territorial_index_map_tool())
+
+        fresh_state.integrated_mode = False
+        reasoner_module.initialize_tools(fresh_state)
+
+        assert "show_territorial_index_map" in fresh_state.cognitive.enabled_tools
+
+        fresh_state.integrated_mode = True
+        fresh_state.cognitive.enabled_tools = ["show_territorial_index_map"]
+        reasoner_module.initialize_tools(fresh_state)
+
+        assert "show_territorial_index_map" not in fresh_state.cognitive.enabled_tools
 
     def test_resets_scratchpad_and_pending_action_on_fresh_turn(
         self, fresh_state: AgentState

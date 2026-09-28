@@ -1,7 +1,6 @@
 from fastapi import HTTPException
 import jwt
-
-from app.tools.backend_tools import check_authorization
+from app.utils.common import get_data, BACKEND_URL
 
 # ---------------------------------------------------------------------------
 # AUTH / SESSION-OWNERSHIP HELPERS
@@ -35,6 +34,14 @@ def _authorize_tenant(token: str, tenant: str) -> None:
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+def check_authorization(token: str, tenant: str) -> bool:
+    """Check authorization against the backend."""
+    url = f"{BACKEND_URL}{tenant}/auth/me"
+    headers = {"Authorization": f"Bearer {token}"}
+    api_response = get_data(url, headers=headers)
+    return api_response.get("authenticated", False)
+
+
 def get_user_id(token: str) -> str:
     if token is None:
         return "unidentified"
@@ -51,3 +58,52 @@ def get_user_id(token: str) -> str:
         return payload["preferred_username"]
 
     return "unidentified"
+
+
+# Recognized role values, highest-privilege first. Must match
+# app.tools.tool_schema.UserRole's values — kept as plain strings here
+# rather than importing that enum, the same way this module already keeps
+# no dependency on the agent/tools layers.
+_KNOWN_ROLES_BY_PRIVILEGE = ("admin", "standard", "viewer")
+
+
+def get_user_role(token: str | None) -> str:
+    """Best-effort role resolution from the bearer token, for tool
+    role-gating (see app.tools.tool_schema.UserRole / ToolDefinition.
+    allowed_roles).
+
+    Checks a few common claim shapes defensively (a flat "role" string, a
+    "roles" list, or Keycloak-style "realm_access.roles") since the exact
+    shape the backend issues hasn't been confirmed yet — TODO: confirm
+    against the real token and drop whichever shapes turn out unused. If
+    more than one recognized role is present, the highest-privilege one
+    wins.
+
+    Defaults to "standard" whenever the token is missing or carries no
+    recognizable role claim — the same access level every caller
+    effectively had before roles existed — so introducing role-gated
+    tools doesn't retroactively lock existing callers out of tools that
+    don't declare allowed_roles. This is a rollout convenience, not a
+    long-term security posture: tighten it (e.g. default to "viewer")
+    once the backend reliably issues a role claim.
+    """
+    if token is None:
+        return "standard"
+
+    payload = jwt.decode(token, options={"verify_signature": False})
+
+    candidates: list[str] = []
+    if isinstance(payload.get("role"), str):
+        candidates.append(payload["role"])
+    if isinstance(payload.get("roles"), list):
+        candidates.extend(r for r in payload["roles"] if isinstance(r, str))
+    realm_access = payload.get("realm_access")
+    if isinstance(realm_access, dict) and isinstance(realm_access.get("roles"), list):
+        candidates.extend(r for r in realm_access["roles"] if isinstance(r, str))
+
+    normalized = {c.strip().lower() for c in candidates}
+    for role in _KNOWN_ROLES_BY_PRIVILEGE:
+        if role in normalized:
+            return role
+
+    return "standard"

@@ -3,7 +3,7 @@ import logging
 from app.utils.llm import llm_interaction
 from app.agent.state import AgentState
 from app.utils.common import truncate_for_prompt
-from app.utils.terminology import build_terminology_block
+from app.utils.knowledge import build_terminology_block
 
 # Scenario evaluation data is the core content of the report, so give it a
 # much larger budget than the default per-entry cap (DEFAULT_MAX_CHARS_PER_ENTRY,
@@ -15,7 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = None):
-    context_block = state.cognitive.context_cache
+    # Bounded the same way generate_summary/generate_report (below and in
+    # app/prompts/report.py) already treat context_cache — this used to
+    # f-string the RAW cache dict in unbounded, which (a) had no size cap
+    # at all (unlike every other context_cache injection site in this
+    # codebase) and (b) rendered as a Python dict repr rather than JSON.
+    # Bounding it here is defense-in-depth: context_cache should no longer
+    # contain plot_data at all (see app.utils.common.strip_plot_data), but
+    # other fields (extras, related_scenario_ids, ...) can still be sizable.
+    context_block = truncate_for_prompt(
+        state.cognitive.context_cache, max_chars=MAX_CONTEXT_BLOCK_CHARS
+    )
 
     visual_note = (
         f"\n    A {widget_hint} will be displayed to the user automatically alongside "
@@ -90,16 +100,16 @@ what simulations are on this platform and what "sustainability" and "uncertainty
 
 <h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati generali simulazione</h6>
 <p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
-[fill in: Give a general, high-level summary of the overall sustainability and results of
-the simulation(s), explicitly citing the sustainability_index value(s) as percentages from the
+[fill in: Give a general, high-level summary of the overall overtourism level and results of
+the simulation(s), explicitly citing the overtourism_level value(s) as percentages from the
 evaluation data below. Also mention index_diffs if present (what changed from the base scenario, also as percentages).]
 </p>
 
 <h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati dettagliati</h6>
-<div _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
+<p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
 [fill in: a <ul class="mb-0"> with one <li> per sustainability constraint found in the evaluation data below,
 each starting with the constraint name in <strong>, followed by its value(s) as percentages. {comparison_instruction}]
-</div>
+</p>
 
 Use ONLY the data provided below. If some data is missing or was truncated for
 length, say so explicitly rather than inferring or speculating. Be concise,
@@ -111,6 +121,6 @@ Glossary definitions:
 Scenario evaluation data:
 {context_block}
 
-Respond with ONLY the HTML fragment above (h6/p, h6/p, h6/div>ul>li), filled in, following every formatting rule exactly. Do not add a document wrapper, markdown code fences, or any explanatory text before or after."""
+Respond with ONLY the HTML fragment above (h6/p, h6/p, h6/p>ul>li), filled in, following every formatting rule exactly. Do not add a document wrapper, markdown code fences, or any explanatory text before or after."""
 
     return llm_interaction(state, prompt, lightweight_llm=True)

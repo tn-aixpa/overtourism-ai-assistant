@@ -20,10 +20,12 @@ import re
 
 from langgraph.types import Command
 
-from app.agent.state import AgentState
+from app.agent.state import AgentState, AgentTier
 from app.agent.events import publish_thought
-from app.tools.tool_registry import get_tool_registry, _ensure_tool_registry
-from app.tools.agent_tools import WIDGET_TOOL_NAMES
+from app.tools.tool_registry import (
+    get_tool_registry,
+    _ensure_tool_registry,
+)
 from app.prompts.react_reasoning import react_step
 
 logger = logging.getLogger(__name__)
@@ -47,25 +49,40 @@ def initialize_tools(state: AgentState) -> Command:
 
     registry = _ensure_tool_registry()
 
-    # Widget tools are intentionally restricted to standalone mode only.
-    # Set enabled state BEFORE get_context_tools so the registry already
-    # reflects the correct mode when the allowlist is built below.
-    # In integrated mode the route already passed a curated allowlist and we
-    # must not expose them there.
-    for tool_name in WIDGET_TOOL_NAMES:
-        registry.set_tool_enabled(tool_name, not state.integrated_mode)
-
     allowlist = state.cognitive.known_tools or None
-    known_tools = registry.get_context_tools(allowlist=allowlist)
+    # No tier filtering here: which tools are selectable this turn is
+    # governed entirely by routing (top_level_router_node scopes
+    # enabled_tools further down below), not by the tier a tool's response
+    # would be generated under (see ToolDefinition.agent_tier).
+    #
+    # role/mode filtering (ToolDefinition.allowed_roles / allowed_modes,
+    # see app.tools.tool_schema) IS applied here, via state.user_role /
+    # state.session_mode — e.g. this is what keeps widget tools
+    # (show_analysis_widget, show_territorial_index_map, both declared
+    # allowed_modes={"standalone"}) out of integrated-mode sessions, now
+    # declaratively on the tools themselves instead of a hardcoded
+    # WIDGET_TOOL_NAMES exclusion list here. Computed fresh from THIS
+    # session's state on every call and only ever narrows a per-request
+    # copy of known_tools/enabled_tools in AgentState — it must never
+    # mutate the ToolRegistry itself, which is a process-wide singleton
+    # (see get_tool_registry) shared by every session's worker thread.
+    known_tools = registry.get_context_tools(
+        allowlist=allowlist,
+        role=state.user_role,
+        mode=state.session_mode,
+    )
+
     state.cognitive.known_tools = list(known_tools.keys())
 
     if state.integrated_mode:
         if not state.cognitive.enabled_tools:
             state.cognitive.enabled_tools = state.cognitive.known_tools
+        # Re-narrow to known_tools rather than re-checking role/mode here:
+        # known_tools has already had the same role/mode filter applied
+        # above, so intersecting against it (instead of duplicating the
+        # is_allowed_for check) keeps this in sync with it by construction.
         state.cognitive.enabled_tools = [
-            name
-            for name in state.cognitive.enabled_tools
-            if name not in WIDGET_TOOL_NAMES
+            name for name in state.cognitive.enabled_tools if name in known_tools
         ]
     else:
         state.cognitive.enabled_tools = list(state.cognitive.known_tools)
@@ -81,8 +98,22 @@ def initialize_tools(state: AgentState) -> Command:
     state.cognitive.pending_thought = ""
     state.cognitive.tool_confirmation_needed = False
     state.cognitive.tool_confirmed = False
+    # active_agent reflects the highest-tier tool actually used THIS turn
+    # (see tool_executor_node._bump_active_agent) — reset to the EXECUTOR
+    # baseline at the start of every fresh turn so a previous turn's tier
+    # never leaks into this one's response style. This is deliberately NOT
+    # persisted across turns, unlike top_level_route/second_level_route
+    # below and tier_consent (state.cognitive.tier_consent) — those track
+    # "where we are" / "what's been permitted", active_agent tracks "what
+    # kind of response this turn earned".
+    state.active_agent = AgentTier.EXECUTOR
 
-    return Command(update=state, goto="react_reasoner")
+    # Route the turn to the right domain (and scope enabled_tools to it)
+    # before the ReAct loop starts reasoning about which specific tool to
+    # call. top_level_route/second_level_route persist on CognitiveState
+    # across turns — see top_level_router_node for when it re-asks vs.
+    # keeps the session's current route.
+    return Command(update=state, goto="top_level_router")
 
 
 def react_reasoner_node(state: AgentState) -> Command:
@@ -92,12 +123,37 @@ def react_reasoner_node(state: AgentState) -> Command:
     logger.info(f"Entering react_reasoner (step {len(state.cognitive.scratchpad) + 1})")
 
     registry = get_tool_registry()
-    tools_for_llm = registry.get_tools_for_llm(allowlist=None)
+    # role/mode must be passed here too, not just in initialize_tools:
+    # enabled_tools (the allowlist below) was already narrowed by routing
+    # and is names-only, it carries no role/mode information of its own.
+    # get_tools_for_llm -> get_context_tools re-applies is_allowed_for
+    # against whatever role/mode it's given, and is_allowed_for fails
+    # CLOSED for role=None/mode=None on any tool that declares a
+    # restriction (see ToolDefinition.is_allowed_for) — which by now is
+    # nearly every tool. Omitting these here doesn't just skip a filter,
+    # it flips it to "reject everything", silently emptying
+    # tools_for_llm_enabled even though enabled_tools/known_tools are
+    # completely correct.
     tools_for_llm_enabled = registry.get_tools_for_llm(
-        allowlist=state.cognitive.enabled_tools
+        allowlist=state.cognitive.enabled_tools,
+        role=state.user_role,
+        mode=state.session_mode,
     )
 
-    if not tools_for_llm:
+    # Tools genuinely absent this session for an execution-mode reason
+    # (currently: widget/chart tools filtered out of known_tools when
+    # integrated_mode — see initialize_tools). NOT tools merely out of
+    # scope for the current routing domain: known_tools is the full
+    # session-wide candidate set BEFORE routing narrows enabled_tools, so
+    # diffing against the whole registry (not against enabled_tools) is
+    # what keeps this from re-conflating "genuinely unavailable" with
+    # "routed elsewhere" — see react_step's docstring.
+    all_registry_tools = set(registry.get_all_known_tools().keys())
+    mode_unavailable_tool_names = sorted(
+        all_registry_tools - set(state.cognitive.known_tools)
+    )
+
+    if not tools_for_llm_enabled:
         logger.warning("No tools available for this context")
         state.cognitive.messages_to_include = [
             "No tools are available in the current context."
@@ -119,7 +175,7 @@ def react_reasoner_node(state: AgentState) -> Command:
         return Command(update=state, goto="generate_output_message")
 
     try:
-        raw = react_step(state, tools_for_llm, tools_for_llm_enabled)
+        raw = react_step(state, tools_for_llm_enabled, mode_unavailable_tool_names)
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
         response_json = json.loads(raw)
     except Exception as e:

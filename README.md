@@ -1,6 +1,9 @@
-# DIGITAL TWIN AGENT
+# AI ASSISTANT
 
-This projects aims contains the first prototype of an Agentic AI for the Digital Twin project.
+This project contains the AI Assistant developed to interact
+with our overtourism management platform.
+We develop this repository in the context of our R&D
+activities at [Fondazione Bruno Kessler](https://www.fbk.eu/en/).
 
 ## Core idea
 
@@ -10,25 +13,29 @@ The Agents expoits ReAct (Reasoning + Acting) — from the 2022 paper "ReAct: Sy
 
 ## Getting started
 
-In order to run this project you need first to setup the working virtual environment doing
+## Getting Started
 
-```
+The code is written in Python. We recommend using [uv](https://astral.sh/uv)
+for managing the Python version, the virtual environment, and the
+dependencies. Please, refer to `uv` documentation regarding how to
+install it for your operating system.
+
+Once `uv` is installed, use these commands:
+
+```bash
+git clone git@github.com:fbk-most/digital-twin-agent.git
+cd digital-twin-agent
 uv venv
 source .venv/bin/activate
 uv sync --dev
 ```
 
-Then you can run the agentic system with the following command 
+In order to run this project you need first to setup API KEYS and
+links in `run.sh` then use this script to run the code.
 
-You can run the agentic system as a service with the following command
+# Dependencies
 
-```
-uvicorn app.main:app --reload --port 9000
-```
-
-A different port can be used, just change it so that it does not conflic with other services.
-
-Additionally you will need
+You will additioanlly need these repos running:
 
 1) [overtourism backend](https://github.com/fbk-most/overtourism)
 2) [overtourism-fronted](https://github.com/fbk-most/overtourism-frontend)
@@ -88,28 +95,3 @@ Notes:
 | `test_events.py` | SSE event bus publish/consume, final-result handoff, session cleanup |
 | `test_backend_tools.py` | All HTTP wrappers and CRUD tools (`requests` mocked) — auth headers, create/edit "preserve untouched fields" logic, delete-with-name-lookup fallback, scenario evaluation-data enrichment |
 | `test_reasoner_routing.py` | `initialize_tools` and `react_reasoner_node` routing logic — enabled-tools allowlist enforcement, malformed/hallucinated LLM responses, markdown-fenced JSON, the max-react-steps safety valve. `react_step` is mocked, so no real Anthropic calls. |
-
-
-## Not covered (would need heavier mocking / are thin wiring code)
-
-- `app/agent/nodes/reasoner.py` — the routing logic is now covered (see
-  above); the only untested piece is `react_step` itself, i.e. actually
-  talking to the Anthropic client. See `test_llm.py` if/when you want unit
-  tests for `app/utils/llm.py` mocking the client directly (retry-on-529,
-  fallback-to-backup-LLM).
-- `app/agent/graph_agentic.py`, `app/api/routes.py`, `app/main.py` — FastAPI
-  wiring and LangGraph graph assembly; best covered by integration tests
-  against a running app (e.g. `httpx.AsyncClient` + `TestClient`) rather than
-  unit tests.
-- `app/prompts/*.py` — these build LLM prompts; behaviorally they're mostly
-  string formatting, worth a light snapshot test if you want prompt-format
-  regressions caught, but I left them out to focus on decision logic.
-
-
-## TO FIX LATER
-
-1) Set up CORS correcly
-2) Everything lives in process memory (_STATE_STORE, _LOCKS (memory.py), _queues, _results) and sessions are never cleaned up unless the client explicitly calls /agent/reset. Implement proper saving + TTL-based eviction.
-Also, dump_to_file writes the entire state to disk on every single turn (logs/state_<id>.json), synchronously, on a relative logs/ path with no rotation. That's an I/O bottleneck under load and an unbounded-disk-growth risk. error_recovery_node does the same to logs/errors.txt.
-4) The SSE stream has no timeout or heartbeat. queue.get() blocks forever if a session never finishes; most reverse proxies/load balancers will silently kill idle connections without periodic keepalive pings, and a stuck session ties up a thread forever.
-5) No /health or /ready endpoint for orchestration probes.

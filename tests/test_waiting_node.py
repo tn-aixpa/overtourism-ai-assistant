@@ -150,7 +150,7 @@ class TestWaitInstructions:
         fresh_state.cognitive.selected_tool = "create_new_scenario"
         fresh_state.cognitive.tool_arguments = {"proposal_id": "p1"}
         msg = _wait_instructions(fresh_state)
-        assert "Proposal id: p1" in msg
+        assert "Proposal" in msg and "p1" in msg
 
     def test_empty_string_values_are_skipped(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_problem"

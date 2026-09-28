@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 import logging
 
 from app.tools.tool_schema import ToolDefinition
-from app.tools.agent_tools import get_all_agent_tools
+from app.tools.definitions import get_all_agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +45,36 @@ class ToolRegistry:
             self._tools[tool_name].enabled = enabled
 
     def get_context_tools(
-        self, allowlist: Optional[List[str]] = None
+        self,
+        allowlist: Optional[List[str]] = None,
+        role: Optional[str] = None,
+        mode: Optional[str] = None,
     ) -> Dict[str, ToolDefinition]:
+        """Enabled tools, narrowed by (in order): the explicit `allowlist`
+        (a name allowlist, e.g. from a session's known_tools), then by
+        `role`/`mode` against each tool's own allowed_roles/allowed_modes
+        (see ToolDefinition.is_allowed_for). Passing role=None/mode=None
+        only excludes tools whose access is actually restricted on that
+        axis and needed a value to check against — an unrestricted tool
+        (allowed_roles/allowed_modes is None) is never affected by what's
+        passed here.
+        """
         tools = self.get_all_known_tools()
         if allowlist is not None:
             tools = {name: tool for name, tool in tools.items() if name in allowlist}
-        return tools
+        return {
+            name: tool
+            for name, tool in tools.items()
+            if tool.is_allowed_for(role, mode)
+        }
 
     def get_tools_for_llm(
-        self, allowlist: Optional[List[str]] = None
+        self,
+        allowlist: Optional[List[str]] = None,
+        role: Optional[str] = None,
+        mode: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        tools = self.get_context_tools(allowlist=allowlist)
+        tools = self.get_context_tools(allowlist=allowlist, role=role, mode=mode)
         return [tool.to_tool_description() for tool in tools.values()]
 
 

@@ -38,14 +38,6 @@ def post_data(url, json=None, headers=None, params=None):
     return response.json()
 
 
-def check_authorization(token: str, tenant: str) -> bool:
-    """Check authorization against the backend."""
-    url = f"{BACKEND_URL}{tenant}/auth/me"
-    headers = {"Authorization": f"Bearer {token}"}
-    api_response = get_data(url, headers=headers)
-    return api_response.get("authenticated", False)
-
-
 def put_data(url, json=None, headers=None, params=None):
     logger.info(f"Putting data to URL: {url}")
     merged_headers = {
@@ -73,14 +65,15 @@ def clean_scenario(raw_data):
     """Strip a raw `.../evaluations/{id}/data` backend payload down to what
     the rest of the app needs, split into two buckets:
 
-    - "data": the tiny sustainability/KPI summary (used by _parse_kpis for
-      the histogramComparison / indexComparison widgets). Unchanged from
-      before — anything reading `["data"]` keeps working exactly as-is.
+    - "data": the tiny sustainability/KPI summary. Read directly (as the
+      "data" sub-key of get_evaluation_data's output) by
+      analyze_scenario_results/generate_summary for prompt text, and by
+      show_analysis_widget as part of the widget payload it hands to the
+      frontend (see app.tools.executors.analysis_widgets).
     - "plot_data": the additional raw fields needed to build the load and
       capacity plots (constraint curves, per-sample uncertainty/usage,
       capacity thresholds, x/y ranges). This used to be discarded entirely,
-      which is why show_load_plot/show_capacity_plot could only ever
-      return mocks.
+      which is why the plot widgets could only ever return mocks.
 
     IMPORTANT: "plot_data" is intentionally kept separate from "data" and
     is NEVER meant to be dumped wholesale into an LLM prompt — it can hold
@@ -88,32 +81,18 @@ def clean_scenario(raw_data):
     payload (sent straight to the frontend) or a small derived summary, the
     same way `_HEAVY_FIELDS` in app/utils/common.py keeps other bulky
     backend fields (extras, evaluation_data, ...) out of prompt injection.
+    It must also never be written into state.cognitive.context_cache — see
+    app.utils.common.strip_plot_data, applied wherever evaluation data
+    enters that (long-lived) cache — since show_analysis_widget is the only
+    consumer and it fetches plot_data fresh for its own transient use
+    rather than reading it back out of long-lived state.
     """
     data = raw_data["data"]
     return {
         "scenario_id": raw_data["scenario_id"],
         "evaluation_id": raw_data["evaluation_id"],
-        "data": {
-            # "sustainable_area": ev["data"]["sustainable_area"],
-            "sustainability_index": data["sustainability_index"],
-            "sustainability_by_constraint": data["sustainability_by_constraint"],
-        },
-        "plot_data": {
-            "constraint_curves": data.get("constraint_curves", {}) or {},
-            "uncertainty": data.get("uncertainty", []) or [],
-            "uncertainty_by_constraint": data.get("uncertainty_by_constraint", {})
-            or {},
-            "usage": data.get("usage", []) or [],
-            "usage_by_constraint": data.get("usage_by_constraint", {}) or {},
-            "sample_x": data.get("sample_x", []) or [],
-            "sample_y": data.get("sample_y", []) or [],
-            "capacity_mean": data.get("capacity_mean"),
-            "capacity_mean_by_constraint": data.get("capacity_mean_by_constraint", {})
-            or {},
-            "x_max": data.get("x_max"),
-            "y_max": data.get("y_max"),
-            "kpis": data.get("kpis", {}) or {},
-        },
+        "data": data.get("kpis", {}),
+        "plot_data": data,
     }
 
 
@@ -176,27 +155,22 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
     url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
     extracted_data = get_data(url)
 
-    logger.info(f"AAAAAAA {extracted_data}")
-
     if not cleaned:
         return extracted_data
 
     cleaned_data = {
-        "problem_id": extracted_data["problem_id"],
-        "name": extracted_data["name"],
-        "description": extracted_data["description"],
-        "objective": extracted_data["extras"]["objective"],
-        "links": extracted_data["extras"]["links"],
+        "problem_id": extracted_data.get("problem_id", ""),
+        "name": extracted_data.get("name", ""),
+        "description": extracted_data.get("description", ""),
+        "objective": extracted_data.get("extras", {}).get("objective", ""),
+        "links": extracted_data.get("extras", {}).get("links", ""),
         "additional_data_available_on_specific_request": {
-            "version": extracted_data["version"],
-            "tenant": extracted_data["tenant"],
-            "created": extracted_data["created"],
-            "updated": extracted_data["updated"],
-            "related_subsystem": extracted_data["extras"]["groups"],
+            "version": extracted_data.get("version", ""),
+            "tenant": extracted_data.get("tenant", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
         },
     }
-
-    logger.info(f"BBBBBBB {cleaned_data}")
 
     return cleaned_data
 
@@ -213,19 +187,20 @@ def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
         return extracted_data
 
     cleaned_data = {
-        "proposal_id": extracted_data["proposal_id"],
-        "problem_id": extracted_data["problem_id"],
-        "name": extracted_data["name"],
-        "description": extracted_data["description"],
-        "resources": extracted_data["extras"]["resources"],
-        "context": extracted_data["extras"]["context"],
-        "impact": extracted_data["extras"]["impact"],
+        "proposal_id": extracted_data.get("proposal_id", ""),
+        "problem_id": extracted_data.get("problem_id", ""),
+        "name": extracted_data.get("name", ""),
+        "description": extracted_data.get("description", ""),
+        "related_scenario_ids": extracted_data.get("extras", {}).get("context", ""),
+        "resources": extracted_data.get("resources", ""),
+        "context": extracted_data.get("context", ""),
+        "impact": extracted_data.get("impact", ""),
         "additional_data_available_on_specific_request": {
-            "version": 2,
-            "status": "draft",
-            "created": "2026-06-16T16:09:03.521471+02:00",
-            "updated": "2026-06-16T16:10:39.691952+02:00",
-            "related_scenario_ids": extracted_data["related_scenario_ids"],
+            "version": extracted_data.get("version", ""),
+            "tenant": extracted_data.get("tenant", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
+            "status": extracted_data.get("status", ""),
         },
     }
 
@@ -251,9 +226,9 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
         "description": extracted_data["description"],
         "changes_wrt_base_scenario": extracted_data["extras"]["index_diffs"],
         "additional_data_available_on_specific_request": {
-            "version": 1,
-            "created": "2026-06-16T16:09:44.825363+02:00",
-            "updated": "2026-06-16T16:09:44.825363+02:00",
+            "version": extracted_data.get("version", ""),
+            "created": extracted_data.get("created", ""),
+            "updated": extracted_data.get("updated", ""),
         },
     }
 
@@ -263,8 +238,9 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
 @tool
 def get_widgets(tenant: str) -> dict:
     """Fetch all tunable configuration parameters (widgets) from the API."""
-    url = f"{BACKEND_URL}{tenant}/widgets"
-    return get_data(url)
+    url = f"{BACKEND_URL}{tenant}/configuration"
+    extracted_data = get_data(url)
+    return extracted_data.get("indexes", [])
 
 
 @tool
@@ -303,7 +279,7 @@ def create_temp_scenario(
 
     body = {
         "base_scenario_id": base_scenario_id,
-        "values": values,
+        "params_overrides": values,
     }
 
     params = {"base_scenario_id": base_scenario_id} if base_scenario_id else None
@@ -315,8 +291,6 @@ def create_temp_scenario(
     url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/"
     body = {
         "scenario_id": created_scenario["scenario_id"],
-        "ensemble_size": 20,
-        "kwargs": {},
     }
 
     created_eval = post_data(url, json=body, params=params)
@@ -400,7 +374,7 @@ def get_temp_evaluation_data(
 
     Mirrors Step 3 of create_temp_scenario, but as a standalone call for
     when the temp scenario/evaluation were created in a previous request
-    (e.g. the /agent/tool "summary-temp" pipeline) and only their ids are
+    (e.g. the /agent/tool "summary" pipeline) and only their ids are
     available now.
 
     Returns:
@@ -744,3 +718,66 @@ def delete_scenario(scenario_id: str, tenant: str):
 
     delete_data(url)
     return {"success": True, "name": name}
+
+
+def _strong_html_to_markdown(text: str) -> str:
+    """The backend wraps emphasized terms in index descriptions with raw
+    <strong>...</strong> HTML. Convert those to markdown bold so the text
+    renders correctly wherever it ends up (chat, prompts) instead of
+    leaking HTML tags."""
+    if not text:
+        return text
+    return text.replace("<strong>", "**").replace("</strong>", "**")
+
+
+@tool
+def get_territorial_index_list(tenant: str) -> list:
+    """Fetch the list of available territorial indexes (with descriptions) from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get-index-list"
+    extracted_data = get_data(url)
+
+    cleaned_data = [
+        {
+            "index_id": item["value"],
+            "label": item["label"],
+            "description": _strong_html_to_markdown(item["index_description"]),
+            "available_for_variation": item.get("availableForVariation", False),
+            "years_range": item.get("years_range", {}),
+        }
+        for item in extracted_data.get("indicators", [])
+    ]
+
+    return cleaned_data
+
+
+@tool
+def get_territorial_index_map_data(
+    tenant: str, index: str, start_date: str, end_date: str
+) -> dict:
+    """Fetch the geo-referenced values (GeoJSON + value range) of a single
+    territorial index for the given date range from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get_index_data"
+    params = {"index": index, "start_date": start_date, "end_date": end_date}
+    return get_data(url, params=params)
+
+
+@tool
+def get_territorial_index_plot_data(
+    tenant: str,
+    index: str,
+    start_date: str,
+    end_date: str,
+    granularity: str,
+    spatial_granularity: str = "comune",
+) -> dict:
+    """Fetch the geo-referenced values (GeoJSON + value range) of a single
+    territorial index for the given date range from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get-variation-data"
+    params = {
+        "index": index,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+        "spatial_granularity": spatial_granularity,
+    }
+    return get_data(url, params=params)

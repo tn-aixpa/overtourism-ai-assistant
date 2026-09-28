@@ -86,13 +86,31 @@ _INTERNAL_ONLY_TOOLS = {"get_context_ids", "get_base_scenario"}
 def generate_output_message_node(state: AgentState) -> Command:
     logger.info("Entering output generation")
 
-    # If tool actions ran this turn and no messages have been prepared yet (e.g. by a
-    # clarification/confirmation/error path), build them from EVERY observation produced
-    # by this turn's ReAct scratchpad — not just the last one — so that e.g. a
-    # "list problems and proposals" request surfaces both lists.
+    # Append messages built from EVERY observation produced by this turn's
+    # ReAct scratchpad — not just the last one — so that e.g. a "list
+    # problems and proposals" request surfaces both lists.
+    #
+    # This used to be gated on "and not state.cognitive.messages_to_include",
+    # i.e. it only ran when nothing had set a message yet (an error/
+    # clarification/confirmation path, or the max-react-steps safety valve
+    # — see react_reasoner_node). But a normal "finish" from
+    # react_reasoner_node ALSO always sets messages_to_include (to its own
+    # short wrap-up line, written from a condensed/truncated view of the
+    # observations), which meant this richer, untruncated synthesis never
+    # ran on the common path and the wrap-up line silently became the ONLY
+    # grounding data generate_answer ever saw for that turn — e.g.
+    # analyze_scenario_results' full analysis text was dropped in favor of
+    # a one-line gloss like "the comparison chart is shown, details are in
+    # the result". This surfaced concretely with show_analysis_widget:
+    # calling it alongside analyze_scenario_results in the same turn (as
+    # the scenario_analysis guideline requires) needs BOTH the widget
+    # confirmation and the actual analysis text to reach the user — losing
+    # the latter defeated the pairing. Building these unconditionally and
+    # appending them (instead of replacing the wrap-up line) keeps that
+    # lead-in while restoring the actual data behind it.
     current_turn_result_keys = state.cognitive.current_turn_result_keys()
-    if current_turn_result_keys and not state.cognitive.messages_to_include:
-        messages: list[str] = []
+    if current_turn_result_keys:
+        messages: list[str] = list(state.cognitive.messages_to_include)
         for result_key in current_turn_result_keys:
             tool_result = state.cognitive.tool_results.get(result_key)
             if tool_result is None:
@@ -150,6 +168,9 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]
 
+        case "explain_workflow":
+            return [output.get("workflow_document", "Workflow document unavailable.")]
+
         case (
             "list_available_problems"
             | "list_available_proposals"
@@ -171,6 +192,22 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
         case "analyze_scenario_results":
             return [output.get("message", "No answer could be generated.")]
+
+        case "explain_widget":
+            return [output.get("message", "No explanation could be generated.")]
+
+        case "show_analysis_widget":
+            # The widget's own payload is the raw evaluation dataset behind
+            # the chart (see execute_analysis_widget) — large, numeric, and
+            # meant for the frontend chart, not for the LLM to narrate. The
+            # actual analysis text belongs to analyze_scenario_results,
+            # called alongside this tool per the scenario_analysis
+            # guidelines. Falling through to the generic `case _` here
+            # would dump that whole raw payload into the prompt as an
+            # "Agent Message", which is unhelpful and just re-invites the
+            # exact bug this function exists to avoid. Just confirm the
+            # chart was shown.
+            return [output.get("response", "The requested chart was shown.")]
 
         case "get_configuration_parameters":
             # Bounded, fixed-size payload (not tenant data), so give it a
