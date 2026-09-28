@@ -243,7 +243,14 @@ class CognitiveState:
     # conversation about e.g. proposals doesn't re-ask "which of the 4
     # areas do you mean?" on every single message.
     top_level_route: Optional[str] = None
-    second_level_route: Optional[str] = None
+    # A LIST, not a single value: a turn can legitimately resolve to more
+    # than one sub-area at once (e.g. "quali problemi e scenari sono
+    # disponibili?" -> ["problem", "scenario"]) — see
+    # app.agent.nodes.router._apply_route / route_groups.resolve_allowed_tools,
+    # which union each listed sub-group's tools/guidelines. None means "no
+    # second_level resolved yet" (top_level either has no sub-levels, or
+    # sub-level routing is still pending); never an empty list.
+    second_level_route: Optional[List[str]] = None
     # Set by top_level_router_node while it is paused waiting for the user
     # to pick an option from an ambiguous routing prompt. "top" or
     # "second" — tells WAIT_USER_INPUT which menu (and matching logic) to

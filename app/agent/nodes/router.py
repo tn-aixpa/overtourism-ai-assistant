@@ -68,7 +68,8 @@ def _second_level_clarification_message(top_level: str) -> str:
     return (
         "Got it — within that area, are you asking about:\n"
         + "\n".join(lines)
-        + "\n\nWhich one (you can just reply with the number)?"
+        + "\n\nWhich one (you can reply with a number — or more than one, e.g. "
+        '"1 e 3", if your question spans several)?'
     )
 
 
@@ -96,11 +97,53 @@ def _match_numeric(user_input: str, options: dict[str, str]) -> str | None:
     return None
 
 
-def _apply_route(state: AgentState, top_level: str, second_level: str | None) -> None:
-    state.cognitive.top_level_route = top_level
-    state.cognitive.second_level_route = second_level
+def _match_numeric_multi(user_input: str, options: dict[str, str]) -> list[str]:
+    """Resolve EVERY valid option number mentioned anywhere in the reply,
+    not just a leading one — e.g. "1 e 3", "1, 3", "1 and 3", "1+3" all
+    resolve to two keys. This is what _match_numeric (above) deliberately
+    doesn't do: a leading-number-only match is fine for "pick exactly one
+    of these", but the second-level menu now allows picking several at
+    once (a turn can legitimately span more than one sub-area — see
+    route_groups.resolve_allowed_tools) and a naive leading-number match
+    would silently drop everything after the first number, which is
+    exactly the bug this fixes: "1 e 3" used to resolve to ["problem"]
+    only, discarding the "e 3" (scenario) half of the user's answer
+    entirely, with no indication anything was dropped.
 
-    allowed = rg.resolve_allowed_tools(top_level, second_level)
+    Order- and duplicate-safe: returns matched keys in the order their
+    numbers first appear in the text, each at most once. Numbers with no
+    corresponding option are silently ignored (rather than rejecting the
+    whole reply) since a stray digit elsewhere in free text shouldn't
+    invalidate an otherwise-clear multi-pick.
+    """
+    normalized = _normalize(user_input)
+    if not normalized:
+        return []
+    by_index = {i: key for i, key, _label in _numbered_options(options)}
+    keys: list[str] = []
+    for match in re.finditer(r"\d+", normalized):
+        key = by_index.get(int(match.group(0)))
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _apply_route(
+    state: AgentState, top_level: str, second_level: str | list[str] | None
+) -> None:
+    # Normalize to a list (or None) before persisting: second_level may
+    # arrive here as a single key (the common case), a list of several
+    # (a multi-area resolution — see route_groups.resolve_allowed_tools),
+    # or None (domain has no sub-levels, or none resolved yet). Persisted
+    # as a list (or None) on CognitiveState — never a bare string — so
+    # every reader downstream (guideline_groups, resolve_allowed_tools,
+    # this function's own callers reading state.cognitive.second_level_route
+    # back) has exactly one shape to handle.
+    normalized_second = rg._as_list(second_level) or None
+    state.cognitive.top_level_route = top_level
+    state.cognitive.second_level_route = normalized_second
+
+    allowed = rg.resolve_allowed_tools(top_level, normalized_second)
     if allowed is not None:
         # Derive from known_tools, NOT from the current enabled_tools.
         # enabled_tools is only guaranteed fresh on a turn that ran
@@ -199,12 +242,12 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
     # level == "second"
     current_top = state.cognitive.top_level_route
     options = rg.sublevel_options(current_top or "")
-    numeric_choice = _match_numeric(user_input, options)
-    if numeric_choice:
+    multi_choice = _match_numeric_multi(user_input, options)
+    if multi_choice:
         state.cognitive.pending_route_clarification = None
         state.waiting_for = None
         return continue_from_resolved_top_level(
-            state, current_top, second_level_hint=numeric_choice
+            state, current_top, second_level_hint=multi_choice
         )
 
     classification = classify_route(state, current_top, None)
@@ -222,12 +265,15 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
             state, classified_top, second_level_hint=None
         )
 
-    second_level = classification["second_level"]
-    if current_top and second_level in rg.sublevel_options(current_top):
+    valid_subs = rg.sublevel_options(current_top or "")
+    matched = [
+        s for s in rg._as_list(classification["second_level"]) if s in valid_subs
+    ]
+    if current_top and matched:
         state.cognitive.pending_route_clarification = None
         state.waiting_for = None
         return continue_from_resolved_top_level(
-            state, current_top, second_level_hint=second_level
+            state, current_top, second_level_hint=matched
         )
 
     return _pause_for_clarification(
@@ -239,7 +285,9 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
 
 
 def continue_from_resolved_top_level(
-    state: AgentState, resolved_top: str, second_level_hint: str | None = None
+    state: AgentState,
+    resolved_top: str,
+    second_level_hint: str | list[str] | None = None,
 ) -> Command:
     """Given a top_level that is ALREADY decided (no classification call
     needed — used both by top_level_router_node once it has one, and
@@ -249,9 +297,15 @@ def continue_from_resolved_top_level(
     or "location"), resolve second_level if this domain needs one and
     hand off to react_reasoner — or pause again for a second-level menu.
 
-    `second_level_hint`: a second_level value to accept if still valid for
-    `resolved_top` (e.g. carried over from a persisted route, or a value
-    the classifier already returned alongside top_level in the same call).
+    `second_level_hint`: one or more second_level values to accept if
+    still valid for `resolved_top` (e.g. carried over from a persisted
+    route, a value the classifier already returned alongside top_level in
+    the same call, or several values at once — a numeric menu reply like
+    "1 e 3", or a classification call confident enough to name more than
+    one sub-area in one shot). Invalid/unrecognized entries are silently
+    dropped rather than invalidating the whole hint, so a message like
+    "problemi e non so cos'altro" still resolves the "problem" part
+    instead of falling through to the menu entirely.
     """
     if not rg.has_sublevels(resolved_top):
         _apply_route(state, resolved_top, None)
@@ -259,10 +313,11 @@ def continue_from_resolved_top_level(
         return Command(update=state, goto="react_reasoner")
 
     valid_subs = rg.sublevel_options(resolved_top)
-    if second_level_hint in valid_subs:
-        _apply_route(state, resolved_top, second_level_hint)
+    matched = [s for s in rg._as_list(second_level_hint) if s in valid_subs]
+    if matched:
+        _apply_route(state, resolved_top, matched)
         logger.info(
-            f"Routed turn to top_level='{resolved_top}', second_level='{second_level_hint}'"
+            f"Routed turn to top_level='{resolved_top}', second_level={matched}"
         )
         return Command(update=state, goto="react_reasoner")
 
@@ -306,24 +361,33 @@ def top_level_router_node(state: AgentState) -> Command:
         resolved_top = top_level
         # A genuine topic change always drops whatever second_level was
         # active for the old domain — it's meaningless in the new one.
+        # second_level here may itself be a list (classify_route can now
+        # confidently name several sub-areas in one call — see
+        # app.prompts.routing) — continue_from_resolved_top_level accepts
+        # either shape.
         second_level_hint = second_level
     else:
         resolved_top = current_top
-        # Even though the DOMAIN hasn't changed, the sub-area within it
+        # Even though the DOMAIN hasn't changed, the sub-area(s) within it
         # might have: e.g. "quali indici esistono?" (index_list) followed
         # by "mostrami l'indice X sulla mappa" (index_map) is "indexes"
         # both times, so topic_changed is correctly False, but it's a
         # different second_level. classify_route already computed a fresh
         # second_level guess for THIS message above — prefer that over the
-        # stale persisted one whenever it actually resolves to a valid
-        # sub-group for this domain, so a within-domain sub-area switch
-        # isn't stuck on whatever sub-area the session first happened to
-        # land on. Fall back to the persisted current_second only when
-        # this turn's classification didn't confidently name a sub-area
+        # stale persisted one whenever it names at least one valid
+        # sub-group for this domain (checked via membership per-entry, not
+        # `in` on the raw value, since second_level may be a list — an
+        # unhashable value would raise on a plain `in valid_subs` dict
+        # check), so a within-domain sub-area switch isn't stuck on
+        # whatever sub-area(s) the session first happened to land on. Fall
+        # back to the persisted current_second only when this turn's
+        # classification didn't confidently name any sub-area at all
         # (e.g. "unclear", or a genuinely sub-area-agnostic follow-up).
-        if second_level in rg.sublevel_options(current_top):
-            second_level_hint = second_level
-        else:
-            second_level_hint = current_second
+        valid_now = [
+            s
+            for s in rg._as_list(second_level)
+            if s in rg.sublevel_options(current_top)
+        ]
+        second_level_hint = valid_now or current_second
 
     return continue_from_resolved_top_level(state, resolved_top, second_level_hint)

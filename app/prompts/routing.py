@@ -43,7 +43,7 @@ def _format_top_level_options() -> str:
 def classify_route(
     state: AgentState,
     current_top_level: str | None,
-    current_second_level: str | None,
+    current_second_level: str | list[str] | None,
 ) -> dict:
     """
     Decide top-level (and, where relevant, second-level) routing for the
@@ -54,8 +54,11 @@ def classify_route(
       - "topic_changed": bool — true if this message no longer belongs to
         `current_top_level`/`current_second_level` (irrelevant if there was
         no current route yet)
-      - "second_level": sub-group key for the resolved top_level, "unclear",
-        or None if the resolved top_level has no sub-levels
+      - "second_level": a sub-group key, a LIST of sub-group keys (when the
+        message confidently names more than one sub-area of the resolved
+        top_level at once — e.g. "problemi e scenari" -> ["problem",
+        "scenario"]), "unclear", or None if the resolved top_level has no
+        sub-levels
     On any parsing failure, returns a dict with every field "unclear" /
     False so the caller falls back to asking the user directly rather than
     silently guessing.
@@ -67,9 +70,14 @@ def classify_route(
         history = history[:-1]
     history_block = format_messages(history) if history else "None"
 
+    current_second_display = (
+        ", ".join(current_second_level)
+        if isinstance(current_second_level, list)
+        else current_second_level
+    )
     current_route_block = (
         f'- top_level: "{current_top_level}"\n'
-        f'- second_level: "{current_second_level}"'
+        f'- second_level: "{current_second_display}"'
         if current_top_level
         else "None yet — this session hasn't been routed to a domain."
     )
@@ -93,6 +101,15 @@ the two are independent judgments about the same message, not sequential
 steps that need separate turns. Only leave second_level "unclear" when the
 message really doesn't indicate a specific sub-area (e.g. "dimmi qualcosa
 sulla mia località" — some LOCATION content, but no specific sub-area).
+
+If the message confidently names MORE THAN ONE sub-area of the SAME
+top-level domain (e.g. "quali problemi e scenari sono disponibili?" is
+"location" with both "problem" and "scenario"), return "second_level" as a
+JSON ARRAY of every sub-area key it names, not just the first one — do not
+pick only one and do not fall back to "unclear" just because there's more
+than one. Only use an array when each named sub-area is individually
+unambiguous; if even one part is vague, use "unclear" for the whole field
+instead of guessing which sub-areas were meant.
 
 If the message clearly fits more than one top-level domain heuristically,
 prefer the most specific: e.g. a question about a named territorial index
@@ -121,9 +138,10 @@ Return ONLY ONE JSON object, no markdown, no extra text:
 {{
   "top_level": "<one of: system_info, location, indexes, general, unclear>",
   "topic_changed": <true or false>,
-  "second_level": "<sub-area key for the resolved top_level, or null if
-     top_level has no sub-areas, or \\"unclear\\" if top_level has sub-areas
-     but you cannot tell which one>"
+  "second_level": "<sub-area key for the resolved top_level, a JSON array
+     of several sub-area keys if the message confidently names more than
+     one (see rule above), null if top_level has no sub-areas, or
+     \\"unclear\\" if top_level has sub-areas but you cannot tell which one>"
 }}
 
 Rules:
@@ -173,10 +191,17 @@ Return ONLY valid JSON.
             cleaned = cleaned.strip("`")
             cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned
         parsed = json.loads(cleaned)
+        second_level = parsed.get("second_level")
+        if isinstance(second_level, list):
+            # Keep only well-formed entries — a stray non-string in the
+            # array shouldn't crash routing, just get dropped like any
+            # other invalid key does downstream (route_groups filters
+            # against each domain's actual sub-group keys anyway).
+            second_level = [s for s in second_level if isinstance(s, str)]
         return {
             "top_level": parsed.get("top_level", "unclear"),
             "topic_changed": bool(parsed.get("topic_changed", False)),
-            "second_level": parsed.get("second_level"),
+            "second_level": second_level,
         }
     except Exception as e:
         logger.warning(

@@ -28,7 +28,7 @@ across every domain, tags are free-form) — an explicit table is more
 predictable and easier to audit than inferring it.
 """
 
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Iterable, Union, List
 
 TOP_SYSTEM_INFO = "system_info"
 TOP_LOCATION = "location"
@@ -166,6 +166,20 @@ def has_sublevels(top_level: str) -> bool:
     return top_level in SUBLEVELS
 
 
+def _as_list(value: Union[str, Iterable[str], None]) -> List[str]:
+    """Normalize a second_level argument that may arrive as None, a single
+    key, or an iterable of keys (see resolve_allowed_tools/guideline_groups
+    docstrings for why callers may legitimately pass any of the three) into
+    a plain list — filtering out falsy entries (None, "", "unclear" is
+    intentionally left for the caller to filter via subgroup membership,
+    not here, since "valid" is domain-specific)."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [v for v in value if v]
+
+
 def sublevel_options(top_level: str) -> Dict[str, str]:
     """Sub-group name -> human label for `top_level`, or {} if it has none."""
     return SUBLEVEL_LABELS.get(top_level, {})
@@ -186,15 +200,20 @@ _LOCATION_SUBLEVEL_GUIDELINE_GROUPS: Dict[str, str] = {
 }
 
 
-def guideline_groups(top_level: Optional[str], second_level: Optional[str]) -> Set[str]:
+def guideline_groups(
+    top_level: Optional[str], second_level: Union[str, Iterable[str], None]
+) -> Set[str]:
     """Which guideline module keys apply for this route. Returns a SET
-    (not a single value) because a domain with sub-levels but no
-    second_level resolved yet (still routing, or routing was skipped) is
-    scoped to the union of every sub-group's tools, so it needs every
-    sub-group's guidelines too — a turn shouldn't have a wider tool
-    allowlist than the guidance covering it. Returns an empty set for None
-    or an unrecognized top_level (caller falls back to every group, same
-    "don't restrict what we can't confidently scope" policy as
+    (not a single value) for two independent reasons: a domain with
+    sub-levels but no second_level resolved yet (still routing, or routing
+    was skipped) is scoped to the union of every sub-group's tools, so it
+    needs every sub-group's guidelines too — a turn shouldn't have a wider
+    tool allowlist than the guidance covering it; AND a turn can now
+    legitimately resolve to SEVERAL sub-groups at once (see
+    resolve_allowed_tools below), which needs the union of just those
+    sub-groups' guidelines, not the domain-wide fallback. Returns an empty
+    set for None or an unrecognized top_level (caller falls back to every
+    group, same "don't restrict what we can't confidently scope" policy as
     resolve_allowed_tools)."""
     if top_level == TOP_SYSTEM_INFO:
         return {"system_info"}
@@ -203,24 +222,42 @@ def guideline_groups(top_level: Optional[str], second_level: Optional[str]) -> S
     if top_level == TOP_INDEXES:
         return {"indexes"}
     if top_level == TOP_LOCATION:
-        if second_level in _LOCATION_SUBLEVEL_GUIDELINE_GROUPS:
-            return {_LOCATION_SUBLEVEL_GUIDELINE_GROUPS[second_level]}
+        valid_seconds = [
+            s
+            for s in _as_list(second_level)
+            if s in _LOCATION_SUBLEVEL_GUIDELINE_GROUPS
+        ]
+        if valid_seconds:
+            return {_LOCATION_SUBLEVEL_GUIDELINE_GROUPS[s] for s in valid_seconds}
         return set(_LOCATION_SUBLEVEL_GUIDELINE_GROUPS.values())
     return set()
 
 
 def resolve_allowed_tools(
-    top_level: Optional[str], second_level: Optional[str]
+    top_level: Optional[str], second_level: Union[str, Iterable[str], None]
 ) -> Optional[Set[str]]:
     """Tool-name allowlist for the given route, or None if `top_level` isn't
     resolved yet (caller should fall back to the full known-tools list
     rather than block everything).
 
-    For a domain with sublevels but no second_level chosen yet, returns the
-    union of every sub-group in that domain — i.e. "any tool in this
-    domain" — which is the right scope while level-2 routing is still being
-    decided (see top_level_router_node) and a safe fallback if second-level
-    routing is ever skipped.
+    `second_level` accepts a single sub-group key, an iterable of several
+    (a turn can resolve to more than one sub-area at once — e.g. "quali
+    problemi e scenari sono disponibili?" -> ("problem", "scenario") — see
+    app.agent.nodes.router._apply_route, which is what actually produces
+    a multi-value second_level in the first place: either the model
+    resolves several sub-areas confidently in one classification call, or
+    the user answers a disambiguation menu by picking more than one
+    option, e.g. "1 e 3"), or None/empty/all-invalid.
+
+    For a domain with sublevels but no (valid) second_level given at all,
+    returns the union of every sub-group in that domain — i.e. "any tool
+    in this domain" — which is the right scope while level-2 routing is
+    still being decided (see top_level_router_node) and a safe fallback if
+    second-level routing is ever skipped. Given one or more VALID
+    second_level values, returns the union of just those sub-groups'
+    tools instead — this is what lets, say, ["problem", "scenario"]
+    expose exactly the problem tools + the scenario/analysis tools
+    together, not the domain-wide fallback.
     """
     if top_level is None:
         return None
@@ -233,14 +270,17 @@ def resolve_allowed_tools(
         # Unknown top_level value (shouldn't happen) — don't restrict.
         return None
 
-    if second_level and second_level in subgroups:
-        allowed = set(subgroups[second_level])
+    valid_seconds = [s for s in _as_list(second_level) if s in subgroups]
+    if valid_seconds:
+        allowed: Set[str] = set()
+        for key in valid_seconds:
+            allowed |= subgroups[key]
         if top_level == TOP_LOCATION:
             allowed |= _LOCATION_SHARED_TOOLS
         return allowed
 
     # No (valid) second_level yet: union of all sub-groups in this domain.
-    allowed: Set[str] = set()
+    allowed = set()
     for tool_names in subgroups.values():
         allowed |= tool_names
     return allowed
