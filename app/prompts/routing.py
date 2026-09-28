@@ -116,6 +116,13 @@ prefer the most specific: e.g. a question about a named territorial index
 is "indexes", not "system_info", even though indexes are technically part
 of the system.
 
+Within "indexes", distinguish requests about existing index data from
+methodology questions. Requests to define, design, construct, choose
+variables for, interpret, or validate a new territorial index belong to
+second_level "index_methodology". Requests for which indexes exist, their
+available periods, maps, or charts belong to index_list, index_map, or
+index_plot respectively. For index_methodology, use top_level "indexes".
+
 ============================================================
 CURRENT ROUTE FOR THIS SESSION
 ============================================================

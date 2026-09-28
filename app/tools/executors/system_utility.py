@@ -32,9 +32,29 @@ def execute_lookup_glossary(
     # asked. Real search terms are never this short, so dropping them only
     # removes noise, never a legitimate match.
     _STOPWORDS = {
-        "a", "an", "the", "is", "are", "of", "what", "what's",
-        "il", "lo", "la", "i", "gli", "le", "un", "uno", "una",
-        "di", "che", "cosa", "cos'è", "è", "e",
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "of",
+        "what",
+        "what's",
+        "il",
+        "lo",
+        "la",
+        "i",
+        "gli",
+        "le",
+        "un",
+        "uno",
+        "una",
+        "di",
+        "che",
+        "cosa",
+        "cos'è",
+        "è",
+        "e",
     }
     raw_tokens = [t.strip().lower() for t in query.split() if t.strip()]
     tokens = [t for t in raw_tokens if t not in _STOPWORDS] or raw_tokens
@@ -179,28 +199,45 @@ def execute_get_data_from_link(
     return result
 
 
-def execute_explain_workflow(state: AgentState, **kwargs) -> Dict[str, Any]:
+def execute_explain_workflow(
+    state: AgentState, workflow_type: str = "auto", **kwargs
+) -> Dict[str, Any]:
     """Execute explain_workflow tool.
 
-    Returns the full workflow reference document (knowledge/workflow.md,
-    read once at import via app.utils.workflow_knowledge) as-is. No parsing
-    or matching against the query happens here — unlike lookup_glossary,
-    this tool is meant to ground a broader, methodological answer (see this
-    tool's agent_tier="methodological" and _reasoning_policy in
-    app.prompts.answer_generation), so the reasoning over the document is
-    left entirely to that downstream answer-generation step.
+    Returns one of the two workflow reference documents. Explicit selection
+    from the reasoner takes precedence; auto-selection follows the index
+    methodology route when present, otherwise it defaults to the modeling
+    workflow. The downstream answer-generation step reasons over the chosen
+    reference text.
     """
-    from app.utils.workflow_knowledge import WORKFLOW_DOCUMENT
+    from app.utils.workflow_knowledge import get_workflow_document
 
     logger.info("Executing explain_workflow tool")
 
-    if not WORKFLOW_DOCUMENT:
+    if workflow_type == "auto":
+        route = state.cognitive.second_level_route or []
+        workflow_type = (
+            "territorial_indexes" if "index_methodology" in route else "modeling"
+        )
+
+    if workflow_type not in {"modeling", "territorial_indexes"}:
         return {
             "success": False,
-            "error": "The workflow reference document is currently unavailable.",
+            "error": f"Unknown workflow type: {workflow_type}",
         }
 
-    return {"success": True, "workflow_document": WORKFLOW_DOCUMENT}
+    workflow_document = get_workflow_document(workflow_type)
+    if not workflow_document:
+        return {
+            "success": False,
+            "error": f"The {workflow_type} workflow reference document is currently unavailable.",
+        }
+
+    return {
+        "success": True,
+        "workflow_type": workflow_type,
+        "workflow_document": workflow_document,
+    }
 
 
 EXECUTORS = {

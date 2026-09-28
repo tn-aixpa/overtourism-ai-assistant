@@ -96,7 +96,10 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "what steps to follow, whether there are predefined/standard "
             "strategies or approaches for modelling such a problem, or how the "
             "platform's Problem/Proposal/Scenario concepts relate to each other "
-            "end to end — call explain_workflow. This applies even if the "
+            "end to end — call explain_workflow with workflow_type='modeling'. "
+            "For methodology on designing or validating a new territorial "
+            "index, use the indexes/index_methodology route and select "
+            "workflow_type='territorial_indexes'. This applies even if the "
             'question is phrased in general terms (e.g. "ci sono strategie '
             'predefinite per modellare un problema di affollamento turistico?") '
             "rather than using the platform's own vocabulary, and even if it "
@@ -110,6 +113,17 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
         ),
     ],
     "indexes": [
+        (
+            "DESIGN OR VALIDATE A TERRITORIAL INDEX",
+            "If the user asks how to define, design, construct, interpret, or "
+            "validate a NEW territorial index/indicator, or how to choose its "
+            "dimensions, variables, normalization, weighting, or aggregation, "
+            "call explain_workflow with workflow_type='territorial_indexes'. "
+            "Use the index-design methodology document, not the modeling "
+            "workflow. This is distinct from looking up an existing index or "
+            "requesting its data, map, or chart; those use the index-list/map/plot "
+            "tools below.",
+        ),
         (
             "TERRITORIAL INDEXES",
             "If the user asks what territorial indexes/indicators exist, wants to "

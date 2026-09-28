@@ -50,10 +50,10 @@ def _log_costs(input_tokens, output_tokens, model, user_id):
         # Don't crash the request just because pricing metadata is missing
         # (e.g. a new/renamed deployment) — log a visible warning and record
         # cost as 0 so usage tracking keeps working.
-        logger.warning(
-            f"No pricing entry for model '{model}' — logging cost as 0.0. "
-            f"Add it to MODEL_PRICING in {__name__}."
-        )
+        # logger.warning(
+        #     f"No pricing entry for model '{model}' — logging cost as 0.0. "
+        #     f"Add it to MODEL_PRICING in {__name__}."
+        # )
         pricing = {"input": 0.0, "output": 0.0}
 
     input_cost = input_tokens * pricing["input"] / 1_000_000

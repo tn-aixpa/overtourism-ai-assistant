@@ -147,52 +147,54 @@ def create_explain_workflow_tool() -> ToolDefinition:
     return ToolDefinition(
         name="explain_workflow",
         description=(
-            "Answer questions about the platform's overall analysis "
-            "methodology/workflow: how to identify a territorial problem "
-            "and its stakeholders, how the Digital Twin models the As-is "
-            "situation, and how Problems, Proposals, and Scenarios relate "
-            "to each other and get evaluated/compared end to end. Also use "
-            "this for the general, platform-agnostic procedure for mapping "
-            "overtourism and touristic-crowding problems in a location — "
-            "e.g. how to identify the relevant territorial elements and "
-            "stakeholders behind a crowding/overtourism issue, how to model "
-            "the current (As-is) situation, and how to define and compare "
-            "candidate interventions — even if the question doesn't mention "
-            "the platform's own concepts by name. Use this for 'how does "
-            "this work', 'what's the process for...', 'how would I go about "
-            "analysing overtourism/crowding in a place', or 'what's the "
-            "difference between a Proposal and a Scenario in this workflow' "
-            "style questions. Do NOT use this to look up a single term's "
-            "definition (use lookup_glossary instead) or to fetch a "
-            "specific problem/proposal/scenario's actual data (use the "
-            "relevant data-retrieval tool instead) — this tool only covers "
-            "the general methodology, not live platform content."
+            "Answer methodology/process questions using the relevant "
+            "workflow reference. Choose workflow_type='modeling' for "
+            "territorial problem analysis, Digital Twin As-is modeling, and "
+            "the Problem/Proposal/Scenario process. Choose "
+            "workflow_type='territorial_indexes' for defining, designing, "
+            "constructing, interpreting, or validating a new territorial "
+            "index/indicator. If the question is clearly about index "
+            "methodology, never use the modeling document. Do NOT use this "
+            "to look up a single term's definition (use lookup_glossary) or "
+            "to fetch existing index records/values or specific platform "
+            "data (use the relevant data-retrieval tool)."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
-            "Returns the platform's full workflow reference document — "
-            "covering both the general territorial-analysis methodology for "
-            "mapping overtourism/touristic-crowding problems (identifying "
-            "elements/stakeholders, modelling the As-is scenario, defining "
-            "and evaluating changes) and how that maps onto the platform's "
-            "own concepts (Problem -> Proposal -> Scenario) and the overall "
-            "step-by-step procedure — so the answer can be grounded in it. "
+            "Returns exactly one relevant workflow reference document: "
+            "'modeling' covers territorial problem analysis, Digital Twin "
+            "modeling and Problem -> Proposal -> Scenario; "
+            "'territorial_indexes' covers the methodological design and "
+            "validation of new territorial indexes. "
             "This tool's agent_tier is 'methodological' (see AgentTier): "
             "unlike the plain data-report style of most other tools, the "
             "response may reason more broadly about *why* a step matters "
             "and may suggest a procedural sequence of next steps, while "
             "still not inventing the concrete content of a specific "
             "strategy/proposal — see _reasoning_policy in "
-            "app.prompts.answer_generation. Call this whenever the user's "
-            "question is about process/methodology — whether phrased in "
-            "terms of the platform's own concepts or more generally about "
-            "how to approach an overtourism/crowding problem — rather than "
-            "about a single term or a specific piece of live data."
+            "app.prompts.answer_generation. Call this for methodology "
+            "questions, and set workflow_type to the document that directly "
+            "addresses the question. Do not use it for glossary definitions "
+            "or live data lookups."
         ),
-        parameters=[],
+        parameters=[
+            ToolParameter(
+                name="workflow_type",
+                description=(
+                    "Select 'modeling' for territorial problem/Digital Twin "
+                    "workflow questions, 'territorial_indexes' for the "
+                    "methodology of designing a new territorial index, or "
+                    "'auto' to follow the current route."
+                ),
+                type="string",
+                required=False,
+                default="auto",
+                schema={"enum": ["auto", "modeling", "territorial_indexes"]},
+            ),
+        ],
         output_description=(
-            "The full text of the workflow reference document, used as "
-            "grounding for a methodological answer."
+            "The selected workflow reference text, used as grounding for a "
+            "methodological answer."
         ),
         tags=["data", "read-only", "workflow", "methodology", "system"],
         agent_tier="methodological",
