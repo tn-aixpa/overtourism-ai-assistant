@@ -751,11 +751,33 @@ def get_territorial_index_list(tenant: str) -> list:
 
 
 @tool
-def get_territorial_index_data(
+def get_territorial_index_map_data(
     tenant: str, index: str, start_date: str, end_date: str
 ) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
     url = f"{BACKEND_URL}{tenant}/indexes/get_index_data"
     params = {"index": index, "start_date": start_date, "end_date": end_date}
+    return get_data(url, params=params)
+
+
+@tool
+def get_territorial_index_plot_data(
+    tenant: str,
+    index: str,
+    start_date: str,
+    end_date: str,
+    granularity: str,
+    spatial_granularity: str = "comune",
+) -> dict:
+    """Fetch the geo-referenced values (GeoJSON + value range) of a single
+    territorial index for the given date range from the API."""
+    url = f"{BACKEND_URL}{tenant}/indexes/get-variation-data"
+    params = {
+        "index": index,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+        "spatial_granularity": spatial_granularity,
+    }
     return get_data(url, params=params)

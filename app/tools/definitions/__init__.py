@@ -32,6 +32,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_analysis_widget_tool(),
         create_explain_widget_tool(),
         create_show_territorial_index_map_tool(),
+        create_show_territorial_index_plot_tool(),
         create_summary_generation_tool(),
         create_report_generation_tool(),
         create_new_problem_tool(),

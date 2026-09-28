@@ -121,6 +121,27 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "lookup_glossary for this.",
         ),
         (
+            "PLOT A TERRITORIAL INDEX (LINE / BAR CHART)",
+            "If the user wants to see how a territorial index varies over time, or "
+            'to compare selected areas, as a chart (e.g. "puoi mostrarmi la '
+            'variazione nel tempo?", "mostrami la ricettività a Molveno e '
+            'Trento") — call show_territorial_index_plot. For a geographic '
+            "distribution on the map use show_territorial_index_map instead.\n\n"
+            "  - Resolve index_id first via get_territorial_index_list, never guess "
+            "it, and convert the period to start_date/end_date exactly as described "
+            "in the tool description (both YYYY-MM-DD). If the user gave no period, "
+            "ask for one instead of guessing.\n\n"
+            "  - type is 'line' unless the user asks for bars; granularity and "
+            "spatial_granularity can be omitted to use their defaults.\n\n"
+            "  - The tool returns only a small plot_summary of the parameters used, "
+            "NOT the plotted values — never state specific figures or trends for "
+            "the chart, only describe what was plotted.\n\n"
+            "  - show_territorial_index_plot is disabled outside standalone mode. "
+            'Only treat it as absent if it appears under "Tools that exist but are '
+            'NOT available in this execution mode"; otherwise do not claim a mode '
+            "restriction.",
+        ),
+        (
             "VISUALIZE A TERRITORIAL INDEX ON THE MAP",
             "If the user wants to see/visualize a territorial index on the map, or "
             'asks which areas are more affected by it (e.g. "mostrami sulla mappa '

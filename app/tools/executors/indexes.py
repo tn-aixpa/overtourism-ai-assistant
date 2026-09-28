@@ -77,14 +77,14 @@ def execute_show_territorial_index_map(
     """
     import json
 
-    from app.tools.executor_backend_tools import get_territorial_index_data
+    from app.tools.executor_backend_tools import get_territorial_index_map_data
 
     logger.info(
         f"Executing show_territorial_index_map tool for index '{index_id}' "
         f"({start_date} -> {end_date})"
     )
 
-    raw = get_territorial_index_data.invoke(
+    raw = get_territorial_index_map_data.invoke(
         {
             "tenant": state.tenant,
             "index": index_id,
@@ -140,7 +140,99 @@ def execute_show_territorial_index_map(
     }
 
 
+_PLOT_WIDGETS = {"line": "lineChart", "bar": "barChart"}
+_DEFAULT_PLOT_TYPE = "line"
+_DEFAULT_GRANULARITY = "monthly"
+_DEFAULT_SPATIAL_GRANULARITY = "comune"
+
+
+def execute_show_territorial_index_plot(
+    state: AgentState,
+    index_id: str,
+    start_date: str,
+    end_date: str,
+    type: str = _DEFAULT_PLOT_TYPE,
+    granularity: str = _DEFAULT_GRANULARITY,
+    spatial_granularity: str = _DEFAULT_SPATIAL_GRANULARITY,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Build the 'lineChart' / 'barChart' widget for a single territorial
+    index over a date range, from live backend data.
+
+    `type`, `granularity` and `spatial_granularity` default here (not only
+    in the tool definition) because validate_tool_arguments only enforces
+    *required* parameters and never applies ToolParameter.default: an
+    optional parameter the LLM omits simply doesn't arrive, so without
+    Python-level defaults this would raise a TypeError instead of using the
+    documented defaults. `type` shadows the builtin only because it is the
+    parameter name exposed to the LLM.
+    """
+    from app.tools.executor_backend_tools import get_territorial_index_plot_data
+
+    # Validate BEFORE the backend call so a bad `type` doesn't cost a
+    # request. Also tolerate an LLM passing null/empty/"Line" for the
+    # optional parameters instead of omitting them.
+    plot_type = (type or _DEFAULT_PLOT_TYPE).strip().lower()
+    granularity = (granularity or _DEFAULT_GRANULARITY).strip().lower()
+    spatial_granularity = (
+        (spatial_granularity or _DEFAULT_SPATIAL_GRANULARITY).strip().lower()
+    )
+
+    widget_name = _PLOT_WIDGETS.get(plot_type)
+    if widget_name is None:
+        raise ValueError(
+            f"Unknown plot type '{type}': use one of {sorted(_PLOT_WIDGETS)}"
+        )
+
+    logger.info(
+        f"Executing show_territorial_index_plot: {plot_type} plot for index "
+        f"'{index_id}' ({start_date} -> {end_date}), granularity={granularity}, "
+        f"spatial_granularity={spatial_granularity}"
+    )
+
+    raw = get_territorial_index_plot_data.invoke(
+        {
+            "tenant": state.tenant,
+            "index": index_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "granularity": granularity,
+            "spatial_granularity": spatial_granularity,
+        }
+    )
+
+    # The payload can be large: log its shape, not its content.
+    logger.debug(
+        "Plot data received (type=%s, keys=%s)",
+        raw.__class__.__name__,  # not type(raw): `type` is shadowed above
+        list(raw.keys()) if isinstance(raw, dict) else None,
+    )
+
+    action = {
+        "type": "SHOW_WIDGET",
+        "payload": {
+            "widgetName": widget_name,
+            "data": raw,
+        },
+    }
+
+    return {
+        "success": True,
+        "response": "Ecco il grafico dell'indice richiesto:",
+        "plot_summary": {
+            "index_id": index_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "plot_type": plot_type,
+            "granularity": granularity,
+            "spatial_granularity": spatial_granularity,
+        },
+        "assistant_action_data": [action],
+    }
+
+
 EXECUTORS = {
     "get_territorial_index_list": execute_get_territorial_index_list,
     "show_territorial_index_map": execute_show_territorial_index_map,
+    "show_territorial_index_plot": execute_show_territorial_index_plot,
 }

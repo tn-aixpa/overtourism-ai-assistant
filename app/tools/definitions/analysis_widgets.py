@@ -120,7 +120,7 @@ def create_analysis_widget_tool() -> ToolDefinition:
             "interface, already formatted for assistant_action_data."
         ),
         enabled=True,
-        tags=["widget", "plot", "compare", "kpi", "integrated", "scenario"],
+        tags=["widget", "plot", "compare", "kpi", "standalone", "scenario"],
         agent_tier="executor",
         allowed_modes=("standalone",),
     )
