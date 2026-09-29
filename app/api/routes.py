@@ -14,7 +14,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 import logging
 import asyncio
-import time
+import queue
 
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
@@ -28,13 +28,7 @@ from app.agent.memory import (
     mark_in_flight,
     clear_in_flight,
 )
-from app.agent.events import (
-    start_turn,
-    publish_done,
-    get_result,
-    get_events_since,
-    clear_session,
-)
+from app.agent.events import get_queue, publish_done, get_result, clear_session
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 from app.utils.authentication import (
@@ -48,23 +42,6 @@ logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "true"
-
-# Some deployments sit behind a proxy that cuts a connection after a fixed
-# total duration regardless of activity (observed in production: streams
-# were cut around 15-16s even mid-keep-alive, with no server-side error).
-# Rather than depend on that limit being raised (which may not be possible
-# if the proxy isn't ours to configure), the stream voluntarily closes
-# itself just under it and tells the client exactly where to resume (see
-# stream_events' "retry" event) — so no event is ever lost to a cut we
-# don't control. Configurable per deployment via env var; keep comfortably
-# under whatever the real proxy limit turns out to be.
-SSE_MAX_CONNECTION_SECONDS = float(os.environ.get("SSE_MAX_CONNECTION_SECONDS", "12"))
-# How often the stream re-checks the rotation deadline / emits a
-# keep-alive comment while waiting for new events. Short enough that
-# SSE_MAX_CONNECTION_SECONDS is honored promptly and that an idle-timeout
-# style proxy (as opposed to a total-duration one) also sees frequent
-# bytes.
-SSE_POLL_INTERVAL_SECONDS = 5.0
 
 router = APIRouter()
 
@@ -106,10 +83,10 @@ def _run_agent(key: str, state: AgentState, token: str):
         result = {
             "response": response_text,
             "session_id": key,
+            "agent_type": final_state.active_agent.value,
             "assistant_action_data": getattr(
                 final_state, "assistant_action_data", None
             ),
-            "agent_type": final_state.active_agent,
         }
 
         save_state(final_state)
@@ -161,7 +138,6 @@ async def run_agent_endpoint(
         }
 
         # Whatever mechanism your frontend expects for completion:
-        start_turn(session_id)
         publish_done(session_id, result)
 
         return {"session_id": session_id}
@@ -269,13 +245,6 @@ async def run_agent_endpoint(
         # silently drift apart on which non-widget tools are available.
         state.cognitive.enabled_tools = []
 
-        # Reset this session's event log/result for the NEW turn now
-        # starting, under the same lock as everything else above — a
-        # stream that connects with since=0 right after this must not
-        # replay a previous turn's events, and /agent/result must not
-        # keep returning the previous turn's answer while this one runs
-        # (see app.agent.events.start_turn).
-        start_turn(session_id)
         save_state(state)
         mark_in_flight(session_id)
 
@@ -350,13 +319,6 @@ async def get_agent_result(
 async def stream_events(
     session_id: str,
     tenant: str = Query(...),
-    since: int = Query(
-        default=0,
-        description="Resume from this event index instead of replaying "
-        "the current turn from the start — the value to use is given by "
-        "the 'retry' event whenever the server voluntarily rotates the "
-        "connection (see event_generator below).",
-    ),
     # EventSource (the standard way to consume SSE from a browser) cannot
     # set custom headers, so this endpoint also accepts the token as a query
     # param. The Authorization header is preferred when present.
@@ -380,57 +342,31 @@ async def stream_events(
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    event_queue = get_queue(session_id)
+
     async def event_generator():
-        # Never leave an SSE connection blocked forever: periodic
-        # keep-alive comments and the rotation deadline below both depend
-        # on regularly re-entering this loop rather than waiting on a
-        # single long blocking call. The final response is always
-        # available through /agent/result/{session_id} regardless of what
-        # happens to this connection.
-        start = time.monotonic()
-        cursor = since
+        # Never leave an SSE connection blocked forever. Periodic comments keep
+        # proxies/load-balancers from considering the response idle, while the
+        # timeout also lets us recover cleanly if the client connects after the
+        # completion event has already been published. The final response is
+        # available through /agent/result/{session_id}.
         while True:
-            elapsed = time.monotonic() - start
-            remaining = SSE_MAX_CONNECTION_SECONDS - elapsed
-            if remaining <= 0:
-                # Voluntarily end this connection BEFORE whatever sits in
-                # front of it (proxy/gateway/tunnel) can cut it uncleanly —
-                # see the long comment on SSE_MAX_CONNECTION_SECONDS above.
-                # This is a normal, clean end of the response (no
-                # exception), not an error: the frontend's event source
-                # wrapper reconnects transparently on seeing this "retry"
-                # event, using `cursor` as the new `since`, so nothing
-                # published after this point is ever missed.
-                logger.info(
-                    f"Voluntarily rotating SSE stream for session "
-                    f"{session_id} at cursor={cursor} (proxy-safety rotation)"
-                )
-                yield f"event: retry\ndata: {cursor}\n\n"
-                return
-
-            wait = min(SSE_POLL_INTERVAL_SECONDS, remaining)
             try:
-                new_events, cursor = await asyncio.to_thread(
-                    get_events_since, session_id, cursor, wait
-                )
-            except Exception as exc:
-                logger.exception(
-                    f"SSE event-log failure for session {session_id}: {exc}"
-                )
-                break
-
-            if not new_events:
+                event = await asyncio.to_thread(event_queue.get, True, 30)
+            except queue.Empty:
                 yield ": keep-alive\n\n"
                 continue
+            except Exception as exc:
+                logger.exception(f"SSE queue failure for session {session_id}: {exc}")
+                break
 
-            for event in new_events:
-                logger.info(f"Sending SSE event for session {session_id}: {event}")
+            logger.info(f"Sending SSE event for session {session_id}: {event}")
 
-                if event == "__done__":
-                    yield "event: done\ndata: \n\n"
-                    return
+            if event == "__done__":
+                yield "event: done\ndata: \n\n"
+                break
 
-                yield f"event: status\ndata: {event}\n\n"
+            yield f"event: status\ndata: {event}\n\n"
 
     return StreamingResponse(
         event_generator(),
