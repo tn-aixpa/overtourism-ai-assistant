@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional, List, Dict
 class AgentResponse(BaseModel):
     session_id: str
     response: Optional[str] = None
+    agent_type: str
     # List of UIAction-shaped dicts: {"type": "SHOW_WIDGET" | "NAVIGATE" | "SHOW_TOAST", "payload": {...}}.
     # Matches the frontend's UIAction[] (see chat.model.ts / ChatbotActionTranslatorService).
     assistant_action_data: Optional[List[Dict[str, Any]]] = None

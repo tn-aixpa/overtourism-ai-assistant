@@ -109,6 +109,7 @@ def _run_agent(key: str, state: AgentState, token: str):
             "assistant_action_data": getattr(
                 final_state, "assistant_action_data", None
             ),
+            "agent_type": final_state.active_agent,
         }
 
         save_state(final_state)
