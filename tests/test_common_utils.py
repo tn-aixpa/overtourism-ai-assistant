@@ -17,14 +17,19 @@ from app.utils.common import (
     truncate_for_prompt,
 )
 
-
 # ---------------------------------------------------------------------------
 # _condense_object / condense_for_matching
 # ---------------------------------------------------------------------------
 
+
 class TestCondenseObject:
     def test_drops_heavy_fields(self):
-        obj = {"id": "1", "name": "n", "extras": {"big": "data"}, "evaluation_data": [1, 2]}
+        obj = {
+            "id": "1",
+            "name": "n",
+            "extras": {"big": "data"},
+            "evaluation_data": [1, 2],
+        }
         condensed = _condense_object(obj)
         assert "extras" not in condensed
         assert "evaluation_data" not in condensed
@@ -91,6 +96,7 @@ class TestCondenseForMatching:
 # _truncate_json / truncate_for_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestTruncateJson:
     def test_short_object_not_truncated(self):
         result = _truncate_json({"a": 1}, max_chars=1000)
@@ -122,6 +128,7 @@ class TestTruncateJson:
 # enforce_prompt_budget
 # ---------------------------------------------------------------------------
 
+
 class TestEnforcePromptBudget:
     def test_short_prompt_untouched(self):
         prompt = "short prompt"
@@ -144,6 +151,7 @@ class TestEnforcePromptBudget:
 # build_prior_results_block
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPriorResultsBlock:
     def test_empty_results_returns_none_string(self):
         assert build_prior_results_block({}) == "None"
@@ -163,7 +171,7 @@ class TestBuildPriorResultsBlock:
             assert f"### tool_{i}" in block
         for i in range(0, 5):
             assert f"### tool_{i}" not in block
-        assert "5 older result(s) omitted" in block
+        assert "5 older SUCCESSFUL result(s) omitted" in block
         assert "tool_0" in block  # omitted keys are still named
 
     def test_each_entry_truncated_per_entry_limit(self):
@@ -175,6 +183,7 @@ class TestBuildPriorResultsBlock:
 # ---------------------------------------------------------------------------
 # token contextvar
 # ---------------------------------------------------------------------------
+
 
 class TestTokenContextVar:
     @pytest.fixture(autouse=True)
@@ -199,6 +208,7 @@ class TestTokenContextVar:
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class TestExceptions:
     def test_graph_error_stores_details(self):

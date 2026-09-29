@@ -30,7 +30,10 @@ class TestPublishThought:
         events.publish_thought("s1", "I should look up the glossary")
         q = events.get_queue("s1")
         payload = json.loads(q.get_nowait())
-        assert payload == {"type": "thought", "content": "I should look up the glossary"}
+        assert payload == {
+            "type": "thought",
+            "content": "I should look up the glossary",
+        }
 
 
 class TestPublishAction:
@@ -48,10 +51,16 @@ class TestPublishDoneAndGetResult:
         q = events.get_queue("s1")
         assert q.get_nowait() == "__done__"
 
-    def test_get_result_pops_result_only_once(self):
+    def test_get_result_is_idempotent_for_retries(self):
         events.publish_done("s1", {"answer": "42"})
-        events.get_result("s1")
-        assert events.get_result("s1") is None
+        assert events.get_result("s1") == {"answer": "42"}
+        assert events.get_result("s1") == {"answer": "42"}
+
+    def test_get_result_returns_copy_of_stored_result(self):
+        events.publish_done("s1", {"answer": "42"})
+        result = events.get_result("s1")
+        result["answer"] = "changed"
+        assert events.get_result("s1") == {"answer": "42"}
 
     def test_get_result_missing_session_returns_none(self):
         assert events.get_result("never-published") is None

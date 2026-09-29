@@ -50,6 +50,30 @@ class TestToolRegistryCRUD:
 
 
 class TestToolRegistryFiltering:
+    def test_get_context_tools_applies_role_and_mode_filters(self):
+        reg = ToolRegistry()
+        reg.register_tool(
+            ToolDefinition(
+                name="admin_internal",
+                description="d",
+                category=ToolCategory.UTILITY,
+                allowed_roles="admin",
+                allowed_modes="internal",
+            )
+        )
+        reg.register_tool(make_tool("open_tool"))
+
+        assert set(reg.get_context_tools(role="admin", mode="internal")) == {
+            "admin_internal",
+            "open_tool",
+        }
+        assert set(reg.get_context_tools(role="standard", mode="internal")) == {
+            "open_tool"
+        }
+        assert set(reg.get_context_tools(role="admin", mode="standalone")) == {
+            "open_tool"
+        }
+
     def test_get_all_known_tools_excludes_disabled(self):
         reg = ToolRegistry()
         reg.register_tool(make_tool("enabled_tool", enabled=True))

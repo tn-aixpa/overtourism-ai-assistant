@@ -272,7 +272,50 @@ class TestGenerateOutputMessageNode:
         with patch.object(gn, "generate_answer", side_effect=fake_generate_answer):
             gn.generate_output_message_node(fresh_state)
 
-        assert captured["messages"] == ["Please confirm to proceed."]
+        assert captured["messages"] == [
+            "Please confirm to proceed.",
+            "No glossary entries found.",
+        ]
+
+    def test_appends_messages_for_every_current_turn_result(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.messages_to_include = ["The tools completed."]
+        fresh_state.cognitive.tool_results.update(
+            {
+                "list_available_problems": {
+                    "success": True,
+                    "output": {"items": ["problem"]},
+                },
+                "analyze_scenario_results": {
+                    "success": True,
+                    "output": {"message": "Analysis is ready."},
+                },
+            }
+        )
+        fresh_state.cognitive.scratchpad = [
+            ReActStep(
+                tool_name="list_available_problems",
+                observation_key="list_available_problems",
+            ),
+            ReActStep(
+                tool_name="analyze_scenario_results",
+                observation_key="analyze_scenario_results",
+            ),
+        ]
+
+        captured = {}
+
+        def fake_generate_answer(state):
+            captured["messages"] = list(state.cognitive.messages_to_include)
+            return "done"
+
+        with patch.object(gn, "generate_answer", side_effect=fake_generate_answer):
+            gn.generate_output_message_node(fresh_state)
+
+        assert captured["messages"][0] == "The tools completed."
+        assert "Here are the available items" in captured["messages"][1]
+        assert captured["messages"][2] == "Analysis is ready."
 
     def test_scratchpad_reset_when_turn_concludes(self, fresh_state: AgentState):
         fresh_state.cognitive.scratchpad = [ReActStep(tool_name="x")]
