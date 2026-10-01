@@ -457,6 +457,42 @@ class AgentState:
 
         os.makedirs("logs", exist_ok=True)
         serialized = self._serialize(self.__dict__)
+
+        # Keep interface widget payloads useful for debugging without
+        # persisting their potentially large rendered data.
+        actions = serialized.get("assistant_action_data")
+        if isinstance(actions, list):
+            serialized["assistant_action_data"] = [
+                (
+                    {
+                        key: action[key]
+                        for key in ("type", "widgetName")
+                        if key in action
+                    }
+                    if isinstance(action, dict)
+                    else action
+                )
+                for action in actions
+            ]
+
+        # Trace entries should retain their diagnostic metadata, but not
+        # backend data payloads accidentally attached under retrieved* keys.
+        def omit_retrieved_data(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {
+                    key: omit_retrieved_data(item)
+                    for key, item in value.items()
+                    if "retrieved" not in str(key).lower().replace("_", "")
+                }
+            if isinstance(value, list):
+                return [omit_retrieved_data(item) for item in value]
+            return value
+
+        trace = serialized.get("cognitive", {}).get("trace", {})
+        for step in trace.get("steps", []):
+            if isinstance(step, dict) and "data" in step:
+                step["data"] = omit_retrieved_data(step["data"])
+
         # Write to a temp file and rename over the target, rather than
         # writing filepath directly: a plain open(filepath, "w") is
         # truncate-then-write, so any interruption mid-write (process

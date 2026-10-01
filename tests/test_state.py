@@ -272,3 +272,48 @@ class TestAgentStateSerialize:
         assert dumped["session_id"] == "test-session"
         assert dumped["waiting_for"] == "PROBLEM_CONFIRMATION"
         assert dumped["conversation"]["messages"][0]["content"] == "hello"
+
+    def test_dump_to_file_compacts_actions_and_omits_retrieved_trace_data(
+        self, fresh_state: AgentState, tmp_path
+    ):
+        fresh_state.assistant_action_data = [
+            {
+                "type": "map",
+                "widgetName": "territorial-index",
+                "data": {"large": "payload"},
+            },
+            {"type": "plot", "data": [1, 2, 3]},
+        ]
+        fresh_state.add_trace(
+            "diagnostic",
+            "test_node",
+            {
+                "result_key": "lookup",
+                "nested": {"retrieved": {"large": "payload"}},
+            },
+        )
+        filepath = tmp_path / "state.json"
+
+        import os as _os
+
+        cwd = _os.getcwd()
+        _os.chdir(tmp_path)
+        try:
+            fresh_state.dump_to_file(str(filepath))
+        finally:
+            _os.chdir(cwd)
+
+        with open(filepath, encoding="utf-8") as f:
+            dumped = json.load(f)
+
+        assert dumped["assistant_action_data"] == [
+            {"type": "map", "widgetName": "territorial-index"},
+            {"type": "plot"},
+        ]
+        assert dumped["cognitive"]["trace"]["steps"][0]["data"] == {
+            "result_key": "lookup",
+            "nested": {},
+        }
+        # File sanitization must not mutate the live state used by the agent.
+        assert "data" in fresh_state.assistant_action_data[0]
+        assert "retrieved" in fresh_state.cognitive.trace.steps[0].data["nested"]

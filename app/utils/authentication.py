@@ -1,6 +1,9 @@
 from fastapi import HTTPException
 import jwt
 from app.utils.common import get_data, BACKEND_URL
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # AUTH / SESSION-OWNERSHIP HELPERS
@@ -36,9 +39,10 @@ def _authorize_tenant(token: str, tenant: str) -> None:
 
 def check_authorization(token: str, tenant: str) -> bool:
     """Check authorization against the backend."""
-    url = f"{BACKEND_URL}{tenant}/auth/me"
+    url = f"{BACKEND_URL}auth/me?territory={tenant}"
     headers = {"Authorization": f"Bearer {token}"}
     api_response = get_data(url, headers=headers)
+    logger.info(api_response)
     return api_response.get("authenticated", False)
 
 
