@@ -33,7 +33,7 @@ from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 from app.utils.authentication import (
     _require_bearer_token,
-    _authorize_tenant,
+    _authorize_territory,
     get_user_id,
     get_user_role,
 )
@@ -46,16 +46,16 @@ DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "tr
 router = APIRouter()
 
 
-def _load_owned_session(session_id: str, tenant: str) -> AgentState | None:
-    """Load session state, but only if it belongs to the authorized tenant.
+def _load_owned_session(session_id: str, territory: str) -> AgentState | None:
+    """Load session state, but only if it belongs to the authorized territory.
 
     Returns None both when the session doesn't exist AND when it belongs to
-    a different tenant — deliberately indistinguishable to the caller, so an
-    authorized-but-wrong-tenant request can't be used to probe which
+    a different territory — deliberately indistinguishable to the caller, so an
+    authorized-but-wrong-territory request can't be used to probe which
     session_ids exist.
     """
     state = load_state(session_id)
-    if state is None or state.tenant != tenant:
+    if state is None or state.territory != territory:
         return None
     return state
 
@@ -124,7 +124,7 @@ async def run_agent_endpoint(
             session_id=session_id,
             user_id="system",
             integrated_mode=True,
-            tenant=tenant,
+            territory=tenant,
             user_role="standard",
             session_mode="internal",
         )
@@ -145,7 +145,7 @@ async def run_agent_endpoint(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
     else:
         token = None
 
@@ -189,7 +189,7 @@ async def run_agent_endpoint(
                 user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
-                tenant=tenant,
+                territory=tenant,
                 user_role=get_user_role(token),
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
@@ -197,8 +197,8 @@ async def run_agent_endpoint(
                 # form field).
                 session_mode="internal" if integrated_mode else "standalone",
             )
-        elif state.tenant != tenant:
-            # Don't reveal whether the session exists under another tenant.
+        elif state.territory != tenant:
+            # Don't reveal whether the session exists under another territory.
             raise HTTPException(status_code=404, detail="Session not found")
 
         # A session's mode is fixed for its whole lifetime (set once, above,
@@ -271,11 +271,11 @@ async def reset_session(
 
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
 
     lock = _get_lock(session_id)
     async with lock:
-        # Only reset a session that actually belongs to this tenant. If it
+        # Only reset a session that actually belongs to this territory. If it
         # belongs to someone else (or never existed), don't touch it, and
         # don't reveal which of those two happened.
         state = load_state(session_id)
@@ -302,7 +302,7 @@ async def get_agent_result(
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -337,7 +337,7 @@ async def stream_events(
         if not auth_header and token:
             auth_header = f"Bearer {token}"
         token = _require_bearer_token(auth_header)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
 
     if _load_owned_session(session_id, tenant) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -390,7 +390,7 @@ async def submit_feedback_get(
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
 
     state = _load_owned_session(session_id, tenant)
     if state is None:
@@ -437,7 +437,7 @@ async def run_selected_tools(
 
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, tenant)
     else:
         token = None
     if token:
@@ -448,7 +448,7 @@ async def run_selected_tools(
     # Stateless, session-less scratch state — intentionally never saved.
     user_id = get_user_id(token) + "-system"
     state = AgentState(
-        tenant=tenant,
+        territory=tenant,
         user_id=user_id,
         user_role=get_user_role(token),
         # This pipeline runs outside the normal chat surface entirely —
@@ -522,8 +522,7 @@ async def get_usge_stats(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        tenant = "molveno"  # TODO admin?
-        _authorize_tenant(token, tenant)
+        _authorize_territory(token, "default")
     else:
         token = None
 

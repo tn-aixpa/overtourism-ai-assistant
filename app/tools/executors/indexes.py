@@ -21,7 +21,7 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
     from app.tools.executor_backend_tools import get_territorial_index_list
 
     logger.info("Executing get_territorial_index_list tool")
-    result = get_territorial_index_list.invoke({"tenant": state.tenant})
+    result = get_territorial_index_list.invoke({})
 
     return {"indexes": result}
 
@@ -86,7 +86,6 @@ def execute_show_territorial_index_map(
 
     raw = get_territorial_index_map_data.invoke(
         {
-            "tenant": state.tenant,
             "index": index_id,
             "start_date": start_date,
             "end_date": end_date,
@@ -192,7 +191,6 @@ def execute_show_territorial_index_plot(
 
     raw = get_territorial_index_plot_data.invoke(
         {
-            "tenant": state.tenant,
             "index": index_id,
             "start_date": start_date,
             "end_date": end_date,

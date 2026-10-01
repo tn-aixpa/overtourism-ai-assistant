@@ -306,7 +306,7 @@ class AgentState:
     session_id: str = ""
     user_id: str | None = None
     user_lang: str = "Italian"
-    tenant: str = ""
+    territory: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
     # Coarse-grained role this session is authenticated as — "admin",

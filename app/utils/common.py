@@ -44,7 +44,7 @@ DEFAULT_MAX_RESULT_ENTRIES = 6
 DEFAULT_MAX_CHARS_PER_ENTRY = 1200
 
 # Most tool results are raw backend payloads that can grow without bound
-# (tenant data, scenario lists, ...), so the generic cap above is the right
+# (territory data, scenario lists, ...), so the generic cap above is the right
 # default. A few tools instead return a fixed, small, bounded payload
 # (e.g. the full catalog of tunable simulation parameters, or a single
 # scenario's evaluation summary) — capping those at the generic size cuts

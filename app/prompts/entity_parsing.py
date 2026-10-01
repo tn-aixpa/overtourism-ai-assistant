@@ -57,7 +57,7 @@ def get_relatet_context_ids(
     # Condense before injecting: matching only needs id/name/description-type
     # fields, not the full raw payload (which can carry large nested extras
     # like scenario evaluation_data). This keeps the prompt bounded
-    # regardless of how much data the tenant has, instead of growing with
+    # regardless of how much data the territory has, instead of growing with
     # the dataset. See app.utils.common.condense_for_matching.
     condensed_sections = {
         source: condense_for_matching(data) for source, data in sections.items()

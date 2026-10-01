@@ -13,7 +13,7 @@ def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, A
     from app.tools.executor_backend_tools import get_all_proposals
 
     logger.info("Executing list_available_proposals tool")
-    result = get_all_proposals.invoke({"tenant": state.tenant})
+    result = get_all_proposals.invoke({"territory": state.territory})
 
     return result
 
@@ -33,7 +33,7 @@ def execute_create_new_proposal(
 
     result = create_new_proposal.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "name": name,
             "problem_id": problem_id,
             "description": description,
@@ -62,7 +62,7 @@ def execute_edit_proposal(
 
     result = edit_proposal.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "proposal_id": proposal_id,
             "name": name,
             "problem_id": problem_id,
@@ -85,7 +85,7 @@ def execute_delete_proposal(
     from app.tools.executor_backend_tools import delete_proposal
 
     result = delete_proposal.invoke(
-        {"proposal_id": proposal_id, "tenant": state.tenant}
+        {"proposal_id": proposal_id, "territory": state.territory}
     )
 
     return result

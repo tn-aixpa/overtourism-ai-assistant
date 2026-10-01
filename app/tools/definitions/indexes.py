@@ -16,7 +16,7 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
         long_description=(
             "Fetches the live list of territorial indexes from the backend. Unlike "
             "lookup_glossary (static domain vocabulary), this always reflects the "
-            "indexes currently available for the tenant, including which ones support "
+            "indexes currently available for the territory, including which ones support "
             "variation analysis and the min/max year each one covers. Call this before "
             "any tool that needs a specific index value/id, whenever the user asks "
             "'what indices are there' or names an index you haven't seen the id for yet."

@@ -16,12 +16,7 @@ else:
 # ---------------------------------------------------------------------------
 # STARTUP VALIDATION
 # ---------------------------------------------------------------------------
-# Config the app cannot function without. Missing any of these currently
-# fails silently deep inside a request (e.g. BACKEND_URL=None produces a URL
-# like "Nonetenant/problems" that only errors when a tool actually runs).
-# Checked once at process startup instead, so misconfiguration is caught
-# immediately with a clear message rather than surfacing as a confusing
-# runtime error to whichever user happens to trigger it first.
+# Config the app cannot function without.
 REQUIRED_ENV_VARS = ["BACKEND_URL", "ANTHROPIC_API_KEY"]
 
 

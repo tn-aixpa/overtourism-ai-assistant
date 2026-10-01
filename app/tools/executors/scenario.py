@@ -13,7 +13,7 @@ def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, A
     from app.tools.executor_backend_tools import get_all_scenarios
 
     logger.info("Executing list_available_scenarios tool")
-    result = get_all_scenarios.invoke({"tenant": state.tenant})
+    result = get_all_scenarios.invoke({"territory": state.territory})
 
     return result
 
@@ -26,7 +26,7 @@ def execute_get_base_scenario(
     from app.tools.executor_backend_tools import get_base_scenario
 
     logger.info("Executing get_base_scenario tool")
-    result = get_base_scenario.invoke({"tenant": state.tenant})
+    result = get_base_scenario.invoke({"territory": state.territory})
     return result
 
 
@@ -55,7 +55,7 @@ def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:
     """
     from app.tools.executor_backend_tools import get_widgets
 
-    widgets = get_widgets.invoke({"tenant": state.tenant})
+    widgets = get_widgets.invoke({"territory": state.territory})
 
     logger.info("WIDGETS: %s", widgets)
     logger.info("values: %s", values)
@@ -118,7 +118,7 @@ def execute_create_new_temp_scenario(
     )
 
     if not base_scenario_id:
-        base_scenario_id = get_base_scenario.invoke({"tenant": state.tenant})
+        base_scenario_id = get_base_scenario.invoke({"territory": state.territory})
 
     # Create a new creation session if needed
     pending = state.cognitive.pending_temp_scenario or {}
@@ -128,7 +128,7 @@ def execute_create_new_temp_scenario(
         or None
     )
     if creation_session is None:
-        creation_session = create_cration_session.invoke(state.tenant)
+        creation_session = create_cration_session.invoke(state.territory)
 
     logger.info(
         f"Retrieved required info: base_scenario id {base_scenario_id} and creation_session {creation_session}"
@@ -136,7 +136,7 @@ def execute_create_new_temp_scenario(
 
     scenario_result = create_temp_scenario.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "values": values,
             "base_scenario_id": base_scenario_id,
             "creation_session": creation_session,
@@ -193,7 +193,7 @@ def execute_create_new_scenario(
 
     result = promote_scenario.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "creation_session": pending["creation_session"],
             "scenario_id": pending["scenario_id"],
             "name": name,
@@ -222,7 +222,7 @@ def execute_edit_scenario(
 
     result = edit_scenario.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "scenario_id": scenario_id,
             "name": name,
             "description": description,
@@ -241,7 +241,7 @@ def execute_delete_scenario(
     from app.tools.executor_backend_tools import delete_scenario
 
     result = delete_scenario.invoke(
-        {"scenario_id": scenario_id, "tenant": state.tenant}
+        {"scenario_id": scenario_id, "territory": state.territory}
     )
 
     return result

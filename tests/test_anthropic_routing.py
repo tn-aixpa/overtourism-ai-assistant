@@ -46,7 +46,7 @@ def _use_real_api_key(monkeypatch):
 
 
 def make_state(user_message: str) -> AgentState:
-    state = AgentState(session_id="eval-session", tenant="molveno")
+    state = AgentState(session_id="eval-session", territory="molveno")
     state.add_user_message(user_message)
     return state
 

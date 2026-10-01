@@ -125,7 +125,7 @@ def execute_get_context_details(
 
     if any(to_fetch.values()):
         fetched = get_data_from_context.invoke(
-            {"current_context": to_fetch, "tenant": state.tenant}
+            {"current_context": to_fetch, "territory": state.territory}
         )
         cache.update(fetched.get("retrieved", {}))
 
@@ -149,7 +149,7 @@ def execute_get_context_details(
             )
             cleaned = get_temp_evaluation_data.invoke(
                 {
-                    "tenant": state.tenant,
+                    "territory": state.territory,
                     "creation_session": creation_session,
                     "evaluation_id": evaluation_id,
                 }
@@ -202,7 +202,7 @@ def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[st
 
     logger.info("Executing get_configuration_parameters tool")
 
-    return get_widgets.invoke({"tenant": state.tenant})
+    return get_widgets.invoke({"territory": state.territory})
 
 
 def execute_analyze_scenario_results(

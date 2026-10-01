@@ -97,9 +97,9 @@ def clean_scenario(raw_data):
 
 
 @tool
-def get_all_problems(tenant: str):
+def get_all_problems(territory: str):
     """Fetch all problems from the API."""
-    url = f"{BACKEND_URL}{tenant}/problems"
+    url = f"{BACKEND_URL}{territory}/problems"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -114,9 +114,9 @@ def get_all_problems(tenant: str):
 
 
 @tool
-def get_all_proposals(tenant: str):
+def get_all_proposals(territory: str):
     """Fetch all proposals from the API."""
-    url = f"{BACKEND_URL}{tenant}/proposals"
+    url = f"{BACKEND_URL}{territory}/proposals"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -132,9 +132,9 @@ def get_all_proposals(tenant: str):
 
 
 @tool
-def get_all_scenarios(tenant: str):
+def get_all_scenarios(territory: str):
     """Fetch all scenarios from the API."""
-    url = f"{BACKEND_URL}{tenant}/scenarios"
+    url = f"{BACKEND_URL}{territory}/scenarios"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -148,11 +148,11 @@ def get_all_scenarios(tenant: str):
     return cleaned_data
 
 
-def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> dict:
+def get_single_problem(problem_id: str, territory: str, cleaned: bool = True) -> dict:
     """Fetch a single problem instance (internal helper, not exposed as an agent tool)."""
     logger.info(f"Retrieving info for problem {problem_id}")
 
-    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -166,7 +166,7 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
         "links": extracted_data.get("extras", {}).get("links", ""),
         "additional_data_available_on_specific_request": {
             "version": extracted_data.get("version", ""),
-            "tenant": extracted_data.get("tenant", ""),
+            "territory": extracted_data.get("territory", ""),
             "created": extracted_data.get("created", ""),
             "updated": extracted_data.get("updated", ""),
         },
@@ -175,12 +175,12 @@ def get_single_problem(problem_id: str, tenant: str, cleaned: bool = True) -> di
     return cleaned_data
 
 
-def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
+def get_single_proposal(proposal_id: str, territory, cleaned: bool = True) -> dict:
     """Fetch a single proposal instance (internal helper, not exposed as an agent tool)."""
 
     logger.info(f"Retrieving info for proposal {proposal_id}")
 
-    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -197,7 +197,7 @@ def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
         "impact": extracted_data.get("impact", ""),
         "additional_data_available_on_specific_request": {
             "version": extracted_data.get("version", ""),
-            "tenant": extracted_data.get("tenant", ""),
+            "territory": extracted_data.get("territory", ""),
             "created": extracted_data.get("created", ""),
             "updated": extracted_data.get("updated", ""),
             "status": extracted_data.get("status", ""),
@@ -207,12 +207,12 @@ def get_single_proposal(proposal_id: str, tenant, cleaned: bool = True) -> dict:
     return cleaned_data
 
 
-def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
+def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> dict:
     """Fetch a single scenario instance (internal helper, not exposed as an agent tool)."""
 
     logger.info(f"Retrieving info for scenario {scenario_id}")
 
-    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -236,24 +236,24 @@ def get_single_scenario(scenario_id: str, tenant, cleaned: bool = True) -> dict:
 
 
 @tool
-def get_widgets(tenant: str) -> dict:
+def get_widgets(territory: str) -> dict:
     """Fetch all tunable configuration parameters (widgets) from the API."""
-    url = f"{BACKEND_URL}{tenant}/configuration"
+    url = f"{BACKEND_URL}{territory}/configuration"
     extracted_data = get_data(url)
     return extracted_data.get("indexes", [])
 
 
 @tool
-def create_cration_session(tenant: str):
+def create_cration_session(territory: str):
     """Create a creation session to handle temporary scenario(s)"""
-    url = f"{BACKEND_URL}{tenant}/sessions/"
+    url = f"{BACKEND_URL}{territory}/sessions/"
     raw_data = post_data(url, json={})
     return raw_data["session_id"]
 
 
 @tool
 def create_temp_scenario(
-    tenant: str,
+    territory: str,
     values: dict,
     base_scenario_id: str,
     creation_session: str,
@@ -275,7 +275,7 @@ def create_temp_scenario(
     )
 
     # Step 1. Create the temporary scenario
-    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/scenarios/"
+    url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/scenarios/"
 
     body = {
         "base_scenario_id": base_scenario_id,
@@ -288,7 +288,7 @@ def create_temp_scenario(
     logger.info(f"Step1. Created scenario: {created_scenario}")
 
     # Step 2. Created associated evaluation
-    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/"
+    url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/"
     body = {
         "scenario_id": created_scenario["scenario_id"],
     }
@@ -297,7 +297,7 @@ def create_temp_scenario(
     logger.info(f"Step 2. Created evalutation: {created_eval}")
 
     # Step 3. Return evaluation results
-    eval_url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
+    eval_url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
     raw_data = get_data(eval_url)
 
     logger.info(f"Step 3.1 Raw eval results {raw_data}")
@@ -311,7 +311,7 @@ def create_temp_scenario(
 
 
 @tool
-def create_evaluation(tenant: str, scenario_id: str) -> dict:
+def create_evaluation(territory: str, scenario_id: str) -> dict:
     """
     Trigger evaluation of a scenario.
 
@@ -320,7 +320,7 @@ def create_evaluation(tenant: str, scenario_id: str) -> dict:
     """
     logger.info("Entered tool create_evaluation")
 
-    url = f"{BACKEND_URL}{tenant}/evaluations/"
+    url = f"{BACKEND_URL}{territory}/evaluations/"
     body = {"scenario_id": scenario_id}
 
     return post_data(url, json=body)
@@ -328,7 +328,7 @@ def create_evaluation(tenant: str, scenario_id: str) -> dict:
 
 @tool
 def promote_scenario(
-    tenant: str,
+    territory: str,
     creation_session: str,
     scenario_id: str,
     name: str,
@@ -344,7 +344,9 @@ def promote_scenario(
     """
     logger.info("Entered tool promote_scenario")
 
-    url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/scenarios/{scenario_id}"
+    url = (
+        f"{BACKEND_URL}{territory}/sessions/{creation_session}/scenarios/{scenario_id}"
+    )
 
     body = {"name": name, "description": description, "proposal_id": proposal_id}
 
@@ -352,12 +354,12 @@ def promote_scenario(
 
 
 @tool
-def get_base_scenario(tenant) -> str:
+def get_base_scenario(territory) -> str:
     """Fetch the id of the base scenario"""
 
     logger.info(f"Retrieving id of base scenario")
 
-    url = f"{BACKEND_URL}{tenant}/scenarios?base_only=true"
+    url = f"{BACKEND_URL}{territory}/scenarios?base_only=true"
     extracted_data = get_data(url)
 
     return extracted_data["scenario_id"]
@@ -365,7 +367,7 @@ def get_base_scenario(tenant) -> str:
 
 @tool
 def get_temp_evaluation_data(
-    tenant: str, creation_session: str, evaluation_id: str
+    territory: str, creation_session: str, evaluation_id: str
 ) -> dict:
     """
     Fetch evaluation results for a temporary (session-scoped, not-yet-saved)
@@ -386,7 +388,7 @@ def get_temp_evaluation_data(
         f"evaluation {evaluation_id}"
     )
 
-    eval_url = f"{BACKEND_URL}{tenant}/sessions/{creation_session}/evaluations/{evaluation_id}/data"
+    eval_url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/{evaluation_id}/data"
     raw_data = get_data(eval_url)
 
     cleaned = clean_scenario(raw_data)
@@ -396,30 +398,30 @@ def get_temp_evaluation_data(
 
 
 @tool
-def get_data_from_context(current_context, tenant, cleaned: bool = True):
+def get_data_from_context(current_context, territory, cleaned: bool = True):
     """Fetch stored problem/proposal/scenario data from the API (no evaluations)."""
     retrieved = {}
 
     for problem_id in current_context.get("problems", []):
         retrieved[f"problems {problem_id}"] = get_single_problem(
-            problem_id, tenant, cleaned=cleaned
+            problem_id, territory, cleaned=cleaned
         )
 
     for proposal_id in current_context.get("proposals", []):
         retrieved[f"proposals {proposal_id}"] = get_single_proposal(
-            proposal_id, tenant, cleaned=cleaned
+            proposal_id, territory, cleaned=cleaned
         )
 
     for scenario_id in current_context.get("scenarios", []):
         retrieved[f"scenarios {scenario_id}"] = get_single_scenario(
-            scenario_id, tenant, cleaned=cleaned
+            scenario_id, territory, cleaned=cleaned
         )
 
     return {"retrieved": retrieved}
 
 
 @tool
-def get_evaluation_data(current_context, tenant):
+def get_evaluation_data(current_context, territory):
     """Fetch evaluation data for each scenario in the current context.
 
     Returns a dict keyed the same way as get_data_from_context's "retrieved"
@@ -434,7 +436,9 @@ def get_evaluation_data(current_context, tenant):
     evaluations_ids = {}
     for scenario_id in scenario_ids:
         try:
-            evals_url = f"{BACKEND_URL}{tenant}/evaluations/?scenario_id={scenario_id}"
+            evals_url = (
+                f"{BACKEND_URL}{territory}/evaluations/?scenario_id={scenario_id}"
+            )
             support = get_data(evals_url)
             evaluations_ids[scenario_id] = support[0]["evaluation_id"]
         except Exception as e:
@@ -444,7 +448,7 @@ def get_evaluation_data(current_context, tenant):
 
     for scenario_id, eval_id in evaluations_ids.items():
         try:
-            eval_url = f"{BACKEND_URL}{tenant}/evaluations/{eval_id}/data"
+            eval_url = f"{BACKEND_URL}{territory}/evaluations/{eval_id}/data"
             raw_data = get_data(eval_url)
 
             cleaned = clean_scenario(raw_data)
@@ -460,7 +464,7 @@ def get_evaluation_data(current_context, tenant):
 
 @tool
 def create_new_problem(
-    tenant: str,
+    territory: str,
     name: str,
     description: str,
     objective: str | None = None,
@@ -474,7 +478,7 @@ def create_new_problem(
     """
     logger.info("Entered tool create_new_problem")
 
-    url = f"{BACKEND_URL}{tenant}/problems/"
+    url = f"{BACKEND_URL}{territory}/problems/"
 
     body = {"name": name, "description": description, "extras": {}}
     if objective:
@@ -488,7 +492,7 @@ def create_new_problem(
 
 @tool
 def create_new_proposal(
-    tenant: str,
+    territory: str,
     name: str,
     problem_id: str,
     description: str,
@@ -504,7 +508,7 @@ def create_new_proposal(
     """
     logger.info("Entered tool create_new_proposal")
 
-    url = f"{BACKEND_URL}{tenant}/proposals/"
+    url = f"{BACKEND_URL}{territory}/proposals/"
 
     body = {
         "problem_id": problem_id,
@@ -525,7 +529,7 @@ def create_new_proposal(
 
 @tool
 def edit_problem(
-    tenant: str,
+    territory: str,
     problem_id: str,
     name: str | None = None,
     description: str | None = None,
@@ -540,12 +544,12 @@ def edit_problem(
     """
     logger.info("Entered tool edit_problem")
 
-    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # extras), not a partial patch. Fetch the current instance first so any
     # field the user didn't mention is preserved instead of being wiped out.
-    existing = get_single_problem(problem_id, tenant=tenant, cleaned=False)
+    existing = get_single_problem(problem_id, territory=territory, cleaned=False)
 
     extras = dict(existing.get("extras") or {})
     if objective:
@@ -566,7 +570,7 @@ def edit_problem(
 
 @tool
 def edit_proposal(
-    tenant: str,
+    territory: str,
     proposal_id: str,
     name: str | None = None,
     problem_id: str | None = None,
@@ -583,13 +587,13 @@ def edit_proposal(
     """
     logger.info("Entered tool edit_proposal")
 
-    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
     # current instance first so any field the user didn't mention (including
     # status and related scenarios) is preserved instead of being wiped out.
-    existing = get_single_proposal(proposal_id, tenant=tenant, cleaned=False)
+    existing = get_single_proposal(proposal_id, territory=territory, cleaned=False)
 
     extras = dict(existing.get("extras") or {})
     if resources:
@@ -618,7 +622,7 @@ def edit_proposal(
 
 @tool
 def edit_scenario(
-    tenant: str,
+    territory: str,
     scenario_id: str,
     name: str | None = None,
     description: str | None = None,
@@ -631,13 +635,13 @@ def edit_scenario(
     """
     logger.info("Entered tool edit_scenario")
 
-    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
     # current instance first so any field the user didn't mention (including
     # status and related scenarios) is preserved instead of being wiped out.
-    existing = get_single_scenario(scenario_id, tenant=tenant, cleaned=False)
+    existing = get_single_scenario(scenario_id, territory=territory, cleaned=False)
 
     body = {
         "version": existing.get("version", 0),
@@ -653,7 +657,7 @@ def edit_scenario(
 
 
 @tool
-def delete_problem(problem_id: str, tenant: str):
+def delete_problem(problem_id: str, territory: str):
     """
     Delete an existing problem instance.
 
@@ -661,13 +665,13 @@ def delete_problem(problem_id: str, tenant: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_problem")
-    url = f"{BACKEND_URL}{tenant}/problems/{problem_id}"
+    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
 
     # DELETE responses are often empty (or just {"success": true}), which has
     # no "name" for the confirmation message. Grab it beforehand.
     name = problem_id
     try:
-        existing = get_single_problem(problem_id, tenant=tenant, cleaned=False)
+        existing = get_single_problem(problem_id, territory=territory, cleaned=False)
         name = existing.get("name", problem_id)
     except Exception as e:
         logger.warning(f"Could not fetch problem '{problem_id}' before delete: {e}")
@@ -677,7 +681,7 @@ def delete_problem(problem_id: str, tenant: str):
 
 
 @tool
-def delete_proposal(proposal_id: str, tenant: str):
+def delete_proposal(proposal_id: str, territory: str):
     """
     Delete an existing proposal instance.
 
@@ -685,11 +689,11 @@ def delete_proposal(proposal_id: str, tenant: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_proposal")
-    url = f"{BACKEND_URL}{tenant}/proposals/{proposal_id}"
+    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
 
     name = proposal_id
     try:
-        existing = get_single_proposal(proposal_id, tenant=tenant, cleaned=False)
+        existing = get_single_proposal(proposal_id, territory=territory, cleaned=False)
         name = existing.get("name", proposal_id)
     except Exception as e:
         logger.warning(f"Could not fetch proposal '{proposal_id}' before delete: {e}")
@@ -699,7 +703,7 @@ def delete_proposal(proposal_id: str, tenant: str):
 
 
 @tool
-def delete_scenario(scenario_id: str, tenant: str):
+def delete_scenario(scenario_id: str, territory: str):
     """
     Delete an existing scenario instance.
 
@@ -707,11 +711,11 @@ def delete_scenario(scenario_id: str, tenant: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_scenario")
-    url = f"{BACKEND_URL}{tenant}/scenarios/{scenario_id}"
+    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
 
     name = scenario_id
     try:
-        existing = get_single_scenario(scenario_id, tenant=tenant, cleaned=False)
+        existing = get_single_scenario(scenario_id, territory=territory, cleaned=False)
         name = existing.get("name", scenario_id)
     except Exception as e:
         logger.warning(f"Could not fetch scenario '{scenario_id}' before delete: {e}")
@@ -731,9 +735,9 @@ def _strong_html_to_markdown(text: str) -> str:
 
 
 @tool
-def get_territorial_index_list(tenant: str) -> list:
+def get_territorial_index_list() -> list:
     """Fetch the list of available territorial indexes (with descriptions) from the API."""
-    url = f"{BACKEND_URL}{tenant}/indexes/get-index-list"
+    url = f"{BACKEND_URL}default/indexes/get-index-list"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -751,19 +755,16 @@ def get_territorial_index_list(tenant: str) -> list:
 
 
 @tool
-def get_territorial_index_map_data(
-    tenant: str, index: str, start_date: str, end_date: str
-) -> dict:
+def get_territorial_index_map_data(index: str, start_date: str, end_date: str) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
-    url = f"{BACKEND_URL}{tenant}/indexes/get_index_data"
+    url = f"{BACKEND_URL}default/indexes/get_index_data"
     params = {"index": index, "start_date": start_date, "end_date": end_date}
     return get_data(url, params=params)
 
 
 @tool
 def get_territorial_index_plot_data(
-    tenant: str,
     index: str,
     start_date: str,
     end_date: str,
@@ -772,7 +773,7 @@ def get_territorial_index_plot_data(
 ) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
-    url = f"{BACKEND_URL}{tenant}/indexes/get-variation-data"
+    url = f"{BACKEND_URL}default/indexes/get-variation-data"
     params = {
         "index": index,
         "start_date": start_date,

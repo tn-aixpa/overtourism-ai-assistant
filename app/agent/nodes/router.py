@@ -5,7 +5,7 @@ belongs to:
 
   1) system_info  — get_system_capabilities / lookup_glossary / links
   2) location      — problems, proposals, scenarios, analysis for a specific
-                      location (tenant-scoped: Molveno, Altipiano di Fazzon)
+                      location (territory-scoped: Molveno, Altipiano di Fazzon)
   3) indexes       — territorial indexes for the whole region
   4) general       — general_question_response, for on-topic questions
                       nothing else can answer

@@ -105,7 +105,7 @@ def _get_evaluation_payload(state: AgentState, scenario_ids: list) -> Dict[str, 
 
     _ensure_data_cached(state, {"scenarios": scenario_ids})
     fetched = get_evaluation_data.invoke(
-        {"current_context": {"scenarios": scenario_ids}, "tenant": state.tenant}
+        {"current_context": {"scenarios": scenario_ids}, "territory": state.territory}
     )
     return {
         f"scenarios {sid}": fetched.get(f"scenarios {sid}", {}) for sid in scenario_ids

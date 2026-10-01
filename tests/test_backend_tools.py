@@ -131,7 +131,7 @@ class TestCreateNewProblem:
         with patch.object(bt, "post_data", return_value={"name": "P"}) as mock_post:
             bt.create_new_problem.invoke(
                 {
-                    "tenant": "t1",
+                    "territory": "t1",
                     "name": "P",
                     "description": "D",
                     "objective": "reduce congestion",
@@ -148,7 +148,7 @@ class TestCreateNewProblem:
         with patch.object(bt, "post_data", return_value={"name": "P"}) as mock_post:
             bt.create_new_problem.invoke(
                 {
-                    "tenant": "t1",
+                    "territory": "t1",
                     "name": "P",
                     "description": "D",
                     "objective": None,
@@ -158,11 +158,11 @@ class TestCreateNewProblem:
         _, kwargs = mock_post.call_args
         assert kwargs["json"]["extras"] == {}
 
-    def test_url_includes_tenant(self):
+    def test_url_includes_territory(self):
         with patch.object(bt, "post_data", return_value={}) as mock_post:
             bt.create_new_problem.invoke(
                 {
-                    "tenant": "molveno",
+                    "territory": "molveno",
                     "name": "P",
                     "description": "D",
                     "objective": None,
@@ -192,7 +192,7 @@ class TestEditProblem:
             ) as mock_put:
                 bt.edit_problem.invoke(
                     {
-                        "tenant": "t1",
+                        "territory": "t1",
                         "problem_id": "p1",
                         "name": None,
                         "description": None,
@@ -217,7 +217,7 @@ class TestEditProblem:
             with patch.object(bt, "put_data", return_value={}) as mock_put:
                 bt.edit_problem.invoke(
                     {
-                        "tenant": "t1",
+                        "territory": "t1",
                         "problem_id": "p1",
                         "name": "New Name",
                         "description": None,
@@ -253,7 +253,7 @@ class TestEditProposal:
             with patch.object(bt, "put_data", return_value={}) as mock_put:
                 bt.edit_proposal.invoke(
                     {
-                        "tenant": "t1",
+                        "territory": "t1",
                         "proposal_id": "pr1",
                         "name": None,
                         "problem_id": None,
@@ -280,7 +280,7 @@ class TestEditProposal:
             with patch.object(bt, "put_data", return_value={}) as mock_put:
                 bt.edit_proposal.invoke(
                     {
-                        "tenant": "t1",
+                        "territory": "t1",
                         "proposal_id": "pr1",
                         "name": None,
                         "problem_id": "new_problem",
@@ -305,7 +305,7 @@ class TestEditProposal:
             with patch.object(bt, "put_data", return_value={}) as mock_put:
                 bt.edit_proposal.invoke(
                     {
-                        "tenant": "t1",
+                        "territory": "t1",
                         "proposal_id": "pr1",
                         "name": None,
                         "problem_id": None,
@@ -329,7 +329,9 @@ class TestDeleteProblem:
             bt, "get_single_problem", return_value={"name": "Overtourism"}
         ):
             with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_problem.invoke({"problem_id": "p1", "tenant": "t1"})
+                result = bt.delete_problem.invoke(
+                    {"problem_id": "p1", "territory": "t1"}
+                )
         assert result == {"success": True, "name": "Overtourism"}
 
     def test_falls_back_to_id_when_fetch_fails(self):
@@ -337,7 +339,9 @@ class TestDeleteProblem:
             bt, "get_single_problem", side_effect=RuntimeError("not found")
         ):
             with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_problem.invoke({"problem_id": "p1", "tenant": "t1"})
+                result = bt.delete_problem.invoke(
+                    {"problem_id": "p1", "territory": "t1"}
+                )
         assert result == {"success": True, "name": "p1"}
 
     def test_delete_still_called_even_if_prefetch_fails(self):
@@ -345,7 +349,7 @@ class TestDeleteProblem:
             with patch.object(
                 bt, "delete_data", return_value={"success": True}
             ) as mock_del:
-                bt.delete_problem.invoke({"problem_id": "p1", "tenant": "t1"})
+                bt.delete_problem.invoke({"problem_id": "p1", "territory": "t1"})
         mock_del.assert_called_once()
 
 
@@ -356,7 +360,7 @@ class TestDeleteProposalAndScenario:
         ):
             with patch.object(bt, "delete_data", return_value={"success": True}):
                 result = bt.delete_proposal.invoke(
-                    {"proposal_id": "pr1", "tenant": "t1"}
+                    {"proposal_id": "pr1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "Strategy A"}
 
@@ -366,7 +370,7 @@ class TestDeleteProposalAndScenario:
         ):
             with patch.object(bt, "delete_data", return_value={"success": True}):
                 result = bt.delete_scenario.invoke(
-                    {"scenario_id": "sc1", "tenant": "t1"}
+                    {"scenario_id": "sc1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "Cap at 500"}
 
@@ -383,7 +387,7 @@ class TestGetDataFromContext:
             bt, "get_data", return_value={"id": "p1", "name": "P"}
         ) as mock_get:
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1", "cleaned": False}
+                {"current_context": context, "territory": "t1", "cleaned": False}
             )
         assert result == {"retrieved": {"problems p1": {"id": "p1", "name": "P"}}}
         mock_get.assert_called_once_with(f"{bt.BACKEND_URL}t1/problems/p1")
@@ -402,7 +406,7 @@ class TestGetDataFromContext:
 
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1", "cleaned": False}
+                {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
         scenario_entry = result["retrieved"]["scenarios sc1"]
@@ -420,7 +424,7 @@ class TestGetDataFromContext:
 
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1", "cleaned": False}
+                {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
         scenario_entry = result["retrieved"]["scenarios sc1"]
@@ -437,7 +441,7 @@ class TestGetDataFromContext:
         with patch.object(bt, "get_data", side_effect=fake_get_data):
             # Should not raise despite the evaluations lookup failing.
             result = bt.get_data_from_context.invoke(
-                {"current_context": context, "tenant": "t1", "cleaned": False}
+                {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
         assert result["retrieved"]["scenarios sc1"]["id"] == "sc1"
@@ -445,6 +449,6 @@ class TestGetDataFromContext:
     def test_empty_context_returns_empty_retrieved(self):
         context = {"problems": [], "proposals": [], "scenarios": []}
         result = bt.get_data_from_context.invoke(
-            {"current_context": context, "tenant": "t1"}
+            {"current_context": context, "territory": "t1"}
         )
         assert result == {"retrieved": {}}

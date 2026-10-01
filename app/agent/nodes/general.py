@@ -176,7 +176,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             | "list_available_proposals"
             | "list_available_scenarios"
         ):
-            # Raw backend payloads grow with tenant data (no bound), so this
+            # Raw backend payloads grow with territory data (no bound), so this
             # is hard-capped rather than embedded in full — see
             # app.utils.common.truncate_for_prompt. If the answer needs more
             # than what's shown, the model should say so instead of a call
@@ -210,7 +210,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             return [output.get("response", "The requested chart was shown.")]
 
         case "get_configuration_parameters":
-            # Bounded, fixed-size payload (not tenant data), so give it a
+            # Bounded, fixed-size payload (not territory data), so give it a
             # much larger budget than the generic default — see
             # app.utils.common._LARGE_BUDGET_TOOLS.
             return [

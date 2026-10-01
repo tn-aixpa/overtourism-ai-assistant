@@ -116,7 +116,7 @@ def _ensure_data_cached(
 
     if any(to_fetch.values()):
         fetched = get_data_from_context.invoke(
-            {"current_context": to_fetch, "tenant": state.tenant}
+            {"current_context": to_fetch, "territory": state.territory}
         )
         cache.update(fetched.get("retrieved", {}))
 
@@ -129,7 +129,10 @@ def _ensure_data_cached(
     ]
     if missing_eval_ids:
         fetched_evals = get_evaluation_data.invoke(
-            {"current_context": {"scenarios": missing_eval_ids}, "tenant": state.tenant}
+            {
+                "current_context": {"scenarios": missing_eval_ids},
+                "territory": state.territory,
+            }
         )
         for key, eval_data in fetched_evals.items():
             if key in cache:

@@ -13,7 +13,7 @@ def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, An
     from app.tools.executor_backend_tools import get_all_problems
 
     logger.info("Executing list_available_problems tool")
-    result = get_all_problems.invoke({"tenant": state.tenant})
+    result = get_all_problems.invoke({"territory": state.territory})
 
     return result
 
@@ -30,7 +30,7 @@ def execute_create_new_problem(
 
     result = create_new_problem.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "name": name,
             "description": description,
             "objective": objective,
@@ -55,7 +55,7 @@ def execute_edit_problem(
 
     result = edit_problem.invoke(
         {
-            "tenant": state.tenant,
+            "territory": state.territory,
             "problem_id": problem_id,
             "name": name,
             "description": description,
@@ -75,7 +75,9 @@ def execute_delete_problem(
 
     from app.tools.executor_backend_tools import delete_problem
 
-    result = delete_problem.invoke({"problem_id": problem_id, "tenant": state.tenant})
+    result = delete_problem.invoke(
+        {"problem_id": problem_id, "territory": state.territory}
+    )
 
     return result
 

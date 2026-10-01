@@ -34,4 +34,4 @@ def _reset_tool_registry():
 @pytest.fixture
 def fresh_state() -> AgentState:
     """A minimal, valid AgentState for a new session."""
-    return AgentState(session_id="test-session", tenant="test-tenant")
+    return AgentState(session_id="test-session", territory="test-territory")

@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 # AUTH / SESSION-OWNERSHIP HELPERS
 # ---------------------------------------------------------------------------
 # Every endpoint below that reads or mutates an existing session_id needs to
-# both (a) confirm the caller holds a valid token for the claimed tenant, and
-# (b) confirm the session actually belongs to that tenant — otherwise anyone
+# both (a) confirm the caller holds a valid token for the claimed territory, and
+# (b) confirm the session actually belongs to that territory — otherwise anyone
 # who knows/guesses a session_id could read or reset someone else's
 # conversation. Centralized here so each route applies the same check.
 
@@ -30,16 +30,16 @@ def _require_bearer_token(authorization: str | None) -> str:
     return token
 
 
-def _authorize_tenant(token: str, tenant: str) -> None:
-    if not tenant:
-        raise HTTPException(status_code=400, detail="tenant is required")
-    if not check_authorization(token=token, tenant=tenant):
+def _authorize_territory(token: str, territory: str) -> None:
+    if not territory:
+        raise HTTPException(status_code=400, detail="territory is required")
+    if not check_authorization(token=token, territory=territory):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
-def check_authorization(token: str, tenant: str) -> bool:
+def check_authorization(token: str, territory: str) -> bool:
     """Check authorization against the backend."""
-    url = f"{BACKEND_URL}auth/me?territory={tenant}"
+    url = f"{BACKEND_URL}auth/me?territory={territory}"
     headers = {"Authorization": f"Bearer {token}"}
     api_response = get_data(url, headers=headers)
     logger.info(api_response)
