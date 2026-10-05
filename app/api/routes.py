@@ -45,11 +45,11 @@ from app.utils.authentication import (
     get_user_id,
     get_user_role,
 )
+from app.tools.executor_backend_tools import get_allowed_territories
 
 logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
-DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "true"
 
 router = APIRouter()
 
@@ -158,29 +158,6 @@ async def run_agent_endpoint(
     context: list[str] = Form(default=[]),
     authorization: str | None = Header(default=None),
 ):
-    if integrated_mode and DISABLE_INTEGRATED:
-        state = AgentState(
-            session_id=session_id,
-            user_id="system",
-            integrated_mode=True,
-            allowed_territories=["molveno", "fazzon"],
-            user_role="standard",
-            session_mode="internal",
-        )
-
-        save_state(state)
-
-        result = {
-            "response": "Al momento l'assistente integrato non è disponibile",
-            "session_id": session_id,
-            "assistant_action_data": None,
-        }
-
-        # Whatever mechanism your frontend expects for completion:
-        publish_done(session_id, result)
-
-        return {"session_id": session_id}
-
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
@@ -228,7 +205,7 @@ async def run_agent_endpoint(
                 user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
-                allowed_territories=["molveno", "fazzon"],
+                allowed_territories=get_allowed_territories(token),
                 user_role=get_user_role(token),
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
@@ -488,7 +465,7 @@ async def run_selected_tools(
 
     _ensure_tool_registry()
 
-    allowed_territories = ["molveno", "fazzon"]
+    allowed_territories = get_allowed_territories(token)
     if territory not in allowed_territories:
         raise HTTPException(
             status_code=400,
@@ -498,7 +475,7 @@ async def run_selected_tools(
     # Stateless, session-less scratch state — intentionally never saved.
     user_id = get_user_id(token) + "-system"
     state = AgentState(
-        allowed_territories=["molveno", "fazzon"],
+        allowed_territories=allowed_territories,
         territory=territory,
         user_id=user_id,
         user_role=get_user_role(token),

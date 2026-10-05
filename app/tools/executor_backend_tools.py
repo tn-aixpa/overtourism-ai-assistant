@@ -24,7 +24,12 @@ def _log_response(response: requests.Response) -> None:
 
 def get_data(url, headers=None, params=None):
     logger.info(f"Fetching data from URL: {url}")
-    response = requests.get(url, headers=_merge_auth_headers(headers), params=params, timeout=BACKEND_TIMEOUT)
+    response = requests.get(
+        url,
+        headers=_merge_auth_headers(headers),
+        params=params,
+        timeout=BACKEND_TIMEOUT,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -36,7 +41,9 @@ def post_data(url, json=None, headers=None, params=None):
         "Content-Type": "application/json",
         **_merge_auth_headers(headers),
     }
-    response = requests.post(url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT)
+    response = requests.post(
+        url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT
+    )
     _log_response(response)
     response.raise_for_status()
     return response.json()
@@ -49,7 +56,9 @@ def put_data(url, json=None, headers=None, params=None):
         "Content-Type": "application/json",
         **_merge_auth_headers(headers),
     }
-    response = requests.put(url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT)
+    response = requests.put(
+        url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT
+    )
     _log_response(response)
     response.raise_for_status()
     return response.json()
@@ -57,7 +66,12 @@ def put_data(url, json=None, headers=None, params=None):
 
 def delete_data(url, headers=None, params=None):
     logger.info(f"Deleting data at URL: {url}")
-    response = requests.delete(url, headers=_merge_auth_headers(headers), params=params, timeout=BACKEND_TIMEOUT)
+    response = requests.delete(
+        url,
+        headers=_merge_auth_headers(headers),
+        params=params,
+        timeout=BACKEND_TIMEOUT,
+    )
     _log_response(response)
     response.raise_for_status()  # 500 (or 404) on missing entry propagates as an exception here
     if not response.content:
@@ -98,6 +112,14 @@ def clean_scenario(raw_data):
         "data": data.get("kpis", {}),
         "plot_data": data,
     }
+
+
+def get_allowed_territories(token: str | None = None):
+    url = f"{BACKEND_URL}default/territorys"
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    territories = get_data(url, headers=headers)
+    logger.info(f"Allowed territories: {territories}")
+    return territories
 
 
 @tool

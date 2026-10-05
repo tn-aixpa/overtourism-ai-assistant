@@ -68,6 +68,18 @@ class TestGetData:
                 bt.get_data("http://x.test/resource")
 
 
+class TestGetAllowedTerritories:
+    def test_passes_token_as_bearer_authorization(self):
+        with patch.object(bt, "get_data", return_value=["territory-1"]) as mock_get:
+            result = bt.get_allowed_territories("test-token-123")
+
+        mock_get.assert_called_once_with(
+            f"{bt.BACKEND_URL}default/territorys",
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert result == ["territory-1"]
+
+
 class TestPostData:
     def test_post_data_sets_content_type_and_accept_headers(self):
         with patch.object(
