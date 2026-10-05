@@ -761,31 +761,63 @@ def _strong_html_to_markdown(text: str) -> str:
 
 
 @tool
-def get_territorial_index_list() -> list:
+def get_territorial_index_list() -> dict:
     """Fetch the list of available territorial indexes (with descriptions) from the API."""
     url = f"{BACKEND_URL}default/indexes/get-index-list"
     extracted_data = get_data(url)
 
-    cleaned_data = [
+    indicators = [
         {
             "index_id": item["value"],
             "label": item["label"],
             "description": _strong_html_to_markdown(item["index_description"]),
+            "value_unit_description": item.get("index_value_unit_description", ""),
             "available_for_variation": item.get("availableForVariation", False),
             "years_range": item.get("years_range", {}),
         }
         for item in extracted_data.get("indicators", [])
     ]
 
-    return cleaned_data
+    additional_labels = [
+        {
+            "index_id": item["value"],
+            "label": item["label"],
+            "description": _strong_html_to_markdown(item.get("index_description", "")),
+            "value_unit_description": item.get("index_value_unit_description", ""),
+        }
+        for item in extracted_data.get("additional_labels", [])
+    ]
+
+    return {"indicators": indicators, "additional_labels": additional_labels}
 
 
 @tool
-def get_territorial_index_map_data(index: str, start_date: str, end_date: str) -> dict:
+def get_territorial_index_map_data(
+    index: str,
+    start_date: str,
+    end_date: str,
+    spatial_granularity: str = "comune",
+    indicator: str | None = None,
+    start_date_comparison: str | None = None,
+    end_date_comparison: str | None = None,
+    seasonality: str | None = None,
+) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
     url = f"{BACKEND_URL}default/indexes/get_index_data"
-    params = {"index": index, "start_date": start_date, "end_date": end_date}
+    params = {
+        "index": index,
+        "start_date": start_date,
+        "end_date": end_date,
+        "spatial_granularity": spatial_granularity,
+    }
+    optional_params = {
+        "indicator": indicator,
+        "start_date_comparison": start_date_comparison,
+        "end_date_comparison": end_date_comparison,
+        "seasonality": seasonality,
+    }
+    params.update({key: value for key, value in optional_params.items() if value})
     return get_data(url, params=params)
 
 

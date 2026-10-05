@@ -15,6 +15,22 @@ from app.agent.state import AgentState, ReActStep
 
 
 class TestBuildMessagesFromToolResult:
+    def test_territorial_index_list_includes_combinable_additional_labels(self):
+        result = {
+            "success": True,
+            "output": {
+                "indexes": [{"index_id": "ricettivita", "label": "Ricettività"}],
+                "additional_labels": [
+                    {"index_id": "tasso-variazione", "label": "Tasso di variazione"}
+                ],
+            },
+        }
+        msgs = gn._build_messages_from_tool_result("get_territorial_index_list", result)
+
+        assert "Ricettività" in msgs[0]
+        assert "additional indicators" in msgs[0]
+        assert "tasso-variazione" in msgs[0]
+
     def test_failed_result_returns_error_message(self):
         result = {"success": False, "error": "boom"}
         msgs = gn._build_messages_from_tool_result("list_available_problems", result)

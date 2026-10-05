@@ -22,11 +22,17 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
 
     logger.info("Executing get_territorial_index_list tool")
     result = get_territorial_index_list.invoke({})
+    if isinstance(result, dict):
+        indicators = result.get("indicators", [])
+        additional_labels = result.get("additional_labels", [])
+    else:  # Backward-compatible with a legacy backend response/test fixture.
+        indicators = result
+        additional_labels = []
 
-    return {"indexes": result}
+    return {"indexes": indicators, "additional_labels": additional_labels}
 
 
-def _extract_map_entries(features: list) -> list:
+def _extract_map_entries(features: list, *, round_values: bool = True) -> list:
     """Flat [{area_name, index_value}] for every feature that has both an
     AREA_NAME and a numeric INDICE (same fields, same filtering as the map
     summary below). Features without a value are skipped here; callers that
@@ -44,7 +50,12 @@ def _extract_map_entries(features: list) -> list:
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
         ):
-            entries.append({"area_name": str(name), "index_value": round(value, 4)})
+            entries.append(
+                {
+                    "area_name": str(name),
+                    "index_value": round(value, 4) if round_values else value,
+                }
+            )
     return entries
 
 
@@ -56,7 +67,77 @@ def _extract_all_area_names(features: list) -> list:
     ]
 
 
-def _fetch_index_features(index_id: str, start_date: str, end_date: str):
+_SEASONALITIES = {
+    "weekend",
+    "weekdays",
+    "festivities",
+    "summer-months",
+    "winter-months",
+}
+
+
+def _additional_index_params(
+    index_id: str,
+    indicator: str | None = None,
+    start_date_comparison: str | None = None,
+    end_date_comparison: str | None = None,
+    seasonality: str | None = None,
+) -> Dict[str, str]:
+    """Validate and return the extra query parameters for combination indexes."""
+    normalized_id = (index_id or "").strip().lower()
+    if normalized_id == "tasso-variazione":
+        missing = [
+            name
+            for name, value in (
+                ("indicator", indicator),
+                ("start_date_comparison", start_date_comparison),
+                ("end_date_comparison", end_date_comparison),
+            )
+            if not value or not value.strip()
+        ]
+        if missing:
+            raise ValueError(
+                "index_id 'tasso-variazione' requires: " + ", ".join(missing)
+            )
+        return {
+            "indicator": indicator.strip(),
+            "start_date_comparison": start_date_comparison.strip(),
+            "end_date_comparison": end_date_comparison.strip(),
+        }
+
+    if normalized_id == "incidenza-periodo":
+        if not indicator or not indicator.strip():
+            raise ValueError("index_id 'incidenza-periodo' requires indicator")
+        normalized_seasonality = (seasonality or "").strip().lower()
+        if normalized_seasonality not in _SEASONALITIES:
+            raise ValueError(
+                "index_id 'incidenza-periodo' requires seasonality to be one of "
+                f"{sorted(_SEASONALITIES)}"
+            )
+        return {
+            "indicator": indicator.strip(),
+            "seasonality": normalized_seasonality,
+        }
+
+    if any((indicator, start_date_comparison, end_date_comparison, seasonality)):
+        raise ValueError(
+            "indicator/comparison/seasonality parameters are only valid with "
+            "'tasso-variazione' or 'incidenza-periodo'"
+        )
+    return {}
+
+
+def _fetch_index_features(
+    index_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    spatial_granularity: str = "comune",
+    indicator: str | None = None,
+    start_date_comparison: str | None = None,
+    end_date_comparison: str | None = None,
+    seasonality: str | None = None,
+):
     """Call the SAME backend endpoint the map widget uses
     (get_territorial_index_map_data -> default/indexes/get_index_data) and
     return (features, min_value, max_value). The geometry is parsed only to
@@ -65,9 +146,20 @@ def _fetch_index_features(index_id: str, start_date: str, end_date: str):
 
     from app.tools.executor_backend_tools import get_territorial_index_map_data
 
-    raw = get_territorial_index_map_data.invoke(
-        {"index": index_id, "start_date": start_date, "end_date": end_date}
-    )
+    params = {
+        "index": index_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "spatial_granularity": spatial_granularity,
+        **_additional_index_params(
+            index_id,
+            indicator,
+            start_date_comparison,
+            end_date_comparison,
+            seasonality,
+        ),
+    }
+    raw = get_territorial_index_map_data.invoke(params)
     geo_data = raw.get("geo_data", {}) if isinstance(raw, dict) else {}
     raw_geojson = geo_data.get("data")
     try:
@@ -103,6 +195,11 @@ def execute_show_territorial_index_map(
     index_id: str,
     start_date: str,
     end_date: str,
+    spatial_granularity: str = "comune",
+    indicator: str | None = None,
+    start_date_comparison: str | None = None,
+    end_date_comparison: str | None = None,
+    seasonality: str | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """Build the 'map' (choropleth) widget for a single territorial index over
@@ -127,9 +224,18 @@ def execute_show_territorial_index_map(
 
     from app.tools.executor_backend_tools import get_territorial_index_map_data
 
+    additional_params = _additional_index_params(
+        index_id,
+        indicator,
+        start_date_comparison,
+        end_date_comparison,
+        seasonality,
+    )
+
     logger.info(
         f"Executing show_territorial_index_map tool for index '{index_id}' "
-        f"({start_date} -> {end_date})"
+        f"({start_date} -> {end_date}), "
+        f"spatial_granularity={spatial_granularity}"
     )
 
     raw = get_territorial_index_map_data.invoke(
@@ -137,6 +243,8 @@ def execute_show_territorial_index_map(
             "index": index_id,
             "start_date": start_date,
             "end_date": end_date,
+            "spatial_granularity": spatial_granularity,
+            **additional_params,
         }
     )
 
@@ -162,6 +270,8 @@ def execute_show_territorial_index_map(
             "index_id": index_id,
             "start_date": start_date,
             "end_date": end_date,
+            "spatial_granularity": spatial_granularity,
+            **additional_params,
             "min_value": min_value,
             "max_value": max_value,
         }
@@ -281,6 +391,7 @@ def execute_show_territorial_index_plot(
 # query_territorial_index_values
 # ---------------------------------------------------------------------------
 _MAX_LISTED_MUNICIPALITIES = 20
+_MAX_RANKED_MUNICIPALITIES = 20
 
 _OPERATORS = {
     ">": lambda v, t: v > t,
@@ -354,6 +465,12 @@ def execute_query_territorial_index_values(
     threshold: float | None = None,
     operator: str | None = None,
     count_only: bool = False,
+    ranking_order: str | None = None,
+    top_n: int | None = 5,
+    indicator: str | None = None,
+    start_date_comparison: str | None = None,
+    end_date_comparison: str | None = None,
+    seasonality: str | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """Answer factual questions about a territorial index's per-municipality
@@ -367,14 +484,18 @@ def execute_query_territorial_index_values(
       above/below `threshold` (`operator` one of >, >=, <, <=), as a count
       and — unless count_only — a list sorted by value, capped at
       _MAX_LISTED_MUNICIPALITIES entries (the full count is always exact).
+        - query_type="ranking": the requested number (five by default) of
+            municipalities with the highest or lowest values. If more than that
+            number share the extreme value, return all tied municipalities up to
+            _MAX_RANKED_MUNICIPALITIES; larger tie groups are reported by count only.
 
     Python (not the LLM) does all filtering, matching and counting, so the
     numbers in the answer are exactly what the backend returned.
     """
     query_type = (query_type or "").strip().lower()
-    if query_type not in {"values", "threshold"}:
+    if query_type not in {"values", "threshold", "ranking"}:
         raise ValueError(
-            f"Unknown query_type '{query_type}': use 'values' or 'threshold'"
+            f"Unknown query_type '{query_type}': use 'values', 'threshold', or 'ranking'"
         )
 
     # Validate BEFORE the backend call so a malformed request costs nothing.
@@ -390,7 +511,7 @@ def execute_query_territorial_index_values(
             raise ValueError(
                 "query_type 'values' needs at least one municipality name in 'municipalities'"
             )
-    else:
+    elif query_type == "threshold":
         if threshold is None:
             raise ValueError("query_type 'threshold' needs a numeric 'threshold'")
         try:
@@ -403,16 +524,44 @@ def execute_query_territorial_index_values(
             raise ValueError(
                 f"Unknown operator '{operator}': use one of {sorted(_OPERATORS)}"
             )
+    else:
+        ranking_order = (ranking_order or "").strip().lower()
+        if ranking_order not in {"highest", "lowest"}:
+            raise ValueError(
+                "query_type 'ranking' requires ranking_order='highest' or 'lowest'"
+            )
+        if top_n is None:
+            top_n = 5
+        if isinstance(top_n, bool):
+            raise ValueError("'top_n' must be a positive integer")
+        try:
+            top_n = int(top_n)
+        except (TypeError, ValueError):
+            raise ValueError("'top_n' must be a positive integer")
+        if top_n < 1:
+            raise ValueError("'top_n' must be a positive integer")
+        if top_n > _MAX_RANKED_MUNICIPALITIES:
+            raise ValueError(f"'top_n' cannot exceed {_MAX_RANKED_MUNICIPALITIES}")
 
     logger.info(
         f"Executing query_territorial_index_values ({query_type}) for index "
         f"'{index_id}' ({start_date} -> {end_date})"
     )
 
-    features, min_value, max_value = _fetch_index_features(
-        index_id, start_date, end_date
+    additional_params = _additional_index_params(
+        index_id,
+        indicator,
+        start_date_comparison,
+        end_date_comparison,
+        seasonality,
     )
-    entries = _extract_map_entries(features)
+    features, min_value, max_value = _fetch_index_features(
+        index_id,
+        start_date,
+        end_date,
+        **additional_params,
+    )
+    entries = _extract_map_entries(features, round_values=query_type != "ranking")
     all_names = _extract_all_area_names(features)
 
     base = {
@@ -424,6 +573,7 @@ def execute_query_territorial_index_values(
         "areas_with_value": len(entries),
         "min_value": min_value,
         "max_value": max_value,
+        **additional_params,
     }
 
     if not entries:
@@ -463,6 +613,42 @@ def execute_query_territorial_index_values(
                 not_found.append(item)
 
         return {**base, "values": found, "not_found": not_found}
+
+    if query_type == "ranking":
+        ranked = sorted(entries, key=lambda entry: entry["area_name"].casefold())
+        ranked = sorted(
+            ranked,
+            key=lambda entry: entry["index_value"],
+            reverse=ranking_order == "highest",
+        )
+        extreme_value = ranked[0]["index_value"]
+        tied_at_extreme = [
+            entry for entry in ranked if entry["index_value"] == extreme_value
+        ]
+        tie_expanded = len(tied_at_extreme) > top_n
+        list_omitted = (
+            tie_expanded and len(tied_at_extreme) > _MAX_RANKED_MUNICIPALITIES
+        )
+
+        if list_omitted:
+            municipalities = []
+        elif tie_expanded:
+            municipalities = tied_at_extreme
+        else:
+            municipalities = ranked[:top_n]
+
+        return {
+            **base,
+            "ranking_order": ranking_order,
+            "requested_count": top_n,
+            "returned_count": len(municipalities),
+            "total_areas_considered": len(entries),
+            "extreme_value": extreme_value,
+            "extreme_value_count": len(tied_at_extreme),
+            "ranking_tie_expanded": tie_expanded,
+            "ranking_list_omitted": list_omitted,
+            "ranked_municipalities": municipalities,
+        }
 
     # ---- threshold ----
     matching = [e for e in entries if _OPERATORS[op_key](e["index_value"], threshold)]

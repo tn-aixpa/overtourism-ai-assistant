@@ -9,7 +9,8 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
         description=(
             "List the concrete territorial indexes available on the platform (e.g. "
             "'Indice di ricettività', 'Indice di turisticità'), with a description and "
-            "the years each is available for. Call this whenever the user asks what "
+            "the years each is available for. Also lists additional indicators that "
+            "can be combined with any concrete index. Call this whenever the user asks what "
             "indices/indicators exist, or needs to pick one by name before analyzing it."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
@@ -17,14 +18,17 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
             "Fetches the live list of territorial indexes from the backend. Unlike "
             "lookup_glossary (static domain vocabulary), this always reflects the "
             "indexes currently available for the territory, including which ones support "
-            "variation analysis and the min/max year each one covers. Call this before "
+            "variation analysis and the min/max year each one covers. It also returns "
+            "additional_labels (such as tasso-variazione and incidenza-periodo); these "
+            "are not standalone indexes, but can be combined with any indicator. Call this before "
             "any tool that needs a specific index value/id, whenever the user asks "
             "'what indices are there' or names an index you haven't seen the id for yet."
         ),
         parameters=[],
         output_description=(
-            "List of indexes, each with its id (value), display label, description, "
-            "whether it supports variation analysis, and its available year range."
+            "A dictionary with 'indexes' (each with id, label, description, unit, "
+            "variation support and year range) and 'additional_labels' (additional "
+            "index operations and descriptions that can be combined with an index)."
         ),
         tags=["data", "read-only", "territorial-index", "navigation"],
         agent_tier="executor",
@@ -49,6 +53,14 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
             "The index_id must be resolved first — if it hasn't been listed yet this "
             "session, call get_territorial_index_list first and use the matching "
             "index's index_id, never a guessed or typed string. "
+            "The additional_labels returned by that list are combination operations: "
+            "for 'tasso-variazione', set index_id to that label's id, indicator to the "
+            "chosen concrete index id, and provide both comparison dates; for "
+            "'incidenza-periodo', set index_id to that label's id, indicator to the "
+            "chosen concrete index id, and provide seasonality. "
+            "spatial_granularity selects the territorial level: 'comune' (default), "
+            "'macro_area' (also referred to as APT, Azienda per il Turismo), or "
+            "'provincia'. If the user asks for an APT, use 'macro_area'. "
             "start_date/end_date must always be computed as YYYY-MM-DD, following these "
             "rules: for a full year (e.g. '2023'), start_date is that year's Jan 1st and "
             "end_date is that same year's Dec 1st (the last month expressed as its own "
@@ -91,6 +103,67 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
                 type="string",
                 required=True,
             ),
+            ToolParameter(
+                name="spatial_granularity",
+                description=(
+                    "Territorial level represented on the map: 'comune' (municipality) "
+                    "'macro_area' (also called APT, Azienda per il Turismo), or "
+                    "'provincia'. Use 'macro_area' when the user asks for an APT. "
+                    "Defaults to 'comune'."
+                ),
+                type="string",
+                required=False,
+                default="comune",
+                schema={"enum": ["comune", "macro_area", "provincia"]},
+            ),
+            ToolParameter(
+                name="indicator",
+                description=(
+                    "Concrete index id to analyze when index_id is an additional label "
+                    "('tasso-variazione' or 'incidenza-periodo'). Resolve it from "
+                    "get_territorial_index_list. Required for those two labels; omit "
+                    "for an ordinary index."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="start_date_comparison",
+                description=(
+                    "Comparison-period start date (YYYY-MM-DD), required when "
+                    "index_id='tasso-variazione'; omit otherwise."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="end_date_comparison",
+                description=(
+                    "Comparison-period end date (YYYY-MM-DD), required when "
+                    "index_id='tasso-variazione'; omit otherwise."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="seasonality",
+                description=(
+                    "Required when index_id='incidenza-periodo': 'weekend', "
+                    "'weekdays' (working days), 'festivities', 'summer-months', or "
+                    "'winter-months'. Omit otherwise."
+                ),
+                type="string",
+                required=False,
+                schema={
+                    "enum": [
+                        "weekend",
+                        "weekdays",
+                        "festivities",
+                        "summer-months",
+                        "winter-months",
+                    ]
+                },
+            ),
         ],
         output_description="'map' widget (choropleth) to display in the interface, already formatted for assistant_action_data.",
         enabled=True,
@@ -118,6 +191,10 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
             "The index_id must be resolved first — if it hasn't been listed yet this "
             "session, call get_territorial_index_list first and use the matching "
             "index's index_id, never a guessed or typed string. "
+            "Available temporal granularities are 'yearly', 'monthly', 'weekly' and "
+            "'daily'. The spatial_granularity selects the territorial level: 'comune' "
+            "(default), 'macro_area' (also referred to as APT, Azienda per il Turismo), "
+            "or 'provincia'. If the user asks for an APT, use 'macro_area'. "
             "start_date/end_date must always be computed as YYYY-MM-DD, following these "
             "rules: for a full year (e.g. '2023'), start_date is that year's Jan 1st and "
             "end_date is that same year's Dec 1st (the last month expressed as its own "
@@ -173,22 +250,26 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
             ToolParameter(
                 name="granularity",
                 description=(
-                    "Time interval of the x-axis (e.g. 'monthly'). Omit to use the "
-                    "default, 'monthly'."
+                    "Time interval of the x-axis: 'yearly', 'monthly', 'weekly' or "
+                    "'daily'. Omit to use the default, 'monthly'."
                 ),
                 type="string",
                 required=False,
                 default="monthly",
+                schema={"enum": ["yearly", "monthly", "weekly", "daily"]},
             ),
             ToolParameter(
                 name="spatial_granularity",
                 description=(
-                    "Territorial level being represented (e.g. 'comune' for "
-                    "municipality, or macro area). Omit to use the default, 'comune'."
+                    "Territorial level being represented: 'comune' (municipality) or "
+                    "'macro_area' (also called APT, Azienda per il Turismo), or "
+                    "'provincia'. Use 'macro_area' for an APT. Omit to use the "
+                    "default, 'comune'."
                 ),
                 type="string",
                 required=False,
                 default="comune",
+                schema={"enum": ["comune", "macro_area", "provincia"]},
             ),
         ],
         output_description=(
@@ -213,7 +294,8 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             "dell'indice di ricettività a Molveno e Trento nel 2023?'), or (b) which "
             "municipalities — or how many — have an index above/below a given value "
             "(e.g. 'quali comuni hanno turisticità superiore a 0.5 a giugno 2023?', "
-            "'quanti comuni sono sotto 0.2?'). Also use it when the user asks such a "
+            "'quanti comuni sono sotto 0.2?'), or the N municipalities with the "
+            "highest/lowest values for an index in a period. Also use it when the user asks such a "
             "question about what a map shows. To only SEE the distribution, use "
             "show_territorial_index_map instead."
         ),
@@ -224,15 +306,25 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             "The index_id must be resolved first — if it hasn't been listed yet this "
             "session, call get_territorial_index_list first and use the matching "
             "index's index_id, never a guessed or typed string. "
-            "start_date/end_date follow the same rules as show_territorial_index_map: "
-            "both YYYY-MM-DD, a full year -> Jan 1st to Dec 1st of that year "
-            "(e.g. '2023-01-01' to '2023-12-01'), a single month -> both the 1st of "
+            "Additional labels can be combined with a concrete index: for "
+            "'tasso-variazione', use that label as index_id and provide indicator plus "
+            "both comparison dates; for 'incidenza-periodo', use that label as index_id "
+            "and provide indicator plus seasonality. These parameters are required "
+            "only for their corresponding additional label. "
+            "start_date/end_date must be YYYY-MM-DD: a full calendar year -> Jan 1st "
+            "to Dec 31st of that year (e.g. '2023-01-01' to '2023-12-31'), a single month -> both the 1st of "
             "that month, a range -> 1st of the first month to 1st of the last month. "
             "If the user gave no period, ask which one instead of guessing. "
             "Use query_type='values' with 'municipalities' for named municipalities, "
             "and query_type='threshold' with 'threshold' + 'operator' for "
-            "above/below questions. Set count_only=true when the user only asks HOW "
-            "MANY municipalities match."
+            "above/below questions. For highest/lowest rankings, use "
+            "query_type='ranking', ranking_order='highest' or 'lowest', and top_n "
+            "equal to the number requested; if the user gives no number, omit top_n "
+            "to use the default of 5. If more than N municipalities tie for the "
+            "highest/lowest value, report the tie count and list all tied municipalities "
+            "when the tie count is at most 20; otherwise report the count without names. "
+            "Set count_only=true when the user only "
+            "asks HOW MANY municipalities match."
         ),
         parameters=[
             ToolParameter(
@@ -265,13 +357,13 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             ToolParameter(
                 name="query_type",
                 description=(
-                    "'values' = value of the index for the municipalities listed in "
-                    "'municipalities'; 'threshold' = municipalities whose value is "
-                    "above/below 'threshold'."
+                    "'values' = values for listed municipalities; 'threshold' = "
+                    "municipalities above/below a threshold; 'ranking' = the N "
+                    "municipalities with the highest or lowest values."
                 ),
                 type="string",
                 required=True,
-                schema={"enum": ["values", "threshold"]},
+                schema={"enum": ["values", "threshold", "ranking"]},
             ),
             ToolParameter(
                 name="municipalities",
@@ -314,13 +406,90 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
                 required=False,
                 default=False,
             ),
+            ToolParameter(
+                name="ranking_order",
+                description=(
+                    "Required for query_type='ranking': 'highest' for largest values "
+                    "first or 'lowest' for smallest values first."
+                ),
+                type="string",
+                required=False,
+                schema={"enum": ["highest", "lowest"]},
+            ),
+            ToolParameter(
+                name="top_n",
+                description=(
+                    "For query_type='ranking': number of municipalities requested "
+                    "(1–20). Use the exact N requested; defaults to 5 when omitted. "
+                    "If more than N municipalities tie at the highest/lowest value, "
+                    "the result includes all tied municipalities if there are at most "
+                    "20; larger ties return the count without names."
+                ),
+                type="integer",
+                required=False,
+                default=5,
+            ),
+            ToolParameter(
+                name="indicator",
+                description=(
+                    "Concrete index id to analyze when index_id is an additional label "
+                    "('tasso-variazione' or 'incidenza-periodo'). Resolve it from "
+                    "get_territorial_index_list. Required for those labels; omit for "
+                    "an ordinary index."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="start_date_comparison",
+                description=(
+                    "Comparison-period start date (YYYY-MM-DD), required when "
+                    "index_id='tasso-variazione'; omit otherwise."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="end_date_comparison",
+                description=(
+                    "Comparison-period end date (YYYY-MM-DD), required when "
+                    "index_id='tasso-variazione'; omit otherwise."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="seasonality",
+                description=(
+                    "Required when index_id='incidenza-periodo': 'weekend', "
+                    "'weekdays' (working days), 'festivities', 'summer-months', or "
+                    "'winter-months'. Omit otherwise."
+                ),
+                type="string",
+                required=False,
+                schema={
+                    "enum": [
+                        "weekend",
+                        "weekdays",
+                        "festivities",
+                        "summer-months",
+                        "winter-months",
+                    ]
+                },
+            ),
         ],
         output_description=(
             "For 'values': 'values' (area_name + index_value per matched municipality) "
             "and 'not_found' (names that didn't match, with suggestions). For "
             "'threshold': 'matching_count', 'total_areas_considered' and, unless "
             "count_only, 'municipalities' sorted by value (capped; 'list_truncated' "
-            "says if so)."
+            "says if so). For 'ranking': 'ranked_municipalities' in requested order, "
+            "each with area_name and index_value, plus returned_count and the total "
+            "number of areas considered. Rankings use unrounded backend values for "
+            "ordering, and return the displayed index values as received. If a tie "
+            "for the extreme value exceeds the requested N, the tie count is reported; "
+            "the full tied list is returned only when its size is at most 20, otherwise "
+            "'ranking_list_omitted' is true and no names are returned."
         ),
         tags=["data", "read-only", "territorial-index", "query"],
         agent_tier="executor",

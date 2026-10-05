@@ -80,6 +80,86 @@ class TestGetAllowedTerritories:
         assert result == ["territory-1"]
 
 
+class TestTerritorialIndexBackendTools:
+    def test_index_list_preserves_additional_labels_and_formats_descriptions(self):
+        payload = {
+            "indicators": [
+                {
+                    "value": "ricettivita",
+                    "label": "Indice di ricettività",
+                    "index_description": "<strong>Indice</strong> base",
+                    "index_value_unit_description": "Rapporto",
+                    "availableForVariation": True,
+                    "years_range": {"min_year": 2020, "max_year": 2023},
+                }
+            ],
+            "additional_labels": [
+                {
+                    "value": "tasso-variazione",
+                    "label": "Tasso di variazione",
+                    "index_description": "<strong>Variazione</strong>",
+                    "index_value_unit_description": "Percentuale",
+                }
+            ],
+        }
+        with patch.object(bt, "get_data", return_value=payload):
+            result = bt.get_territorial_index_list.invoke({})
+
+        assert result["indicators"][0]["index_id"] == "ricettivita"
+        assert result["indicators"][0]["description"] == "**Indice** base"
+        assert result["indicators"][0]["value_unit_description"] == "Rapporto"
+        assert result["additional_labels"] == [
+            {
+                "index_id": "tasso-variazione",
+                "label": "Tasso di variazione",
+                "description": "**Variazione**",
+                "value_unit_description": "Percentuale",
+            }
+        ]
+
+    def test_map_data_forwards_additional_indicator_query_parameters(self):
+        with patch.object(bt, "get_data", return_value={}) as mock_get:
+            bt.get_territorial_index_map_data.invoke(
+                {
+                    "index": "tasso-variazione",
+                    "start_date": "2022-01-01",
+                    "end_date": "2022-12-31",
+                    "spatial_granularity": "comune",
+                    "indicator": "ricettivita",
+                    "start_date_comparison": "2023-01-01",
+                    "end_date_comparison": "2023-12-31",
+                }
+            )
+
+        params = mock_get.call_args.kwargs["params"]
+        assert params == {
+            "index": "tasso-variazione",
+            "start_date": "2022-01-01",
+            "end_date": "2022-12-31",
+            "spatial_granularity": "comune",
+            "indicator": "ricettivita",
+            "start_date_comparison": "2023-01-01",
+            "end_date_comparison": "2023-12-31",
+        }
+
+    def test_map_data_omits_unprovided_additional_parameters(self):
+        with patch.object(bt, "get_data", return_value={}) as mock_get:
+            bt.get_territorial_index_map_data.invoke(
+                {
+                    "index": "ricettivita",
+                    "start_date": "2022-01-01",
+                    "end_date": "2022-12-31",
+                }
+            )
+
+        assert mock_get.call_args.kwargs["params"] == {
+            "index": "ricettivita",
+            "start_date": "2022-01-01",
+            "end_date": "2022-12-31",
+            "spatial_granularity": "comune",
+        }
+
+
 class TestPostData:
     def test_post_data_sets_content_type_and_accept_headers(self):
         with patch.object(

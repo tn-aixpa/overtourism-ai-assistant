@@ -42,7 +42,6 @@ def check_authorization(token: str) -> bool:
     url = f"{BACKEND_URL}auth/me"
     headers = {"Authorization": f"Bearer {token}"}
     api_response = get_data(url, headers=headers)
-    logger.info(api_response)
     return api_response.get("authenticated", False)
 
 

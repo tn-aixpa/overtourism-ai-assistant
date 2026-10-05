@@ -211,8 +211,15 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
         case "get_territorial_index_list":
             return [
-                "Here are the available territorial indexes: "
+                "Here are the available territorial indexes and additional "
+                "indicators that can be combined with a selected index: "
                 f"{truncate_for_prompt(output.get('indexes', output), max_chars=8000)}"
+                + (
+                    " Additional labels (use in combination with one of the indexes): "
+                    f"{truncate_for_prompt(output['additional_labels'], max_chars=2500)}"
+                    if output.get("additional_labels")
+                    else ""
+                )
             ]
 
         case "show_territorial_index_map":
