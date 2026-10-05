@@ -35,7 +35,7 @@ def create_new_proposal_tool() -> ToolDefinition:
         tags=["write", "proposal"],
         agent_tier="executor",
         requires_territory=True,
-        allowed_roles=("admin", "standard"),
+        allowed_roles=("admin", "multieditor", "editor"),
         allowed_modes=("standalone", "internal"),
     )
 
@@ -51,7 +51,7 @@ def edit_proposal_tool() -> ToolDefinition:
         tags=["write", "proposal"],
         agent_tier="executor",
         requires_territory=True,
-        allowed_roles=("admin", "standard"),
+        allowed_roles=("admin", "multieditor", "editor"),
         allowed_modes=("standalone", "internal"),
     )
 
@@ -67,7 +67,7 @@ def delete_proposal_tool() -> ToolDefinition:
         tags=["write", "proposal"],
         agent_tier="executor",
         requires_territory=True,
-        allowed_roles=("admin", "standard"),
+        allowed_roles=("admin", "multieditor", "editor"),
         allowed_modes=("standalone", "internal"),
     )
 

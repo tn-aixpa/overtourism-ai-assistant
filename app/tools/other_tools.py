@@ -3,7 +3,7 @@ import requests
 from langchain.tools import tool
 import logging
 
-from app.utils.common import _merge_auth_headers
+from app.utils.backend_utils import _merge_auth_headers
 
 logger = logging.getLogger(__name__)
 

@@ -3,80 +3,9 @@ import requests
 from langchain.tools import tool
 import logging
 
-from app.utils.common import _merge_auth_headers
-
-BACKEND_URL = os.environ.get("BACKEND_URL")
+from app.utils.backend_utils import get_data, post_data, put_data, delete_data
 
 logger = logging.getLogger(__name__)
-
-# Never let a backend call hang a turn forever (a hung turn never sends
-# "__done__").
-BACKEND_TIMEOUT = 30  # seconds
-
-
-def _log_response(response: requests.Response) -> None:
-    logger.info(f"Response status: {response.status_code}")
-    try:
-        logger.info(f"Response body: {response.json()}")
-    except Exception:
-        logger.info(f"Response text: {response.text}")
-
-
-def get_data(url, headers=None, params=None):
-    logger.info(f"Fetching data from URL: {url}")
-    response = requests.get(
-        url,
-        headers=_merge_auth_headers(headers),
-        params=params,
-        timeout=BACKEND_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def post_data(url, json=None, headers=None, params=None):
-    logger.info(f"Posting data to URL: {url}")
-    merged_headers = {
-        "accept": "application/json",
-        "Content-Type": "application/json",
-        **_merge_auth_headers(headers),
-    }
-    response = requests.post(
-        url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT
-    )
-    _log_response(response)
-    response.raise_for_status()
-    return response.json()
-
-
-def put_data(url, json=None, headers=None, params=None):
-    logger.info(f"Putting data to URL: {url}")
-    merged_headers = {
-        "accept": "application/json",
-        "Content-Type": "application/json",
-        **_merge_auth_headers(headers),
-    }
-    response = requests.put(
-        url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT
-    )
-    _log_response(response)
-    response.raise_for_status()
-    return response.json()
-
-
-def delete_data(url, headers=None, params=None):
-    logger.info(f"Deleting data at URL: {url}")
-    response = requests.delete(
-        url,
-        headers=_merge_auth_headers(headers),
-        params=params,
-        timeout=BACKEND_TIMEOUT,
-    )
-    _log_response(response)
-    response.raise_for_status()  # 500 (or 404) on missing entry propagates as an exception here
-    if not response.content:
-        return {"success": True}
-    return response.json()
 
 
 def clean_scenario(raw_data):
@@ -114,18 +43,10 @@ def clean_scenario(raw_data):
     }
 
 
-def get_allowed_territories(token: str | None = None):
-    url = f"{BACKEND_URL}default/territories"
-    headers = {"Authorization": f"Bearer {token}"} if token else None
-    territories = get_data(url, headers=headers)
-    logger.info(f"Allowed territories: {territories}")
-    return territories
-
-
 @tool
 def get_all_problems(territory: str):
     """Fetch all problems from the API."""
-    url = f"{BACKEND_URL}{territory}/problems"
+    url = f"{territory}/problems"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -142,7 +63,7 @@ def get_all_problems(territory: str):
 @tool
 def get_all_proposals(territory: str):
     """Fetch all proposals from the API."""
-    url = f"{BACKEND_URL}{territory}/proposals"
+    url = f"{territory}/proposals"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -160,7 +81,7 @@ def get_all_proposals(territory: str):
 @tool
 def get_all_scenarios(territory: str):
     """Fetch all scenarios from the API."""
-    url = f"{BACKEND_URL}{territory}/scenarios"
+    url = f"{territory}/scenarios"
     extracted_data = get_data(url)
 
     cleaned_data = [
@@ -178,7 +99,7 @@ def get_single_problem(problem_id: str, territory: str, cleaned: bool = True) ->
     """Fetch a single problem instance (internal helper, not exposed as an agent tool)."""
     logger.info(f"Retrieving info for problem {problem_id}")
 
-    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
+    url = f"{territory}/problems/{problem_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -206,7 +127,7 @@ def get_single_proposal(proposal_id: str, territory, cleaned: bool = True) -> di
 
     logger.info(f"Retrieving info for proposal {proposal_id}")
 
-    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
+    url = f"{territory}/proposals/{proposal_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -238,7 +159,7 @@ def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> di
 
     logger.info(f"Retrieving info for scenario {scenario_id}")
 
-    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
+    url = f"{territory}/scenarios/{scenario_id}"
     extracted_data = get_data(url)
 
     if not cleaned:
@@ -264,7 +185,7 @@ def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> di
 @tool
 def get_widgets(territory: str) -> dict:
     """Fetch all tunable configuration parameters (widgets) from the API."""
-    url = f"{BACKEND_URL}{territory}/configuration"
+    url = f"{territory}/configuration"
     extracted_data = get_data(url)
     return extracted_data.get("indexes", [])
 
@@ -272,7 +193,7 @@ def get_widgets(territory: str) -> dict:
 @tool
 def create_cration_session(territory: str):
     """Create a creation session to handle temporary scenario(s)"""
-    url = f"{BACKEND_URL}{territory}/sessions/"
+    url = f"{territory}/sessions/"
     raw_data = post_data(url, json={})
     return raw_data["session_id"]
 
@@ -301,7 +222,7 @@ def create_temp_scenario(
     )
 
     # Step 1. Create the temporary scenario
-    url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/scenarios/"
+    url = f"{territory}/sessions/{creation_session}/scenarios/"
 
     body = {
         "base_scenario_id": base_scenario_id,
@@ -314,7 +235,7 @@ def create_temp_scenario(
     logger.info(f"Step1. Created scenario: {created_scenario}")
 
     # Step 2. Created associated evaluation
-    url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/"
+    url = f"{territory}/sessions/{creation_session}/evaluations/"
     body = {
         "scenario_id": created_scenario["scenario_id"],
     }
@@ -323,7 +244,7 @@ def create_temp_scenario(
     logger.info(f"Step 2. Created evalutation: {created_eval}")
 
     # Step 3. Return evaluation results
-    eval_url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
+    eval_url = f"{territory}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
     raw_data = get_data(eval_url)
 
     logger.info(f"Step 3.1 Raw eval results {raw_data}")
@@ -346,7 +267,7 @@ def create_evaluation(territory: str, scenario_id: str) -> dict:
     """
     logger.info("Entered tool create_evaluation")
 
-    url = f"{BACKEND_URL}{territory}/evaluations/"
+    url = f"{territory}/evaluations/"
     body = {"scenario_id": scenario_id}
 
     return post_data(url, json=body)
@@ -370,9 +291,7 @@ def promote_scenario(
     """
     logger.info("Entered tool promote_scenario")
 
-    url = (
-        f"{BACKEND_URL}{territory}/sessions/{creation_session}/scenarios/{scenario_id}"
-    )
+    url = f"{territory}/sessions/{creation_session}/scenarios/{scenario_id}"
 
     body = {"name": name, "description": description, "proposal_id": proposal_id}
 
@@ -385,7 +304,7 @@ def get_base_scenario(territory) -> str:
 
     logger.info(f"Retrieving id of base scenario")
 
-    url = f"{BACKEND_URL}{territory}/scenarios?base_only=true"
+    url = f"{territory}/scenarios?base_only=true"
     extracted_data = get_data(url)
 
     return extracted_data["scenario_id"]
@@ -414,7 +333,9 @@ def get_temp_evaluation_data(
         f"evaluation {evaluation_id}"
     )
 
-    eval_url = f"{BACKEND_URL}{territory}/sessions/{creation_session}/evaluations/{evaluation_id}/data"
+    eval_url = (
+        f"{territory}/sessions/{creation_session}/evaluations/{evaluation_id}/data"
+    )
     raw_data = get_data(eval_url)
 
     cleaned = clean_scenario(raw_data)
@@ -462,9 +383,7 @@ def get_evaluation_data(current_context, territory):
     evaluations_ids = {}
     for scenario_id in scenario_ids:
         try:
-            evals_url = (
-                f"{BACKEND_URL}{territory}/evaluations/?scenario_id={scenario_id}"
-            )
+            evals_url = f"{territory}/evaluations/?scenario_id={scenario_id}"
             support = get_data(evals_url)
             evaluations_ids[scenario_id] = support[0]["evaluation_id"]
         except Exception as e:
@@ -474,7 +393,7 @@ def get_evaluation_data(current_context, territory):
 
     for scenario_id, eval_id in evaluations_ids.items():
         try:
-            eval_url = f"{BACKEND_URL}{territory}/evaluations/{eval_id}/data"
+            eval_url = f"{territory}/evaluations/{eval_id}/data"
             raw_data = get_data(eval_url)
 
             cleaned = clean_scenario(raw_data)
@@ -504,7 +423,7 @@ def create_new_problem(
     """
     logger.info("Entered tool create_new_problem")
 
-    url = f"{BACKEND_URL}{territory}/problems/"
+    url = f"{territory}/problems/"
 
     body = {"name": name, "description": description, "extras": {}}
     if objective:
@@ -534,7 +453,7 @@ def create_new_proposal(
     """
     logger.info("Entered tool create_new_proposal")
 
-    url = f"{BACKEND_URL}{territory}/proposals/"
+    url = f"{territory}/proposals/"
 
     body = {
         "problem_id": problem_id,
@@ -570,7 +489,7 @@ def edit_problem(
     """
     logger.info("Entered tool edit_problem")
 
-    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
+    url = f"{territory}/problems/{problem_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # extras), not a partial patch. Fetch the current instance first so any
@@ -613,7 +532,7 @@ def edit_proposal(
     """
     logger.info("Entered tool edit_proposal")
 
-    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
+    url = f"{territory}/proposals/{proposal_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
@@ -661,7 +580,7 @@ def edit_scenario(
     """
     logger.info("Entered tool edit_scenario")
 
-    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
+    url = f"{territory}/scenarios/{scenario_id}"
 
     # The backend expects the full instance on PUT (version, name, description,
     # status, extras, related_scenario_ids), not a partial patch. Fetch the
@@ -691,7 +610,7 @@ def delete_problem(problem_id: str, territory: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_problem")
-    url = f"{BACKEND_URL}{territory}/problems/{problem_id}"
+    url = f"{territory}/problems/{problem_id}"
 
     # DELETE responses are often empty (or just {"success": true}), which has
     # no "name" for the confirmation message. Grab it beforehand.
@@ -715,7 +634,7 @@ def delete_proposal(proposal_id: str, territory: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_proposal")
-    url = f"{BACKEND_URL}{territory}/proposals/{proposal_id}"
+    url = f"{territory}/proposals/{proposal_id}"
 
     name = proposal_id
     try:
@@ -737,7 +656,7 @@ def delete_scenario(scenario_id: str, territory: str):
         A dict with a confirmation message
     """
     logger.info("Entered tool delete_scenario")
-    url = f"{BACKEND_URL}{territory}/scenarios/{scenario_id}"
+    url = f"{territory}/scenarios/{scenario_id}"
 
     name = scenario_id
     try:
@@ -763,7 +682,7 @@ def _strong_html_to_markdown(text: str) -> str:
 @tool
 def get_territorial_index_list() -> dict:
     """Fetch the list of available territorial indexes (with descriptions) from the API."""
-    url = f"{BACKEND_URL}default/indexes/get-index-list"
+    url = f"default/indexes/get-index-list"
     extracted_data = get_data(url)
 
     indicators = [
@@ -804,7 +723,7 @@ def get_territorial_index_map_data(
 ) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
-    url = f"{BACKEND_URL}default/indexes/get_index_data"
+    url = f"default/indexes/get_index_data"
     params = {
         "index": index,
         "start_date": start_date,
@@ -831,7 +750,7 @@ def get_territorial_index_plot_data(
 ) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
-    url = f"{BACKEND_URL}default/indexes/get-variation-data"
+    url = f"default/indexes/get-variation-data"
     params = {
         "index": index,
         "start_date": start_date,

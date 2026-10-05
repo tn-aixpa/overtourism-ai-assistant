@@ -317,7 +317,7 @@ class AgentState:
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
     # Coarse-grained role this session is authenticated as — "admin",
-    # "standard", or "viewer" (see app.tools.tool_schema.UserRole). Kept
+    # "multieditor", "editor", or "viewer" (see app.tools.tool_schema.UserRole). Kept
     # as a plain string rather than importing UserRole here, for the same
     # tools->agent circular-import reason agent_tier is a plain string on
     # ToolDefinition (see AgentTier's docstring below). Resolved once, from
@@ -330,7 +330,7 @@ class AgentState:
     # initialize_tools) and again by execute_selected_tool (tool
     # *execution*, so a direct/explicit call — e.g. the /agent/tool
     # pipeline — can't bypass the same rule).
-    user_role: str = "standard"
+    user_role: str = "viewer"
     # Which surface this session is running under — "standalone",
     # "internal", or "system" (see app.tools.tool_schema.SessionMode).
     # Same plain-string rationale as user_role above. Derived once at

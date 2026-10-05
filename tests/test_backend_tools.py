@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.tools import executor_backend_tools as bt
-from app.utils.authentication import check_authorization
+from app.tools import executor_backend_tools as backend_tools
+from app.utils import backend_utils as bt
 from app.utils.common import set_token
 
 
@@ -74,7 +74,7 @@ class TestGetAllowedTerritories:
             result = bt.get_allowed_territories("test-token-123")
 
         mock_get.assert_called_once_with(
-            f"{bt.BACKEND_URL}default/territories",
+            f"default/territories",
             headers={"Authorization": "Bearer test-token-123"},
         )
         assert result == ["territory-1"]
@@ -102,8 +102,8 @@ class TestTerritorialIndexBackendTools:
                 }
             ],
         }
-        with patch.object(bt, "get_data", return_value=payload):
-            result = bt.get_territorial_index_list.invoke({})
+        with patch.object(backend_tools, "get_data", return_value=payload):
+            result = backend_tools.get_territorial_index_list.invoke({})
 
         assert result["indicators"][0]["index_id"] == "ricettivita"
         assert result["indicators"][0]["description"] == "**Indice** base"
@@ -118,8 +118,8 @@ class TestTerritorialIndexBackendTools:
         ]
 
     def test_map_data_forwards_additional_indicator_query_parameters(self):
-        with patch.object(bt, "get_data", return_value={}) as mock_get:
-            bt.get_territorial_index_map_data.invoke(
+        with patch.object(backend_tools, "get_data", return_value={}) as mock_get:
+            backend_tools.get_territorial_index_map_data.invoke(
                 {
                     "index": "tasso-variazione",
                     "start_date": "2022-01-01",
@@ -143,8 +143,8 @@ class TestTerritorialIndexBackendTools:
         }
 
     def test_map_data_omits_unprovided_additional_parameters(self):
-        with patch.object(bt, "get_data", return_value={}) as mock_get:
-            bt.get_territorial_index_map_data.invoke(
+        with patch.object(backend_tools, "get_data", return_value={}) as mock_get:
+            backend_tools.get_territorial_index_map_data.invoke(
                 {
                     "index": "ricettivita",
                     "start_date": "2022-01-01",
@@ -220,8 +220,10 @@ class TestDeleteData:
 
 class TestCreateNewProblem:
     def test_builds_body_with_extras_only_when_provided(self):
-        with patch.object(bt, "post_data", return_value={"name": "P"}) as mock_post:
-            bt.create_new_problem.invoke(
+        with patch.object(
+            backend_tools, "post_data", return_value={"name": "P"}
+        ) as mock_post:
+            backend_tools.create_new_problem.invoke(
                 {
                     "territory": "t1",
                     "name": "P",
@@ -237,8 +239,10 @@ class TestCreateNewProblem:
         assert body["extras"] == {"objective": "reduce congestion"}
 
     def test_empty_optional_fields_omitted_from_extras(self):
-        with patch.object(bt, "post_data", return_value={"name": "P"}) as mock_post:
-            bt.create_new_problem.invoke(
+        with patch.object(
+            backend_tools, "post_data", return_value={"name": "P"}
+        ) as mock_post:
+            backend_tools.create_new_problem.invoke(
                 {
                     "territory": "t1",
                     "name": "P",
@@ -251,8 +255,8 @@ class TestCreateNewProblem:
         assert kwargs["json"]["extras"] == {}
 
     def test_url_includes_territory(self):
-        with patch.object(bt, "post_data", return_value={}) as mock_post:
-            bt.create_new_problem.invoke(
+        with patch.object(backend_tools, "post_data", return_value={}) as mock_post:
+            backend_tools.create_new_problem.invoke(
                 {
                     "territory": "molveno",
                     "name": "P",
@@ -262,7 +266,7 @@ class TestCreateNewProblem:
                 }
             )
         args, _ = mock_post.call_args
-        assert args[0] == f"{bt.BACKEND_URL}molveno/problems/"
+        assert args[0] == f"molveno/problems/"
 
 
 # ---------------------------------------------------------------------------
@@ -278,11 +282,11 @@ class TestEditProblem:
             "description": "Old Desc",
             "extras": {"objective": "Old objective"},
         }
-        with patch.object(bt, "get_single_problem", return_value=existing):
+        with patch.object(backend_tools, "get_single_problem", return_value=existing):
             with patch.object(
-                bt, "put_data", return_value={"name": "Old Name"}
+                backend_tools, "put_data", return_value={"name": "Old Name"}
             ) as mock_put:
-                bt.edit_problem.invoke(
+                backend_tools.edit_problem.invoke(
                     {
                         "territory": "t1",
                         "problem_id": "p1",
@@ -305,9 +309,9 @@ class TestEditProblem:
             "description": "Old Desc",
             "extras": {"objective": "Old objective"},
         }
-        with patch.object(bt, "get_single_problem", return_value=existing):
-            with patch.object(bt, "put_data", return_value={}) as mock_put:
-                bt.edit_problem.invoke(
+        with patch.object(backend_tools, "get_single_problem", return_value=existing):
+            with patch.object(backend_tools, "put_data", return_value={}) as mock_put:
+                backend_tools.edit_problem.invoke(
                     {
                         "territory": "t1",
                         "problem_id": "p1",
@@ -341,9 +345,9 @@ class TestEditProposal:
             "extras": {},
             "related_scenario_ids": ["s1", "s2"],
         }
-        with patch.object(bt, "get_single_proposal", return_value=existing):
-            with patch.object(bt, "put_data", return_value={}) as mock_put:
-                bt.edit_proposal.invoke(
+        with patch.object(backend_tools, "get_single_proposal", return_value=existing):
+            with patch.object(backend_tools, "put_data", return_value={}) as mock_put:
+                backend_tools.edit_proposal.invoke(
                     {
                         "territory": "t1",
                         "proposal_id": "pr1",
@@ -368,9 +372,9 @@ class TestEditProposal:
             "extras": {},
             "related_scenario_ids": [],
         }
-        with patch.object(bt, "get_single_proposal", return_value=existing):
-            with patch.object(bt, "put_data", return_value={}) as mock_put:
-                bt.edit_proposal.invoke(
+        with patch.object(backend_tools, "get_single_proposal", return_value=existing):
+            with patch.object(backend_tools, "put_data", return_value={}) as mock_put:
+                backend_tools.edit_proposal.invoke(
                     {
                         "territory": "t1",
                         "proposal_id": "pr1",
@@ -393,9 +397,9 @@ class TestEditProposal:
             "extras": {},
             "related_scenario_ids": [],
         }
-        with patch.object(bt, "get_single_proposal", return_value=existing):
-            with patch.object(bt, "put_data", return_value={}) as mock_put:
-                bt.edit_proposal.invoke(
+        with patch.object(backend_tools, "get_single_proposal", return_value=existing):
+            with patch.object(backend_tools, "put_data", return_value={}) as mock_put:
+                backend_tools.edit_proposal.invoke(
                     {
                         "territory": "t1",
                         "proposal_id": "pr1",
@@ -418,50 +422,62 @@ class TestEditProposal:
 class TestDeleteProblem:
     def test_returns_fetched_name_on_success(self):
         with patch.object(
-            bt, "get_single_problem", return_value={"name": "Overtourism"}
+            backend_tools, "get_single_problem", return_value={"name": "Overtourism"}
         ):
-            with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_problem.invoke(
+            with patch.object(
+                backend_tools, "delete_data", return_value={"success": True}
+            ):
+                result = backend_tools.delete_problem.invoke(
                     {"problem_id": "p1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "Overtourism"}
 
     def test_falls_back_to_id_when_fetch_fails(self):
         with patch.object(
-            bt, "get_single_problem", side_effect=RuntimeError("not found")
+            backend_tools, "get_single_problem", side_effect=RuntimeError("not found")
         ):
-            with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_problem.invoke(
+            with patch.object(
+                backend_tools, "delete_data", return_value={"success": True}
+            ):
+                result = backend_tools.delete_problem.invoke(
                     {"problem_id": "p1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "p1"}
 
     def test_delete_still_called_even_if_prefetch_fails(self):
-        with patch.object(bt, "get_single_problem", side_effect=RuntimeError("boom")):
+        with patch.object(
+            backend_tools, "get_single_problem", side_effect=RuntimeError("boom")
+        ):
             with patch.object(
-                bt, "delete_data", return_value={"success": True}
+                backend_tools, "delete_data", return_value={"success": True}
             ) as mock_del:
-                bt.delete_problem.invoke({"problem_id": "p1", "territory": "t1"})
+                backend_tools.delete_problem.invoke(
+                    {"problem_id": "p1", "territory": "t1"}
+                )
         mock_del.assert_called_once()
 
 
 class TestDeleteProposalAndScenario:
     def test_delete_proposal_returns_name(self):
         with patch.object(
-            bt, "get_single_proposal", return_value={"name": "Strategy A"}
+            backend_tools, "get_single_proposal", return_value={"name": "Strategy A"}
         ):
-            with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_proposal.invoke(
+            with patch.object(
+                backend_tools, "delete_data", return_value={"success": True}
+            ):
+                result = backend_tools.delete_proposal.invoke(
                     {"proposal_id": "pr1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "Strategy A"}
 
     def test_delete_scenario_returns_name(self):
         with patch.object(
-            bt, "get_single_scenario", return_value={"name": "Cap at 500"}
+            backend_tools, "get_single_scenario", return_value={"name": "Cap at 500"}
         ):
-            with patch.object(bt, "delete_data", return_value={"success": True}):
-                result = bt.delete_scenario.invoke(
+            with patch.object(
+                backend_tools, "delete_data", return_value={"success": True}
+            ):
+                result = backend_tools.delete_scenario.invoke(
                     {"scenario_id": "sc1", "territory": "t1"}
                 )
         assert result == {"success": True, "name": "Cap at 500"}
@@ -476,13 +492,13 @@ class TestGetDataFromContext:
     def test_fetches_each_id_in_each_category(self):
         context = {"problems": ["p1"], "proposals": [], "scenarios": []}
         with patch.object(
-            bt, "get_data", return_value={"id": "p1", "name": "P"}
+            backend_tools, "get_data", return_value={"id": "p1", "name": "P"}
         ) as mock_get:
-            result = bt.get_data_from_context.invoke(
+            result = backend_tools.get_data_from_context.invoke(
                 {"current_context": context, "territory": "t1", "cleaned": False}
             )
         assert result == {"retrieved": {"problems p1": {"id": "p1", "name": "P"}}}
-        mock_get.assert_called_once_with(f"{bt.BACKEND_URL}t1/problems/p1")
+        mock_get.assert_called_once_with(f"t1/problems/p1")
 
     def test_scenario_fetch_attaches_evaluation_data_when_found(self):
         context = {"problems": [], "proposals": [], "scenarios": ["sc1"]}
@@ -496,8 +512,8 @@ class TestGetDataFromContext:
                 return {"kpi": 42}
             raise AssertionError(f"unexpected url {url}")
 
-        with patch.object(bt, "get_data", side_effect=fake_get_data):
-            result = bt.get_data_from_context.invoke(
+        with patch.object(backend_tools, "get_data", side_effect=fake_get_data):
+            result = backend_tools.get_data_from_context.invoke(
                 {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
@@ -514,8 +530,8 @@ class TestGetDataFromContext:
                 return []  # no matching evaluation
             raise AssertionError(f"unexpected url {url}")
 
-        with patch.object(bt, "get_data", side_effect=fake_get_data):
-            result = bt.get_data_from_context.invoke(
+        with patch.object(backend_tools, "get_data", side_effect=fake_get_data):
+            result = backend_tools.get_data_from_context.invoke(
                 {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
@@ -530,9 +546,9 @@ class TestGetDataFromContext:
                 return {"id": "sc1", "name": "Cap 500"}
             raise RuntimeError("evaluations service down")
 
-        with patch.object(bt, "get_data", side_effect=fake_get_data):
+        with patch.object(backend_tools, "get_data", side_effect=fake_get_data):
             # Should not raise despite the evaluations lookup failing.
-            result = bt.get_data_from_context.invoke(
+            result = backend_tools.get_data_from_context.invoke(
                 {"current_context": context, "territory": "t1", "cleaned": False}
             )
 
@@ -540,7 +556,7 @@ class TestGetDataFromContext:
 
     def test_empty_context_returns_empty_retrieved(self):
         context = {"problems": [], "proposals": [], "scenarios": []}
-        result = bt.get_data_from_context.invoke(
+        result = backend_tools.get_data_from_context.invoke(
             {"current_context": context, "territory": "t1"}
         )
         assert result == {"retrieved": {}}

@@ -30,7 +30,8 @@ class UserRole(str, Enum):
     """
 
     ADMIN = "admin"
-    STANDARD = "standard"
+    MULTIEDITOR = "multieditor"
+    EDITOR = "editor"
     VIEWER = "viewer"
 
 
@@ -81,7 +82,7 @@ def _normalize_access_set(
 
     Accepts a single string/Enum member or any iterable of them, so a
     tool definition can write `allowed_roles="admin"` or
-    `allowed_roles=[UserRole.ADMIN, UserRole.STANDARD]` interchangeably.
+    `allowed_roles=[UserRole.ADMIN, UserRole.EDITOR]` interchangeably.
     Raises ValueError — at tool-registration time, not at filtering time —
     for an empty iterable (would silently mean "nobody may ever select
     this tool", almost certainly not what was intended) or any value

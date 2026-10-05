@@ -67,12 +67,40 @@ class TestToolRegistryFiltering:
             "admin_internal",
             "open_tool",
         }
-        assert set(reg.get_context_tools(role="standard", mode="internal")) == {
+        assert set(reg.get_context_tools(role="viewer", mode="internal")) == {
             "open_tool"
         }
         assert set(reg.get_context_tools(role="admin", mode="standalone")) == {
             "open_tool"
         }
+
+    def test_write_tool_permissions_include_editors_but_exclude_viewers(self):
+        from app.tools.definitions import get_all_agent_tools
+
+        tools = {tool.name: tool for tool in get_all_agent_tools()}
+        expected_roles = {"admin", "multieditor", "editor"}
+
+        for name in (
+            "create_new_problem",
+            "edit_problem",
+            "delete_problem",
+            "create_new_proposal",
+            "edit_proposal",
+            "delete_proposal",
+            "create_new_scenario",
+            "edit_scenario",
+            "delete_scenario",
+            "explain_workflow",
+            "general_question_response",
+        ):
+            assert tools[name].allowed_roles == expected_roles
+            assert not tools[name].is_allowed_for("viewer", "standalone")
+            assert tools[name].is_allowed_for("editor", "standalone")
+
+    def test_user_role_enum_contains_backend_roles(self):
+        from app.tools.tool_schema import ALL_USER_ROLES
+
+        assert ALL_USER_ROLES == {"admin", "multieditor", "editor", "viewer"}
 
     def test_get_all_known_tools_excludes_disabled(self):
         reg = ToolRegistry()

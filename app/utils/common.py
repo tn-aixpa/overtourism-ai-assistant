@@ -9,36 +9,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Never let a backend call hang a turn forever (a hung turn never sends
-# "__done__").
-BACKEND_TIMEOUT = 30  # seconds
-
-AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
-BACKEND_URL = os.environ.get("BACKEND_URL")
-
-
-def _merge_auth_headers(headers: dict | None) -> dict:
-    """Ensure Authorization is present, without overriding an explicitly-provided one."""
-
-    merged = dict(headers) if headers else {}
-
-    if AUTH_ENABLED and "Authorization" not in merged:
-        merged["Authorization"] = f"Bearer {get_token()}"
-
-    return merged
-
-
-def get_data(url, headers=None, params=None):
-    logger.info(f"Fetching data from URL: {url}")
-    response = requests.get(
-        url,
-        headers=_merge_auth_headers(headers),
-        params=params,
-        timeout=BACKEND_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
-
 
 # =========================
 # PROMPT-SIZE GUARDS

@@ -5,8 +5,9 @@ Columns: tool_name, agent_tier, allowed_users, allowed_modes
 
 `allowed_users` / `allowed_modes` are rendered as "ALL" when the tool
 declares no restriction on that axis (ToolDefinition.allowed_roles /
-allowed_modes is None), or as a comma-separated, sorted list of the
-declared values otherwise (e.g. "admin,standard").
+allowed_modes is None), or as a comma-separated list of declared values
+otherwise. User roles use privilege order (admin, multieditor, editor,
+viewer); modes are sorted alphabetically.
 
 Usage:
     python -m scripts.export_tool_access_csv [-o path/to/output.csv]
@@ -31,11 +32,13 @@ from app.tools.tool_registry import _ensure_tool_registry  # noqa: E402
 DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "tool_access.csv"
 
 
-def _format_access_set(values) -> str:
-    """None (unrestricted) -> "ALL"; otherwise a sorted, comma-joined list."""
+def _format_access_set(values, *, preferred_order: tuple[str, ...] = ()) -> str:
+    """None (unrestricted) -> "ALL"; otherwise ordered, comma-joined values."""
     if values is None:
         return "ALL"
-    return ",".join(sorted(values))
+    ordered = [value for value in preferred_order if value in values]
+    ordered.extend(sorted(set(values) - set(ordered)))
+    return ",".join(ordered)
 
 
 def build_rows() -> list[dict[str, str]]:
@@ -50,7 +53,10 @@ def build_rows() -> list[dict[str, str]]:
         {
             "tool_name": tool.name,
             "agent_tier": tool.agent_tier,
-            "allowed_users": _format_access_set(tool.allowed_roles),
+            "allowed_users": _format_access_set(
+                tool.allowed_roles,
+                preferred_order=("admin", "multieditor", "editor", "viewer"),
+            ),
             "allowed_modes": _format_access_set(tool.allowed_modes),
         }
         for tool in tools

@@ -43,9 +43,8 @@ from app.utils.authentication import (
     _require_bearer_token,
     check_authorization,
     get_user_id,
-    get_user_role,
 )
-from app.tools.executor_backend_tools import get_allowed_territories
+from app.utils.backend_utils import get_allowed_territories, get_user_role
 
 logger = logging.getLogger(__name__)
 

@@ -112,7 +112,7 @@ def create_general_question_response_tool() -> ToolDefinition:
         agent_tier="exploitative",
         tags=["general", "ungrounded", "exploitative-tier"],
         allowed_modes=("standalone", "internal"),
-        allowed_roles=("admin", "standard"),
+        allowed_roles=("admin", "multieditor", "editor"),
     )
 
 
@@ -199,7 +199,7 @@ def create_explain_workflow_tool() -> ToolDefinition:
         tags=["data", "read-only", "workflow", "methodology", "system"],
         agent_tier="methodological",
         allowed_modes=("standalone", "internal"),
-        allowed_roles=("admin", "standard"),
+        allowed_roles=("admin", "multieditor", "editor"),
     )
 
 
