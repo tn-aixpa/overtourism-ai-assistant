@@ -22,6 +22,12 @@ from app.agent.nodes.utils import (
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolDefinition
 from app.tools.executors.system_utility import execute_lookup_glossary
+from app.utils.common import split_assistant_actions
+from app.utils.territory import (
+    is_valid_territory,
+    resolve_territory_if_trivial,
+    territory_question,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +157,16 @@ def execute_selected_tool(
             f"mode='{state.session_mode}'"
         )
 
+    # Hard backstop for the territory rule: tool_executor_node asks the user
+    # / auto-selects before getting here, but this function is also reachable
+    # directly (e.g. the /agent/tool pipeline), so never let a
+    # territory-scoped tool run against an unset or non-allowed territory.
+    if tool_def.requires_territory and not is_valid_territory(state, state.territory):
+        raise ValueError(
+            f"Tool '{tool_name}' requires a territory among "
+            f"{state.allowed_territories}, got {state.territory!r}"
+        )
+
     validate_tool_arguments(tool_def, tool_arguments)
 
     # Get the executor function for this tool
@@ -242,6 +258,28 @@ def tool_executor_node(state: AgentState) -> Command:
     # directly instead of entering the confirmation flow.
     registry = get_tool_registry()
     tool_def = registry.get_tool(tool_name)
+
+    # ---- Territory gate ----
+    # Problem/proposal/scenario (and analysis) tools work on territory-scoped
+    # data, so state.territory must be one of allowed_territories first.
+    # Checked before the required-parameter check: there is no point asking
+    # for tool data until we know which territory it is for. Resolved
+    # silently when trivial (already set from a previous task, only one
+    # allowed territory, or named unambiguously in the user's message);
+    # otherwise the turn pauses to ask, keeping this tool pending so it
+    # resumes right here once the user answers (see waiting.py,
+    # _handle_territory_wait).
+    if tool_def and tool_def.requires_territory:
+        if not resolve_territory_if_trivial(state):
+            if not state.allowed_territories:
+                state.cognitive.messages_to_include = [
+                    "No territory is available for this account, so this request cannot be handled."
+                ]
+                return Command(update=state, goto="generate_output_message")
+            logger.info(f"Pausing '{tool_name}' to ask which territory to use")
+            state.cognitive.pending_territory_selection = True
+            return Command(update=state, goto="WAIT_USER_INPUT")
+
     if tool_def:
         missing = _missing_required_params(tool_def, tool_arguments)
         if missing:
@@ -297,7 +335,18 @@ def tool_executor_node(state: AgentState) -> Command:
     publish_action(state.session_id, tool_name)
 
     try:
-        result = execute_selected_tool(tool_name, tool_arguments, state)
+        raw_result = execute_selected_tool(tool_name, tool_arguments, state)
+
+        # Split UI-only payloads (assistant_action_data, geojsonStr,
+        # plot_data) from the result BEFORE it is stored anywhere: the
+        # widget actions are dispatched to the frontend below, while only
+        # the slim result goes into tool_results / the scratchpad / the
+        # trace — from where it is later rendered into LLM prompts (see
+        # generate_output_message_node). Leaving the payload in there is
+        # what made assistant_action_data show up inside prompts.
+        raw_output = raw_result.get("output")
+        clean_output, assistant_actions = split_assistant_actions(raw_output)
+        result = {**raw_result, "output": clean_output}
 
         state.cognitive.tool_result = result
 
@@ -345,16 +394,9 @@ def tool_executor_node(state: AgentState) -> Command:
             state.cognitive.error_details = result.get("error", "Unknown error")
             return Command(update=state, goto="error")
 
-        tool_output = (
-            result.get("output", {}) if isinstance(result.get("output"), dict) else {}
-        )
-        assistant_actions = tool_output.get("assistant_action_data")
         if assistant_actions:
             existing = state.assistant_action_data or []
-            if isinstance(assistant_actions, list):
-                state.assistant_action_data = existing + assistant_actions
-            else:
-                state.assistant_action_data = existing + [assistant_actions]
+            state.assistant_action_data = existing + assistant_actions
 
         # The object this tool just edited/deleted may still be cached from
         # an earlier get_context_details — evict it so any later lookup

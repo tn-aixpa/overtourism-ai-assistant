@@ -4,6 +4,7 @@ import re
 
 from app.agent.state import AgentState, ReActStep
 from app.agent.nodes.router import resolve_clarification_reply
+from app.utils.territory import match_territories, territory_question
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,8 @@ def wait_user_input_node(state: AgentState):
     """
     if state.cognitive.pending_route_clarification:
         return _handle_route_clarification_wait(state)
+    if state.cognitive.pending_territory_selection:
+        return _handle_territory_wait(state)
     if state.cognitive.pending_tier_consent:
         return _handle_tier_consent_wait(state)
     return _handle_creation_confirmation_wait(state)
@@ -227,6 +230,67 @@ def _handle_route_clarification_wait(state: AgentState):
         return Command(update=state, goto="generate_output_message")
 
     return resolve_clarification_reply(state, level)
+
+
+def _handle_territory_wait(state: AgentState):
+    """
+    Wait node for the territory question asked by tool_executor_node's
+    territory gate (see ToolDefinition.requires_territory).
+
+    - No user_input yet: emit the question and persist, same mechanics as
+      the other wait flows.
+    - Reply names exactly one allowed territory (by name or option number):
+      set state.territory (persisted for the session, so later tasks don't
+      ask again) and resume tool_executor with the pending tool and
+      arguments untouched.
+    - Cancellation: drop the pending tool and end the turn.
+    - Anything else (not an allowed territory, or ambiguous): ask again,
+      keeping the pending tool alive. Only entries of allowed_territories
+      are ever accepted.
+    """
+    allowed = state.allowed_territories
+
+    if not state.user_input:
+        state.cognitive.messages_to_include = [territory_question(allowed)]
+        state.waiting_for = AgentState.WaitingFor.TERRITORY_SELECTION
+        state.add_trace(
+            "human_wait",
+            node="WAIT_USER_INPUT",
+            data={"pending_territory_selection": True},
+        )
+        return Command(update=state, goto="generate_output_message")
+
+    user_input = state.user_input.strip()
+    logger.info(f"User replied to territory question: '{user_input}'")
+
+    matches = match_territories(user_input, allowed)
+    if len(matches) == 1:
+        state.territory = matches[0]
+        logger.info(f"Territory set to '{state.territory}'")
+        state.cognitive.pending_territory_selection = False
+        state.waiting_for = None
+        state.user_input = None
+        return Command(update=state, goto="tool_executor")
+
+    if not matches and _is_cancellation(user_input):
+        state.cognitive.pending_territory_selection = False
+        state.cognitive.selected_tool = None
+        state.cognitive.tool_arguments = {}
+        state.cognitive.pending_thought = ""
+        state.waiting_for = None
+        state.user_input = None
+        state.cognitive.messages_to_include = [
+            "Okay, I won't proceed — let me know if you'd like to do something else."
+        ]
+        return Command(update=state, goto="generate_output_message")
+
+    state.cognitive.messages_to_include = [
+        "That is not one of the available territories. "
+        + territory_question(allowed)
+    ]
+    state.waiting_for = AgentState.WaitingFor.TERRITORY_SELECTION
+    state.user_input = None
+    return Command(update=state, goto="generate_output_message")
 
 
 def _handle_tier_consent_wait(state: AgentState):

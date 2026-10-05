@@ -16,7 +16,7 @@ network/proxy failures such as ERR_INCOMPLETE_CHUNKED_ENCODING.
 import json
 import logging
 import threading
-from queue import Queue
+from queue import Queue, Empty
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,33 @@ def publish_action(session_id: str, tool_name: str) -> None:
     )
 
 
+def begin_turn(session_id: str) -> None:
+    """
+    Reset per-turn event state right before a new agent turn is started.
+
+    The queue and the result are per SESSION, not per turn, so anything left
+    over from the previous turn would otherwise leak into this one: a stale
+    "__done__" (the previous stream never read it, e.g. the client
+    disconnected) makes the new stream close immediately and hand the client
+    the OLD answer, while a stale stored result makes "is the turn finished?"
+    impossible to tell. Dropping both here means that, from now on, "a result
+    is stored" == "this turn has finished".
+    """
+    q = _queues[session_id]
+    try:
+        while True:
+            q.get_nowait()
+    except Empty:
+        pass
+    with _results_lock:
+        _results.pop(session_id, None)
+
+
+def has_result(session_id: str) -> bool:
+    with _results_lock:
+        return session_id in _results
+
+
 def publish_done(session_id: str, result: dict) -> None:
     """
     Store the final result BEFORE signalling completion on SSE.
@@ -108,7 +135,16 @@ def clear_session(session_id: str) -> None:
     Called on session reset so a stale stream from a previous conversation
     cannot leak into a new one.
     """
-    _queues.pop(session_id, None)
+    # Keep the queue object (streams hold a reference to it; popping it would
+    # leave them waiting on a queue nobody publishes to anymore) and just
+    # empty it. stream_events ends on its own once the session is gone.
+    q = _queues.get(session_id)
+    if q is not None:
+        try:
+            while True:
+                q.get_nowait()
+        except Empty:
+            pass
 
     with _results_lock:
         _results.pop(session_id, None)

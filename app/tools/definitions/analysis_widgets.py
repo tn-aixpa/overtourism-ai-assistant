@@ -122,6 +122,7 @@ def create_analysis_widget_tool() -> ToolDefinition:
         enabled=True,
         tags=["widget", "plot", "compare", "kpi", "standalone", "scenario"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_modes=("standalone",),
     )
 

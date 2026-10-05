@@ -70,10 +70,14 @@ class TestClearSession:
     def test_clears_queue_and_result(self):
         events.publish_thought("s1", "hi")
         events.publish_done("s1", {"x": 1})
+        queue = events.get_queue("s1")
 
         events.clear_session("s1")
 
-        assert "s1" not in events._queues
+        # Streams may already hold a reference to the session queue, so clear
+        # its contents without replacing or removing the queue itself.
+        assert events.get_queue("s1") is queue
+        assert queue.empty()
         assert "s1" not in events._results
 
     def test_clear_missing_session_is_noop(self):

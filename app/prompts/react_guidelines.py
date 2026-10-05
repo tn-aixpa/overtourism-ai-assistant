@@ -135,6 +135,32 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "lookup_glossary for this.",
         ),
         (
+            "NUMERIC QUESTIONS ABOUT A TERRITORIAL INDEX",
+            "If the user asks for the VALUE of a territorial index for one or more "
+            'named municipalities (e.g. "qual è la ricettività a Molveno e Trento '
+            'nel 2023?"), or which municipalities — or how many — have an index '
+            'above/below a given value (e.g. "quali comuni hanno turisticità '
+            'superiore a 0.5?", "quanti comuni sono sotto 0.2?"), including '
+            "questions about what the map shows — call query_territorial_index_values "
+            "instead of a map or chart:\n\n"
+            "  - Resolve index_id first via get_territorial_index_list, never guess "
+            "it, and convert the period to start_date/end_date as described in the "
+            "tool description. If the user gave no period, ask for one instead of "
+            "guessing.\n\n"
+            "  - Named municipalities -> query_type='values' with the names as the "
+            "user wrote them. Above/below a value -> query_type='threshold' with "
+            "threshold and operator ('>' / '<' unless the user says at "
+            "least/at most); set count_only=true if only the number is asked.\n\n"
+            "  - Report ONLY figures and municipality names present in the tool "
+            "result. If 'not_found' is non-empty, say which names weren't matched "
+            "(offering 'did_you_mean' suggestions when present); if "
+            "'list_truncated' is true, say the list is partial and give "
+            "'matching_count' as the exact total. Never compute, estimate or "
+            "complete values yourself.\n\n"
+            "  - To merely SEE the distribution, use show_territorial_index_map "
+            "instead.",
+        ),
+        (
             "PLOT A TERRITORIAL INDEX (LINE / BAR CHART)",
             "If the user wants to see how a territorial index varies over time, or "
             'to compare selected areas, as a chart (e.g. "puoi mostrarmi la '

@@ -203,8 +203,134 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
     )
 
 
+def create_query_territorial_index_values_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="query_territorial_index_values",
+        description=(
+            "Answer factual questions about the NUMERIC values of a territorial index "
+            "per municipality, without drawing a map or chart: (a) the value of an index "
+            "for one or more named municipalities over a period (e.g. 'qual è il valore "
+            "dell'indice di ricettività a Molveno e Trento nel 2023?'), or (b) which "
+            "municipalities — or how many — have an index above/below a given value "
+            "(e.g. 'quali comuni hanno turisticità superiore a 0.5 a giugno 2023?', "
+            "'quanti comuni sono sotto 0.2?'). Also use it when the user asks such a "
+            "question about what a map shows. To only SEE the distribution, use "
+            "show_territorial_index_map instead."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Reads the same per-municipality data the map widget is built from and does "
+            "the filtering/matching/counting in code, so the figures are exact. "
+            "The index_id must be resolved first — if it hasn't been listed yet this "
+            "session, call get_territorial_index_list first and use the matching "
+            "index's index_id, never a guessed or typed string. "
+            "start_date/end_date follow the same rules as show_territorial_index_map: "
+            "both YYYY-MM-DD, a full year -> Jan 1st to Dec 1st of that year "
+            "(e.g. '2023-01-01' to '2023-12-01'), a single month -> both the 1st of "
+            "that month, a range -> 1st of the first month to 1st of the last month. "
+            "If the user gave no period, ask which one instead of guessing. "
+            "Use query_type='values' with 'municipalities' for named municipalities, "
+            "and query_type='threshold' with 'threshold' + 'operator' for "
+            "above/below questions. Set count_only=true when the user only asks HOW "
+            "MANY municipalities match."
+        ),
+        parameters=[
+            ToolParameter(
+                name="index_id",
+                description=(
+                    "The index_id of the territorial index (e.g. 'tasso-ricettivita'), "
+                    "resolved via get_territorial_index_list — never guess it."
+                ),
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="start_date",
+                description=(
+                    "Start of the period, YYYY-MM-DD, always the 1st of a month "
+                    "(see tool description)."
+                ),
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="end_date",
+                description=(
+                    "End of the period, YYYY-MM-DD, always the 1st of the last month "
+                    "of the period (see tool description)."
+                ),
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="query_type",
+                description=(
+                    "'values' = value of the index for the municipalities listed in "
+                    "'municipalities'; 'threshold' = municipalities whose value is "
+                    "above/below 'threshold'."
+                ),
+                type="string",
+                required=True,
+                schema={"enum": ["values", "threshold"]},
+            ),
+            ToolParameter(
+                name="municipalities",
+                description=(
+                    "Municipality names exactly as the user wrote them. REQUIRED when "
+                    "query_type is 'values'; ignore otherwise."
+                ),
+                type="array",
+                required=False,
+                schema={"items": {"type": "string"}},
+            ),
+            ToolParameter(
+                name="threshold",
+                description=(
+                    "The value to compare against. REQUIRED when query_type is "
+                    "'threshold'."
+                ),
+                type="number",
+                required=False,
+            ),
+            ToolParameter(
+                name="operator",
+                description=(
+                    "Comparison for 'threshold': '>' (higher/above/over), '>=' "
+                    "(at least), '<' (lower/below/under), '<=' (at most). Use the "
+                    "strict '>' / '<' unless the user says 'at least'/'at most' "
+                    "('almeno'/'al massimo')."
+                ),
+                type="string",
+                required=False,
+                schema={"enum": [">", ">=", "<", "<="]},
+            ),
+            ToolParameter(
+                name="count_only",
+                description=(
+                    "For 'threshold': true if the user only wants the NUMBER of "
+                    "matching municipalities, not their names. Default false."
+                ),
+                type="boolean",
+                required=False,
+                default=False,
+            ),
+        ],
+        output_description=(
+            "For 'values': 'values' (area_name + index_value per matched municipality) "
+            "and 'not_found' (names that didn't match, with suggestions). For "
+            "'threshold': 'matching_count', 'total_areas_considered' and, unless "
+            "count_only, 'municipalities' sorted by value (capped; 'list_truncated' "
+            "says if so)."
+        ),
+        tags=["data", "read-only", "territorial-index", "query"],
+        agent_tier="executor",
+        allowed_modes=("standalone", "internal"),
+    )
+
+
 __all__ = [
     "create_get_territorial_index_list_tool",
     "create_show_territorial_index_map_tool",
     "create_show_territorial_index_plot_tool",
+    "create_query_territorial_index_values_tool",
 ]

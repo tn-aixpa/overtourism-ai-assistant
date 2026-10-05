@@ -37,9 +37,9 @@ def _authorize_territory(token: str, territory: str) -> None:
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
-def check_authorization(token: str, territory: str) -> bool:
+def check_authorization(token: str) -> bool:
     """Check authorization against the backend."""
-    url = f"{BACKEND_URL}auth/me?territory={territory}"
+    url = f"{BACKEND_URL}auth/me"
     headers = {"Authorization": f"Bearer {token}"}
     api_response = get_data(url, headers=headers)
     logger.info(api_response)

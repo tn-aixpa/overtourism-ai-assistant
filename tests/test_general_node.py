@@ -1,3 +1,4 @@
+import json
 import os
 from unittest.mock import patch
 
@@ -120,10 +121,10 @@ class TestBuildMessagesFromToolResult:
         msgs = gn._build_messages_from_tool_result("lookup_glossary", result)
         assert msgs == ["No entries found."]
 
-    def test_unknown_tool_falls_back_to_str_output(self):
+    def test_unknown_tool_falls_back_to_safe_json_output(self):
         result = {"success": True, "output": {"foo": "bar"}}
         msgs = gn._build_messages_from_tool_result("some_unknown_tool", result)
-        assert msgs == [str({"foo": "bar"})]
+        assert json.loads(msgs[0]) == {"foo": "bar"}
 
     def test_output_none_is_treated_as_empty_dict(self):
         result = {"success": True, "output": None}

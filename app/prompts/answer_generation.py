@@ -175,7 +175,7 @@ def _generate_control_message(
 {formatted_messages}
 
 ## Instructions
-- Preserve the message's exact intent and meaning. If it asks a yes/no question, your output must also clearly ask a yes/no question — do not turn it into a request for other information, and do not answer or reason about the user's original question here.
+- Preserve the message's exact intent and meaning. If it asks a yes/no question, your output must also clearly ask a yes/no question — do not turn it into a request for other information, and do not answer or reason about the user's original question here. If it lists numbered options, keep every option (names untranslated) and its number.
 - Do not add interpretation, caveats, or content beyond what the message says.
 - Write your response in: **{language}**
 - Be concise.
@@ -212,7 +212,10 @@ def generate_answer(state: AgentState) -> str:
     # rewrite away the actual yes/no consent question and invent an
     # unrelated "please give me more data" ask instead. Bypass the tier
     # persona for this case and just translate/relay the message plainly.
-    if state.waiting_for == AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION:
+    if state.waiting_for in (
+        AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION,
+        AgentState.WaitingFor.TERRITORY_SELECTION,
+    ):
         return _generate_control_message(state, messages_to_include, language)
 
     tier = state.active_agent

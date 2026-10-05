@@ -9,6 +9,10 @@ BACKEND_URL = os.environ.get("BACKEND_URL")
 
 logger = logging.getLogger(__name__)
 
+# Never let a backend call hang a turn forever (a hung turn never sends
+# "__done__").
+BACKEND_TIMEOUT = 30  # seconds
+
 
 def _log_response(response: requests.Response) -> None:
     logger.info(f"Response status: {response.status_code}")
@@ -20,7 +24,7 @@ def _log_response(response: requests.Response) -> None:
 
 def get_data(url, headers=None, params=None):
     logger.info(f"Fetching data from URL: {url}")
-    response = requests.get(url, headers=_merge_auth_headers(headers), params=params)
+    response = requests.get(url, headers=_merge_auth_headers(headers), params=params, timeout=BACKEND_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -32,7 +36,7 @@ def post_data(url, json=None, headers=None, params=None):
         "Content-Type": "application/json",
         **_merge_auth_headers(headers),
     }
-    response = requests.post(url, headers=merged_headers, params=params, json=json)
+    response = requests.post(url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT)
     _log_response(response)
     response.raise_for_status()
     return response.json()
@@ -45,7 +49,7 @@ def put_data(url, json=None, headers=None, params=None):
         "Content-Type": "application/json",
         **_merge_auth_headers(headers),
     }
-    response = requests.put(url, headers=merged_headers, params=params, json=json)
+    response = requests.put(url, headers=merged_headers, params=params, json=json, timeout=BACKEND_TIMEOUT)
     _log_response(response)
     response.raise_for_status()
     return response.json()
@@ -53,7 +57,7 @@ def put_data(url, json=None, headers=None, params=None):
 
 def delete_data(url, headers=None, params=None):
     logger.info(f"Deleting data at URL: {url}")
-    response = requests.delete(url, headers=_merge_auth_headers(headers), params=params)
+    response = requests.delete(url, headers=_merge_auth_headers(headers), params=params, timeout=BACKEND_TIMEOUT)
     _log_response(response)
     response.raise_for_status()  # 500 (or 404) on missing entry propagates as an exception here
     if not response.content:

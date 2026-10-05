@@ -64,6 +64,7 @@ def create_get_context_tool() -> ToolDefinition:
         output_description="Dictionary with retrieved details for all items in the current context",
         tags=["data", "read-only"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_modes=("standalone", "internal", "system"),
     )
 
@@ -92,6 +93,7 @@ def create_get_configuration_parameters_tool() -> ToolDefinition:
         ),
         tags=["data", "read-only", "scenario", "parameters"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_modes=("standalone", "internal"),
     )
 
@@ -122,6 +124,7 @@ def create_analyze_scenario_results_tool() -> ToolDefinition:
         output_description="Answer or analysis based on the retrieved context data",
         tags=["interaction", "read-only"],
         agent_tier="operative",
+        requires_territory=True,
         allowed_modes=("standalone", "internal"),
     )
 
@@ -169,6 +172,7 @@ def create_summary_generation_tool() -> ToolDefinition:
         enabled=False,
         tags=["interaction", "read-only", "internal"],
         agent_tier="operative",
+        requires_territory=True,
         allowed_modes=("system",),
     )
 
@@ -220,6 +224,7 @@ def create_report_generation_tool() -> ToolDefinition:
         enabled=False,
         tags=["interaction", "read-only", "internal"],
         agent_tier="operative",
+        requires_territory=True,
         allowed_modes=("system",),
     )
 

@@ -156,6 +156,15 @@ class ToolDefinition:
     # once a tool has actually run.
     agent_tier: str = "executor"
 
+    # Whether this tool operates on territory-scoped backend data (problems,
+    # proposals, scenarios and their analysis) and therefore needs
+    # AgentState.territory to be set to one of allowed_territories before it
+    # may run. Enforced by tool_executor_node (asks the user when unset, or
+    # auto-selects when only one territory is allowed) and, as a hard
+    # backstop, by execute_selected_tool. Tools that are not territory-scoped
+    # (system info, glossary, region-wide indexes, ...) leave this False.
+    requires_territory: bool = False
+
     # ---- Selectability gating: WHO / WHERE, orthogonal to agent_tier's
     # WHAT-happens-once-selected (see UserRole/SessionMode docstrings
     # above for the full rationale). Both default to None = unrestricted,

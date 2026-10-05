@@ -256,6 +256,12 @@ class CognitiveState:
     # "second" — tells WAIT_USER_INPUT which menu (and matching logic) to
     # resume with. None the rest of the time.
     pending_route_clarification: Optional[str] = None
+    # True while the turn is paused asking the user which territory to use
+    # (see tool_executor_node's territory gate and waiting.py's
+    # _handle_territory_wait). The tool that triggered the question stays in
+    # selected_tool/tool_arguments and is resumed once a valid territory is
+    # set.
+    pending_territory_selection: bool = False
 
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.
@@ -306,6 +312,7 @@ class AgentState:
     session_id: str = ""
     user_id: str | None = None
     user_lang: str = "Italian"
+    allowed_territories: List[str] = field(default_factory=list)
     territory: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
@@ -365,6 +372,11 @@ class AgentState:
         # top-level or second-level routing prompt (see
         # app.agent.nodes.router.top_level_router_node).
         ROUTE_CLARIFICATION = "ROUTE_CLARIFICATION"
+        # Waiting for the user to say which territory (one of
+        # AgentState.allowed_territories) they want to work on, before a
+        # territory-scoped tool (see ToolDefinition.requires_territory) can
+        # run. The pending tool/arguments are kept and resumed afterwards.
+        TERRITORY_SELECTION = "TERRITORY_SELECTION"
 
     waiting_for: Optional["AgentState.WaitingFor"] = None
     user_input: Optional[str] = None

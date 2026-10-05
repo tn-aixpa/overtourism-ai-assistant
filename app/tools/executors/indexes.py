@@ -26,11 +26,12 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
     return {"indexes": result}
 
 
-def _summarize_map_features(features: list) -> Dict[str, Any]:
-    """Compact, LLM-safe summary of a choropleth's features:
-    give the reasoner real, grounded facts (area names, top/bottom values)
-    without ever handing it the raw per-feature geometry, which is only
-    ever meant to reach the frontend widget."""
+def _extract_map_entries(features: list) -> list:
+    """Flat [{area_name, index_value}] for every feature that has both an
+    AREA_NAME and a numeric INDICE (same fields, same filtering as the map
+    summary below). Features without a value are skipped here; callers that
+    need to tell "area exists but has no value" apart from "area doesn't
+    exist" use _extract_all_area_names too."""
     entries = []
     for f in features:
         if not isinstance(f, dict):
@@ -38,8 +39,55 @@ def _summarize_map_features(features: list) -> Dict[str, Any]:
         props = f.get("properties", {}) or {}
         name = props.get("AREA_NAME")
         value = props.get("INDICE")
-        if name is not None and isinstance(value, (int, float)):
-            entries.append({"area_name": name, "index_value": round(value, 4)})
+        if (
+            name is not None
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            entries.append({"area_name": str(name), "index_value": round(value, 4)})
+    return entries
+
+
+def _extract_all_area_names(features: list) -> list:
+    return [
+        str((f.get("properties") or {}).get("AREA_NAME"))
+        for f in features
+        if isinstance(f, dict) and (f.get("properties") or {}).get("AREA_NAME")
+    ]
+
+
+def _fetch_index_features(index_id: str, start_date: str, end_date: str):
+    """Call the SAME backend endpoint the map widget uses
+    (get_territorial_index_map_data -> default/indexes/get_index_data) and
+    return (features, min_value, max_value). The geometry is parsed only to
+    reach the per-area properties; it never leaves this module."""
+    import json
+
+    from app.tools.executor_backend_tools import get_territorial_index_map_data
+
+    raw = get_territorial_index_map_data.invoke(
+        {"index": index_id, "start_date": start_date, "end_date": end_date}
+    )
+    geo_data = raw.get("geo_data", {}) if isinstance(raw, dict) else {}
+    raw_geojson = geo_data.get("data")
+    try:
+        parsed = (
+            json.loads(raw_geojson) if isinstance(raw_geojson, str) else raw_geojson
+        )
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"Backend returned invalid GeoJSON for index '{index_id}': {e}"
+        )
+    features = parsed.get("features", []) if isinstance(parsed, dict) else []
+    return features, geo_data.get("min_value"), geo_data.get("max_value")
+
+
+def _summarize_map_features(features: list) -> Dict[str, Any]:
+    """Compact, LLM-safe summary of a choropleth's features:
+    give the reasoner real, grounded facts (area names, top/bottom values)
+    without ever handing it the raw per-feature geometry, which is only
+    ever meant to reach the frontend widget."""
+    entries = _extract_map_entries(features)
 
     entries_sorted = sorted(entries, key=lambda e: e["index_value"], reverse=True)
     return {
@@ -229,8 +277,216 @@ def execute_show_territorial_index_plot(
     }
 
 
+# ---------------------------------------------------------------------------
+# query_territorial_index_values
+# ---------------------------------------------------------------------------
+_MAX_LISTED_MUNICIPALITIES = 20
+
+_OPERATORS = {
+    ">": lambda v, t: v > t,
+    ">=": lambda v, t: v >= t,
+    "<": lambda v, t: v < t,
+    "<=": lambda v, t: v <= t,
+}
+# Words the LLM (or a user-facing phrase it copies) may use instead of a symbol.
+_OPERATOR_ALIASES = {
+    "above": ">",
+    "higher": ">",
+    "greater": ">",
+    "over": ">",
+    "gt": ">",
+    "above_or_equal": ">=",
+    "at_least": ">=",
+    "gte": ">=",
+    "below": "<",
+    "lower": "<",
+    "less": "<",
+    "under": "<",
+    "lt": "<",
+    "below_or_equal": "<=",
+    "at_most": "<=",
+    "lte": "<=",
+}
+
+
+def _normalize_name(name: str) -> str:
+    """Case-, accent- and punctuation-insensitive key for municipality names
+    ("Ville d'Anaunia" == "ville d anaunia", "Cavedine" == "CAVEDINE")."""
+    import re
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", stripped.lower()).strip()
+
+
+def _match_municipality(requested: str, by_key: Dict[str, str]):
+    """Map one user-typed name onto a real AREA_NAME. Returns
+    (matched_area_name | None, suggestions). Order: exact normalized match,
+    then a UNIQUE whole-word containment either way ("Trento" vs "Trento
+    (TN)", but never a guess between several), then close spelling matches
+    offered only as suggestions — never silently substituted."""
+    import difflib
+
+    key = _normalize_name(requested)
+    if not key:
+        return None, []
+    if key in by_key:
+        return by_key[key], []
+
+    padded = f" {key} "
+    contained = [k for k in by_key if padded in f" {k} " or f" {k} " in padded]
+    if len(contained) == 1:
+        return by_key[contained[0]], []
+
+    close = difflib.get_close_matches(key, list(by_key), n=3, cutoff=0.75)
+    candidates = contained or close
+    return None, [by_key[k] for k in candidates[:3]]
+
+
+def execute_query_territorial_index_values(
+    state: AgentState,
+    index_id: str,
+    start_date: str,
+    end_date: str,
+    query_type: str,
+    municipalities: list | None = None,
+    threshold: float | None = None,
+    operator: str | None = None,
+    count_only: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Answer factual questions about a territorial index's per-municipality
+    values, from the same endpoint (and the same INDICE/AREA_NAME fields) the
+    map widget uses — but WITHOUT producing a widget:
+
+    - query_type="values": the index value of each requested municipality
+      over the period (names are matched tolerantly; unknown names are
+      reported, with suggestions, instead of being dropped silently).
+    - query_type="threshold": every municipality whose value is
+      above/below `threshold` (`operator` one of >, >=, <, <=), as a count
+      and — unless count_only — a list sorted by value, capped at
+      _MAX_LISTED_MUNICIPALITIES entries (the full count is always exact).
+
+    Python (not the LLM) does all filtering, matching and counting, so the
+    numbers in the answer are exactly what the backend returned.
+    """
+    query_type = (query_type or "").strip().lower()
+    if query_type not in {"values", "threshold"}:
+        raise ValueError(
+            f"Unknown query_type '{query_type}': use 'values' or 'threshold'"
+        )
+
+    # Validate BEFORE the backend call so a malformed request costs nothing.
+    if query_type == "values":
+        if isinstance(municipalities, str):
+            municipalities = [municipalities]
+        municipalities = [
+            m.strip()
+            for m in (municipalities or [])
+            if isinstance(m, str) and m.strip()
+        ]
+        if not municipalities:
+            raise ValueError(
+                "query_type 'values' needs at least one municipality name in 'municipalities'"
+            )
+    else:
+        if threshold is None:
+            raise ValueError("query_type 'threshold' needs a numeric 'threshold'")
+        try:
+            threshold = float(str(threshold).replace(",", "."))
+        except (TypeError, ValueError):
+            raise ValueError(f"'threshold' must be a number, got {threshold!r}")
+        op_key = (operator or "").strip().lower()
+        op_key = _OPERATOR_ALIASES.get(op_key, op_key)
+        if op_key not in _OPERATORS:
+            raise ValueError(
+                f"Unknown operator '{operator}': use one of {sorted(_OPERATORS)}"
+            )
+
+    logger.info(
+        f"Executing query_territorial_index_values ({query_type}) for index "
+        f"'{index_id}' ({start_date} -> {end_date})"
+    )
+
+    features, min_value, max_value = _fetch_index_features(
+        index_id, start_date, end_date
+    )
+    entries = _extract_map_entries(features)
+    all_names = _extract_all_area_names(features)
+
+    base = {
+        "success": True,
+        "query_type": query_type,
+        "index_id": index_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "areas_with_value": len(entries),
+        "min_value": min_value,
+        "max_value": max_value,
+    }
+
+    if not entries:
+        return {
+            **base,
+            "success": False,
+            "response": (
+                "The backend returned no municipality values for this index "
+                "and period."
+            ),
+        }
+
+    if query_type == "values":
+        by_key = {_normalize_name(e["area_name"]): e["area_name"] for e in entries}
+        value_of = {e["area_name"]: e["index_value"] for e in entries}
+        no_value_keys = {
+            _normalize_name(n) for n in all_names if _normalize_name(n) not in by_key
+        }
+
+        found, not_found, seen = [], [], set()
+        for requested in municipalities:
+            matched, suggestions = _match_municipality(requested, by_key)
+            if matched is not None:
+                if matched not in seen:
+                    seen.add(matched)
+                    found.append(
+                        {"area_name": matched, "index_value": value_of[matched]}
+                    )
+            elif _normalize_name(requested) in no_value_keys:
+                not_found.append(
+                    {"requested": requested, "reason": "no value for this period"}
+                )
+            else:
+                item = {"requested": requested, "reason": "municipality not found"}
+                if suggestions:
+                    item["did_you_mean"] = suggestions
+                not_found.append(item)
+
+        return {**base, "values": found, "not_found": not_found}
+
+    # ---- threshold ----
+    matching = [e for e in entries if _OPERATORS[op_key](e["index_value"], threshold)]
+    # Closest-to-the-extreme first: highest first for ">"/">=", lowest first
+    # for "<"/"<=".
+    matching.sort(key=lambda e: e["index_value"], reverse=op_key in {">", ">="})
+
+    result = {
+        **base,
+        "threshold": threshold,
+        "operator": op_key,
+        "matching_count": len(matching),
+        "total_areas_considered": len(entries),
+    }
+    if not count_only:
+        listed = matching[:_MAX_LISTED_MUNICIPALITIES]
+        result["municipalities"] = listed
+        result["list_truncated"] = len(matching) > len(listed)
+    return result
+
+
 EXECUTORS = {
     "get_territorial_index_list": execute_get_territorial_index_list,
     "show_territorial_index_map": execute_show_territorial_index_map,
     "show_territorial_index_plot": execute_show_territorial_index_plot,
+    "query_territorial_index_values": execute_query_territorial_index_values,
 }

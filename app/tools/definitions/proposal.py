@@ -16,6 +16,7 @@ def create_list_available_proposals_tool() -> ToolDefinition:
         output_description="Dictionary containing all IDs, names, and relationships",
         tags=["data", "read-only", "navigation"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_modes=("standalone", "internal"),
     )
 
@@ -33,6 +34,7 @@ def create_new_proposal_tool() -> ToolDefinition:
         output_description="Acknowledgement of successful creation or request for more details",
         tags=["write", "proposal"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_roles=("admin", "standard"),
         allowed_modes=("standalone", "internal"),
     )
@@ -48,6 +50,7 @@ def edit_proposal_tool() -> ToolDefinition:
         output_description="Acknowledgement of successful edit or request for more details",
         tags=["write", "proposal"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_roles=("admin", "standard"),
         allowed_modes=("standalone", "internal"),
     )
@@ -63,6 +66,7 @@ def delete_proposal_tool() -> ToolDefinition:
         output_description="Acknowledgement of successful deletetion or request for more details",
         tags=["write", "proposal"],
         agent_tier="executor",
+        requires_territory=True,
         allowed_roles=("admin", "standard"),
         allowed_modes=("standalone", "internal"),
     )

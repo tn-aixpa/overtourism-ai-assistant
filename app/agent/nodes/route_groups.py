@@ -133,12 +133,14 @@ _LOCATION_SHARED_TOOLS: Set[str] = {
 SUB_INDEX_LIST = "index_list"
 SUB_INDEX_MAP = "index_map"
 SUB_INDEX_PLOT = "index_plot"
+SUB_INDEX_QUERY = "index_query"
 SUB_INDEX_METHODOLOGY = "index_methodology"
 
 INDEXES_SUBLEVEL_LABELS: Dict[str, str] = {
     SUB_INDEX_LIST: "Which territorial indexes exist and what they cover",
     SUB_INDEX_MAP: "Visualize a specific territorial index on the map for a period",
     SUB_INDEX_PLOT: "Plot a territorial index as a line/bar chart (trend over time, compare areas)",
+    SUB_INDEX_QUERY: "Numeric questions about an index's values: the value for named municipalities, or which/how many municipalities are above/below a value",
     SUB_INDEX_METHODOLOGY: "How to design, construct, interpret, or validate a territorial index",
 }
 
@@ -146,6 +148,10 @@ _INDEXES_SUBGROUPS: Dict[str, Set[str]] = {
     SUB_INDEX_LIST: {"get_territorial_index_list"},
     SUB_INDEX_MAP: {"get_territorial_index_list", "show_territorial_index_map"},
     SUB_INDEX_PLOT: {"get_territorial_index_list", "show_territorial_index_plot"},
+    SUB_INDEX_QUERY: {
+        "get_territorial_index_list",
+        "query_territorial_index_values",
+    },
     SUB_INDEX_METHODOLOGY: {"explain_workflow"},
 }
 

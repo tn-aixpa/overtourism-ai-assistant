@@ -121,7 +121,10 @@ methodology questions. Requests to define, design, construct, choose
 variables for, interpret, or validate a new territorial index belong to
 second_level "index_methodology". Requests for which indexes exist, their
 available periods, maps, or charts belong to index_list, index_map, or
-index_plot respectively. For index_methodology, use top_level "indexes".
+index_plot respectively. Numeric questions about index values — the value
+of an index for one or more named municipalities, or which/how many
+municipalities are above or below a given value — belong to index_query,
+even when they refer to what a map shows. For index_methodology, use top_level "indexes".
 
 ============================================================
 CURRENT ROUTE FOR THIS SESSION

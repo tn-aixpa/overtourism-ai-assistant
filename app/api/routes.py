@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 import logging
 import asyncio
 import queue
+import threading
 
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
@@ -28,12 +29,19 @@ from app.agent.memory import (
     mark_in_flight,
     clear_in_flight,
 )
-from app.agent.events import get_queue, publish_done, get_result, clear_session
+from app.agent.events import (
+    get_queue,
+    publish_done,
+    get_result,
+    clear_session,
+    begin_turn,
+    has_result,
+)
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 from app.utils.authentication import (
     _require_bearer_token,
-    _authorize_territory,
+    check_authorization,
     get_user_id,
     get_user_role,
 )
@@ -46,24 +54,54 @@ DISABLE_INTEGRATED = os.environ.get("DISABLE_INTEGRATED", "true").lower() == "tr
 router = APIRouter()
 
 
-def _load_owned_session(session_id: str, territory: str) -> AgentState | None:
-    """Load session state, but only if it belongs to the authorized territory.
-
-    Returns None both when the session doesn't exist AND when it belongs to
-    a different territory — deliberately indistinguishable to the caller, so an
-    authorized-but-wrong-territory request can't be used to probe which
-    session_ids exist.
-    """
-    state = load_state(session_id)
-    if state is None or state.territory != territory:
-        return None
-    return state
+# Hard ceiling for one agent turn. If the turn thread is stuck (a hung backend
+# or LLM call, ...) the client must still get a terminal "__done__" + result
+# instead of waiting forever.
+AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
 
 
 def _run_agent(key: str, state: AgentState, token: str):
     """Runs synchronously inside a thread — never call from the event loop directly."""
-    set_token(token)
+    finished = threading.Event()
+    finish_lock = threading.Lock()
+
+    def _finish(result: dict) -> None:
+        """Publish the final result exactly once (turn thread vs watchdog)."""
+        with finish_lock:
+            if finished.is_set():
+                return
+            finished.set()
+        try:
+            publish_done(key, result)
+        except Exception:
+            logger.exception(f"publish_done failed for session {key}")
+        finally:
+            # Must be cleared even on the error paths, or a session that
+            # fails once would stay "in flight" forever and every later
+            # /agent call for it would 409 permanently.
+            clear_in_flight(key)
+
+    def _on_timeout() -> None:
+        logger.error(f"Agent turn for session {key} exceeded {AGENT_TURN_TIMEOUT}s")
+        _finish(
+            {
+                "response": "The request took too long to complete. Please try again.",
+                "session_id": key,
+                "assistant_action_data": None,
+            }
+        )
+
+    watchdog = threading.Timer(AGENT_TURN_TIMEOUT, _on_timeout)
+    watchdog.daemon = True
+    watchdog.start()
+
+    result = {
+        "response": "System error",
+        "session_id": key,
+        "assistant_action_data": None,
+    }
     try:
+        set_token(token)
         logger.info(f"Message sent from conversation {key}")
 
         updated = agent_app.invoke(
@@ -89,9 +127,14 @@ def _run_agent(key: str, state: AgentState, token: str):
             ),
         }
 
-        save_state(final_state)
+        # A failure while persisting must not swallow an answer that was
+        # already generated successfully.
+        try:
+            save_state(final_state)
+        except Exception:
+            logger.exception(f"save_state failed for session {key}")
 
-    except Exception as e:
+    except BaseException as e:  # noqa: BLE001 - done MUST be sent, whatever happens
         logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
         result = {
             "response": "System error",
@@ -100,11 +143,8 @@ def _run_agent(key: str, state: AgentState, token: str):
         }
 
     finally:
-        publish_done(key, result)
-        # Must be cleared even on the exception path above, or a session
-        # that errors once would stay "in flight" forever and every
-        # subsequent /agent call for it would 409 permanently.
-        clear_in_flight(key)
+        watchdog.cancel()
+        _finish(result)
 
 
 @router.post("/agent", status_code=202)
@@ -117,14 +157,13 @@ async def run_agent_endpoint(
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
     authorization: str | None = Header(default=None),
-    territory: str = Query(...),
 ):
     if integrated_mode and DISABLE_INTEGRATED:
         state = AgentState(
             session_id=session_id,
             user_id="system",
             integrated_mode=True,
-            territory=territory,
+            allowed_territories=["molveno", "fazzon"],
             user_role="standard",
             session_mode="internal",
         )
@@ -145,7 +184,7 @@ async def run_agent_endpoint(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, territory)
+        check_authorization(token)
     else:
         token = None
 
@@ -189,7 +228,7 @@ async def run_agent_endpoint(
                 user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
-                territory=territory,
+                allowed_territories=["molveno", "fazzon"],
                 user_role=get_user_role(token),
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
@@ -197,10 +236,6 @@ async def run_agent_endpoint(
                 # form field).
                 session_mode="internal" if integrated_mode else "standalone",
             )
-        elif state.territory != territory:
-            # Don't reveal whether the session exists under another territory.
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # A session's mode is fixed for its whole lifetime (set once, above,
         # when the session is first created) — see reasoner.initialize_tools.
         # Always branch on the PERSISTED state.integrated_mode from here on,
@@ -247,6 +282,9 @@ async def run_agent_endpoint(
 
         save_state(state)
         mark_in_flight(session_id)
+        # Drop the previous turn's leftover "__done__"/result so this turn's
+        # stream can neither close early nor return a stale answer.
+        begin_turn(session_id)
 
     background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
     return {"session_id": session_id}
@@ -256,7 +294,6 @@ async def run_agent_endpoint(
 async def reset_session(
     session_id: str = Form(...),
     authorization: str | None = Header(default=None),
-    territory: str = Query(...),
 ):
     """
     Start a fresh conversation for `session_id`.
@@ -271,17 +308,10 @@ async def reset_session(
 
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, territory)
+        check_authorization(token)
 
     lock = _get_lock(session_id)
     async with lock:
-        # Only reset a session that actually belongs to this territory. If it
-        # belongs to someone else (or never existed), don't touch it, and
-        # don't reveal which of those two happened.
-        state = load_state(session_id)
-        if state is not None and state.territory != territory:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         delete_state(session_id)
         clear_session(session_id)
         # delete_state() already clears this, but stated explicitly here
@@ -297,14 +327,13 @@ async def reset_session(
 @router.get("/agent/result/{session_id}", response_model=AgentResponse)
 async def get_agent_result(
     session_id: str,
-    territory: str = Query(...),
     authorization: str | None = Header(default=None),
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, territory)
+        check_authorization(token)
 
-    if _load_owned_session(session_id, territory) is None:
+    if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     result = get_result(session_id)
@@ -318,7 +347,6 @@ async def get_agent_result(
 @router.get("/agent/stream/{session_id}")
 async def stream_events(
     session_id: str,
-    territory: str = Query(...),
     # EventSource (the standard way to consume SSE from a browser) cannot
     # set custom headers, so this endpoint also accepts the token as a query
     # param. The Authorization header is preferred when present.
@@ -337,29 +365,45 @@ async def stream_events(
         if not auth_header and token:
             auth_header = f"Bearer {token}"
         token = _require_bearer_token(auth_header)
-        _authorize_territory(token, territory)
+        check_authorization(token)
 
-    if _load_owned_session(session_id, territory) is None:
+    if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     event_queue = get_queue(session_id)
 
     async def event_generator():
-        # Never leave an SSE connection blocked forever. Periodic comments keep
-        # proxies/load-balancers from considering the response idle, while the
-        # timeout also lets us recover cleanly if the client connects after the
-        # completion event has already been published. The final response is
-        # available through /agent/result/{session_id}.
+        # Poll the queue without blocking a worker thread. The previous
+        # `await asyncio.to_thread(queue.get, True, 30)` could not be
+        # cancelled: when the client disconnected/reconnected, the orphaned
+        # thread kept waiting and silently swallowed the next event — which
+        # was usually the one and only "__done__" — so the new connection
+        # never saw it. Completion is also derived from the stored result
+        # (stored BEFORE "__done__" is queued, cleared at the start of each
+        # turn), so even a lost queue event can't leave the stream hanging.
+        idle = 0.0
         while True:
             try:
-                event = await asyncio.to_thread(event_queue.get, True, 30)
+                event = event_queue.get_nowait()
             except queue.Empty:
-                yield ": keep-alive\n\n"
+                if has_result(session_id):
+                    yield "event: done\ndata: \n\n"
+                    break
+                if load_state(session_id) is None:
+                    # Session was reset while streaming.
+                    yield "event: done\ndata: \n\n"
+                    break
+                await asyncio.sleep(0.25)
+                idle += 0.25
+                if idle >= 15:
+                    idle = 0.0
+                    yield ": keep-alive\n\n"
                 continue
             except Exception as exc:
                 logger.exception(f"SSE queue failure for session {session_id}: {exc}")
                 break
 
+            idle = 0.0
             logger.info(f"Sending SSE event for session {session_id}: {event}")
 
             if event == "__done__":
@@ -383,16 +427,15 @@ async def stream_events(
 async def submit_feedback_get(
     session_id: str,
     message_index: int,
-    territory: str = Query(...),
     authorization: str | None = Header(default=None),
     vote: str | None = None,
     comment: str | None = None,
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, territory)
+        check_authorization(token)
 
-    state = _load_owned_session(session_id, territory)
+    state = load_state(session_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -437,7 +480,7 @@ async def run_selected_tools(
 
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, territory)
+        check_authorization(token)
     else:
         token = None
     if token:
@@ -445,9 +488,17 @@ async def run_selected_tools(
 
     _ensure_tool_registry()
 
+    allowed_territories = ["molveno", "fazzon"]
+    if territory not in allowed_territories:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown territory {territory!r}; allowed: {allowed_territories}",
+        )
+
     # Stateless, session-less scratch state — intentionally never saved.
     user_id = get_user_id(token) + "-system"
     state = AgentState(
+        allowed_territories=["molveno", "fazzon"],
         territory=territory,
         user_id=user_id,
         user_role=get_user_role(token),
@@ -522,7 +573,7 @@ async def get_usge_stats(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _authorize_territory(token, "default")
+        check_authorization(token)
     else:
         token = None
 

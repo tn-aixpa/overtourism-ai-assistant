@@ -5,7 +5,7 @@ from langgraph.graph import END
 from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
-from app.utils.common import truncate_for_prompt
+from app.utils.common import truncate_for_prompt, render_agent_message
 from app.prompts.answer_generation import generate_answer
 
 logger = logging.getLogger(__name__)
@@ -209,6 +209,44 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             # chart was shown.
             return [output.get("response", "The requested chart was shown.")]
 
+        case "get_territorial_index_list":
+            return [
+                "Here are the available territorial indexes: "
+                f"{truncate_for_prompt(output.get('indexes', output), max_chars=8000)}"
+            ]
+
+        case "show_territorial_index_map":
+            # The widget itself (geojson) goes to the frontend through
+            # assistant_action_data and is never part of this result; only
+            # the grounded summary is narrated.
+            lines = [output.get("response", "The requested map was shown.")]
+            summary = output.get("map_summary")
+            if summary:
+                lines.append(
+                    "Map summary (top/bottom areas by index value): "
+                    f"{truncate_for_prompt(summary, max_chars=2000)}"
+                )
+            return lines
+
+        case "show_territorial_index_plot":
+            lines = [output.get("response", "The requested chart was shown.")]
+            summary = output.get("plot_summary")
+            if summary:
+                lines.append(
+                    f"Chart parameters: {truncate_for_prompt(summary, max_chars=1000)}"
+                )
+            return lines
+
+        case "query_territorial_index_values":
+            if not output.get("success", True):
+                return [output.get("response", "No data was returned for this query.")]
+            # Compact, already-filtered figures computed in Python: render them
+            # verbatim so the answer can only cite what the backend returned.
+            return [
+                "Territorial index query result (use ONLY these figures): "
+                f"{truncate_for_prompt(output, max_chars=9000)}"
+            ]
+
         case "get_configuration_parameters":
             # Bounded, fixed-size payload (not territory data), so give it a
             # much larger budget than the generic default — see
@@ -289,4 +327,7 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             return ["\n".join(lines)]
 
         case _:
-            return [str(output)]
+            # Never str(output) here: that dumps Python reprs of the full
+            # payload (widget data included) into the prompt. Render it
+            # stripped of UI-only fields and length-capped instead.
+            return [render_agent_message(output)]

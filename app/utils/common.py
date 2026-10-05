@@ -1,12 +1,17 @@
 from __future__ import annotations
+import ast
 import os
 from contextvars import ContextVar
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple, List
 import json
 import requests
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Never let a backend call hang a turn forever (a hung turn never sends
+# "__done__").
+BACKEND_TIMEOUT = 30  # seconds
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 BACKEND_URL = os.environ.get("BACKEND_URL")
@@ -25,7 +30,12 @@ def _merge_auth_headers(headers: dict | None) -> dict:
 
 def get_data(url, headers=None, params=None):
     logger.info(f"Fetching data from URL: {url}")
-    response = requests.get(url, headers=_merge_auth_headers(headers), params=params)
+    response = requests.get(
+        url,
+        headers=_merge_auth_headers(headers),
+        params=params,
+        timeout=BACKEND_TIMEOUT,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -67,6 +77,24 @@ _LARGE_BUDGET_TOOLS = {
     # extra indexes in practice. Same reasoning as
     # get_configuration_parameters above.
     "get_territorial_index_list": 8000,
+    # Up to _MAX_LISTED_MUNICIPALITIES (120) {area_name, index_value} entries
+    # (~50 chars each) plus a small header: cutting this at the 1200-char
+    # default would drop most of a "which municipalities are above X" list.
+    "query_territorial_index_values": 9000,
+}
+
+
+# Keys that carry UI-only payloads (widget dispatch data, map GeoJSON, raw plot
+# arrays). They are meant to be consumed programmatically by the frontend and
+# must NEVER reach an LLM prompt or long-lived state, at ANY nesting depth.
+# Kept deliberately separate from _HEAVY_FIELDS below: _HEAVY_FIELDS only
+# applies to list items when condensing for matching, whereas these are
+# stripped recursively everywhere.
+ASSISTANT_ACTION_KEY = "assistant_action_data"
+_UI_ONLY_FIELDS = {
+    ASSISTANT_ACTION_KEY,
+    "geojsonStr",
+    "plot_data",
 }
 
 
@@ -103,6 +131,61 @@ def strip_plot_data(eval_data: Any) -> Any:
     return {k: v for k, v in eval_data.items() if k != "plot_data"}
 
 
+def strip_ui_only_fields(obj: Any) -> Any:
+    """Recursively drop UI-only keys (assistant_action_data, geojsonStr,
+    plot_data) at ANY depth, through dicts, lists and tuples.
+
+    This is the deep counterpart of the shallow, per-item stripping done by
+    _condense_object. It exists because widget payloads such as
+    {"assistant_action_data": [{"type": "SHOW_WIDGET", "payload":
+    {"data": {"geojsonStr": "..."}}}]} sit several levels down, where the
+    shallow strip never reaches them. Returns a new structure; the input is
+    never mutated (so a caller can still dispatch the original payload).
+    """
+    if isinstance(obj, dict):
+        return {
+            k: strip_ui_only_fields(v)
+            for k, v in obj.items()
+            if k not in _UI_ONLY_FIELDS
+        }
+    if isinstance(obj, (list, tuple)):
+        return [strip_ui_only_fields(item) for item in obj]
+    return obj
+
+
+def split_assistant_actions(result: Any) -> Tuple[Any, List[Any]]:
+    """WRITE-TIME helper: separate a tool result into (clean_result, actions).
+
+    `actions` is the list stored under 'assistant_action_data' (empty if
+    absent) and must be dispatched to the frontend BEFORE the clean result is
+    stored in tool_results / context_cache / any long-lived state. The clean
+    result has the widget payload removed at every depth (including heavy
+    leftovers like geojsonStr), but keeps small, LLM-relevant fields such as
+    'success', 'response' and 'map_summary'.
+
+    Typical use in the tool executor:
+
+        clean, actions = split_assistant_actions(raw_result)
+        dispatch_to_frontend(actions)          # widget payload goes out here
+        state.cognitive.tool_results[key] = clean   # only the slim version stored
+    """
+    if not isinstance(result, dict):
+        return strip_ui_only_fields(result), []
+
+    actions = result.get(ASSISTANT_ACTION_KEY) or []
+    if not isinstance(actions, list):
+        actions = [actions]
+    return strip_ui_only_fields(result), actions
+
+
+def strip_assistant_action_data(result: Any) -> Any:
+    """Convenience wrapper around split_assistant_actions for callers that
+    only want the slim result and have already dispatched (or don't need) the
+    widget actions."""
+    clean, _ = split_assistant_actions(result)
+    return clean
+
+
 def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
     """Look up the prompt-injection char budget for a given tool/result key,
     stripping any '__N' collision suffix (see tool_executor's result_key)."""
@@ -115,17 +198,21 @@ def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
 # Fields that regularly hold large/nested payloads (simulation output,
 # free-form extras, etc.) and are almost never needed to *match* an object
 # by name/description — only to inspect it once a specific id is already
-# known. Dropped when condensing list-shaped data for prompt injection.
+# known. Dropped (at the top level of each list item) when condensing
+# list-shaped data for prompt injection.
 # "plot_data" holds the raw per-sample arrays (curves, uncertainty, usage,
 # ...) that back the load/capacity plot widgets — see clean_scenario in
 # app/tools/backend_tools.py. It's only ever meant to be consumed
 # programmatically to build a SHOW_WIDGET payload, never shown to the LLM.
+# Note: the UI-only fields are additionally stripped recursively at any depth
+# by strip_ui_only_fields before condensing runs.
 _HEAVY_FIELDS = {
     "extras",
     "evaluation_data",
     "related_scenario_ids",
     "plot_data",
     "geojsonStr",
+    ASSISTANT_ACTION_KEY,
 }
 
 # Any single object's textual fields (name/description/...) get truncated to
@@ -158,24 +245,10 @@ def _condense_object(obj: Any, max_field_chars: int = DEFAULT_MAX_FIELD_CHARS) -
     return condensed
 
 
-def condense_for_matching(
-    data: Any,
-    max_items: int = DEFAULT_MAX_ITEMS_FOR_MATCHING,
-    max_field_chars: int = DEFAULT_MAX_FIELD_CHARS,
-) -> Any:
-    """Shrink a raw backend list/detail payload down to only what's needed to
-    match a user's intent to an id: id/name/description-type fields, with
-    heavy nested payloads (extras, evaluation_data, ...) stripped and long
-    text truncated. Never drops *which items exist* silently — if there are
-    more than max_items, the extras are summarized by id/name only so the
-    LLM still knows they exist and can ask to narrow the search instead of
-    guessing.
-
-    This is intentionally lossy: if the caller genuinely needs full detail
-    on a specific object, the right move is another call to
-    get_context_details for that one id, not carrying full payloads for
-    every object across every prompt.
-    """
+def _condense(data: Any, max_items: int, max_field_chars: int) -> Any:
+    """Internal recursive worker for condense_for_matching. Assumes UI-only
+    fields were already stripped at every depth by the public wrapper, so it
+    does not re-walk the structure for them."""
     if isinstance(data, list):
         shown = [_condense_object(item, max_field_chars) for item in data[:max_items]]
         if len(data) > max_items:
@@ -194,11 +267,33 @@ def condense_for_matching(
             }
         return shown
     if isinstance(data, dict):
-        return {
-            k: condense_for_matching(v, max_items, max_field_chars)
-            for k, v in data.items()
-        }
+        return {k: _condense(v, max_items, max_field_chars) for k, v in data.items()}
     return data
+
+
+def condense_for_matching(
+    data: Any,
+    max_items: int = DEFAULT_MAX_ITEMS_FOR_MATCHING,
+    max_field_chars: int = DEFAULT_MAX_FIELD_CHARS,
+) -> Any:
+    """Shrink a raw backend list/detail payload down to only what's needed to
+    match a user's intent to an id: id/name/description-type fields, with
+    heavy nested payloads (extras, evaluation_data, ...) stripped and long
+    text truncated. Never drops *which items exist* silently — if there are
+    more than max_items, the extras are summarized by id/name only so the
+    LLM still knows they exist and can ask to narrow the search instead of
+    guessing.
+
+    UI-only payloads (assistant_action_data, geojsonStr, plot_data) are
+    removed first, recursively, at any depth — so a widget payload nested in
+    a tool-result envelope never survives, regardless of where it sits.
+
+    This is intentionally lossy: if the caller genuinely needs full detail
+    on a specific object, the right move is another call to
+    get_context_details for that one id, not carrying full payloads for
+    every object across every prompt.
+    """
+    return _condense(strip_ui_only_fields(data), max_items, max_field_chars)
 
 
 def truncate_for_prompt(obj: Any, max_chars: int = DEFAULT_MAX_CHARS_PER_ENTRY) -> str:
@@ -207,6 +302,43 @@ def truncate_for_prompt(obj: Any, max_chars: int = DEFAULT_MAX_CHARS_PER_ENTRY) 
     result or other backend payload is about to be embedded in an LLM
     prompt, so growth is bounded consistently across the codebase."""
     return _truncate_json(obj, max_chars)
+
+
+def render_agent_message(msg: Any, max_chars: int = 4000) -> str:
+    """Render ONE agent message for the synthesis ("Agent Messages") prompt.
+
+    Use this wherever that list is built, instead of str(msg) / f-string
+    interpolation, which dumps Python reprs (single quotes, True/False) of the
+    full payload — including widget data like geojsonStr — straight into the
+    prompt.
+
+    - Plain text messages pass through unchanged (only length-capped).
+    - Dicts/lists are stripped of UI-only fields at any depth, then
+      serialized with boundary-aware truncation.
+    - Strings that are really the repr/JSON of a dict/list (e.g. someone
+      already did str(result)) are parsed back, stripped, then rendered. If
+      they can't be parsed (e.g. already truncated), they fall back to a
+      plain length cap.
+    """
+    if isinstance(msg, str):
+        text = msg.strip()
+        if text[:1] in ("{", "["):
+            parsed: Any = None
+            try:
+                parsed = json.loads(text)
+            except (TypeError, ValueError):
+                try:
+                    parsed = ast.literal_eval(text)
+                except (ValueError, SyntaxError, MemoryError, RecursionError):
+                    parsed = None
+            if isinstance(parsed, (dict, list)):
+                return _truncate_json(strip_ui_only_fields(parsed), max_chars)
+        if len(msg) <= max_chars:
+            return msg
+        omitted = len(msg) - max_chars
+        return msg[:max_chars] + f"... [truncated, {omitted} more characters omitted]"
+
+    return _truncate_json(strip_ui_only_fields(msg), max_chars)
 
 
 def enforce_prompt_budget(prompt: str, max_chars: int = MAX_PROMPT_CHARS) -> str:
@@ -224,6 +356,11 @@ def enforce_prompt_budget(prompt: str, max_chars: int = MAX_PROMPT_CHARS) -> str
         "the middle before sending. Consider tightening the source of this "
         "prompt so this doesn't need to trigger."
     )
+
+    # TODO remove
+    with open("logs/too_long_debug.txt", "w+") as fout:
+        fout.write(prompt)
+
     head_chars = max_chars // 2
     tail_chars = max_chars - head_chars
     omitted = len(prompt) - max_chars
