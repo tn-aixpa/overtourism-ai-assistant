@@ -115,7 +115,7 @@ def clean_scenario(raw_data):
 
 
 def get_allowed_territories(token: str | None = None):
-    url = f"{BACKEND_URL}default/territorys"
+    url = f"{BACKEND_URL}default/territories"
     headers = {"Authorization": f"Bearer {token}"} if token else None
     territories = get_data(url, headers=headers)
     logger.info(f"Allowed territories: {territories}")

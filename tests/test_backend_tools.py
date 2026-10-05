@@ -74,7 +74,7 @@ class TestGetAllowedTerritories:
             result = bt.get_allowed_territories("test-token-123")
 
         mock_get.assert_called_once_with(
-            f"{bt.BACKEND_URL}default/territorys",
+            f"{bt.BACKEND_URL}default/territories",
             headers={"Authorization": "Bearer test-token-123"},
         )
         assert result == ["territory-1"]
