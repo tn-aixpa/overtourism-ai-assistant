@@ -11,6 +11,24 @@ INSTRUCTIONS_FOR_INTEGRATED_MODE = """
 """
 
 
+AUDIENCE_INSTRUCTIONS = """- **Audience and level of explanation.** The user is a tourism-management professional: assume solid general knowledge of the tourism domain (destinations, accommodation, visitor flows, seasonality, local policy) but NO background in statistics or data science.
+  - Default to plain language. Do not use statistical jargon (e.g. standard deviation, correlation coefficient, variance, outlier, median, percentile, trend line, normalization). Say it in everyday terms instead: "the two areas follow a very similar pattern over the year" rather than "correlation 0.93"; "most values are close to X" rather than "low variance"; "a clear peak in July" rather than "seasonal outlier".
+  - Report numbers sparingly and always with what they mean in tourism terms (e.g. "about 15 beds for every 100 residents" rather than a bare ratio). Round figures sensibly. Briefly explain what an index measures the first time it appears in the conversation, in one short sentence.
+  - Keep sentences short and avoid piling up several figures in one sentence.
+  - **Adapt to the user.** Judge their level from their recent messages (shown below). If they use technical or data terms correctly, ask precise questions (specific periods, thresholds, comparisons, methodology, how an index is computed) or ask for more detail, then raise the level gradually: give more figures, use the proper technical term followed by a short plain-language gloss, and go deeper into method. If they ask simple or general questions, stay simple. Never be condescending, and never assume more expertise than they have shown. When in doubt, stay at the simpler level and offer to go into more detail."""
+
+
+def _recent_user_messages(state: AgentState, n: int = 4) -> str:
+    """The user's last few messages BEFORE the current one, used only so the
+    answer can gauge how technical the user is. The current question is
+    already shown separately in the prompt."""
+    msgs = [m.content for m in state.conversation.messages if m.role == "user"]
+    previous = msgs[:-1][-n:]
+    if not previous:
+        return "(no earlier messages)"
+    return "\n".join(f"- {m[:300]}" for m in previous)
+
+
 def _role_intro(tier: AgentTier) -> str:
     """Opening framing line, tier-specific. Short on purpose: this primes
     the model's overall posture, the detailed rules live in
@@ -221,6 +239,7 @@ def generate_answer(state: AgentState) -> str:
     tier = state.active_agent
 
     formatted_messages = "\n".join(f"- {msg}" for msg in messages_to_include)
+    recent_user_messages = _recent_user_messages(state)
 
     terminology_block = build_terminology_block(question, formatted_messages)
 
@@ -233,6 +252,9 @@ def generate_answer(state: AgentState) -> str:
 ## Question
 {question}
 
+## User's earlier messages (use only to judge their level of expertise)
+{recent_user_messages}
+
 ## Agent Messages
 The following messages represent the core findings of the answering process so far, if any:
 {formatted_messages}
@@ -244,6 +266,7 @@ The following messages represent the core findings of the answering process so f
 ## Instructions
 {reasoning_policy}
 {agent_messages_directive}
+{AUDIENCE_INSTRUCTIONS}
 - **Tone — be propositive, never alarmist:**
   - If something is missing or incomplete, frame it as an invitation: "To do X, I need you to provide Y…" rather than "an error occurred" or "the operation failed".
   - If an operation could not complete because of missing input, explain what is needed and offer to continue: "I can help you with X, but I still need: …".
