@@ -160,6 +160,14 @@ class CognitiveState:
     # object once).
     context_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
+    # Raw time-series payloads already fetched from get-variation-data this
+    # session, keyed by the exact backend request (see
+    # app.tools.executors.indexes._fetch_plot). Re-rendering the same data
+    # as a different chart type (line -> bar) sends the backend a
+    # byte-identical request, which it answers with an empty payload; serving
+    # the earlier response avoids that second call. Bounded + TTL'd there.
+    plot_data_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
     trace: TraceBuffer = field(default_factory=TraceBuffer)
 
     error_details: str = ""
@@ -505,7 +513,12 @@ class AgentState:
                 return [omit_retrieved_data(item) for item in value]
             return value
 
-        trace = serialized.get("cognitive", {}).get("trace", {})
+        # Raw plot payloads are a pure runtime cache; keep only their keys.
+        cog = serialized.get("cognitive", {})
+        if isinstance(cog.get("plot_data_cache"), dict):
+            cog["plot_data_cache"] = {k: "<omitted>" for k in cog["plot_data_cache"]}
+
+        trace = cog.get("trace", {})
         for step in trace.get("steps", []):
             if isinstance(step, dict) and "data" in step:
                 step["data"] = omit_retrieved_data(step["data"])

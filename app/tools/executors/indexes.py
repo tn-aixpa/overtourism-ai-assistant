@@ -470,12 +470,67 @@ def _resolve_selected_territories(
     }
 
 
-def _fetch_plot(tool_fn, params: dict) -> dict:
-    """Call get-variation-data; if it comes back with no series, log the
-    exact request/response and retry ONCE (the backend has been seen to
-    return an empty payload for a repeated identical request)."""
+_PLOT_CACHE_TTL_SECONDS = 600
+_PLOT_CACHE_MAX_ENTRIES = 4
+
+
+def _plot_cache_key(params: dict) -> str:
+    import json
+
+    return json.dumps(params, sort_keys=True, default=str)
+
+
+def _plot_cache_get(state: AgentState | None, key: str) -> dict | None:
+    import copy
+
+    if state is None:
+        return None
+    cache = state.cognitive.plot_data_cache
+    entry = cache.get(key)
+    if not entry:
+        return None
+    if time.time() - entry["ts"] > _PLOT_CACHE_TTL_SECONDS:
+        cache.pop(key, None)
+        return None
+    # Deep copy: the caller mutates the payload (e.g. appends the provincia
+    # series), which must never leak back into the cache.
+    return copy.deepcopy(entry["data"])
+
+
+def _plot_cache_put(state: AgentState | None, key: str, data: dict) -> None:
+    import copy
+
+    if state is None:
+        return
+    cache = state.cognitive.plot_data_cache
+    cache[key] = {"ts": time.time(), "data": copy.deepcopy(data)}
+    while len(cache) > _PLOT_CACHE_MAX_ENTRIES:
+        oldest = min(cache, key=lambda k: cache[k]["ts"])
+        del cache[oldest]
+
+
+def _fetch_plot(tool_fn, params: dict, state: AgentState | None = None) -> dict:
+    """Call get-variation-data and return its payload.
+
+    The chart type (line/bar) is NOT part of the backend request, so asking
+    for the same data as a different chart sends a byte-identical request —
+    which the backend has been seen to answer with an empty payload. To make
+    that case robust, successful payloads are cached per session (short TTL)
+    and reused for an identical request, so a line -> bar switch doesn't hit
+    the backend again. Only non-empty payloads are cached.
+
+    If the backend still returns no series, log the exact request/response
+    and retry ONCE.
+    """
+    key = _plot_cache_key(params)
+    cached = _plot_cache_get(state, key)
+    if cached is not None:
+        logger.info("Reusing cached get-variation-data payload for params=%s", params)
+        return cached
+
     raw = tool_fn.invoke(params)
     if isinstance(raw, dict) and raw.get("series"):
+        _plot_cache_put(state, key, raw)
         return raw
     logger.warning(
         "Empty series from get-variation-data; params=%s raw=%s",
@@ -484,10 +539,12 @@ def _fetch_plot(tool_fn, params: dict) -> dict:
     )
     time.sleep(0.5)
     retry = tool_fn.invoke(params)
-    logger.warning(
-        "Retry of get-variation-data returned n_series=%s",
-        len((retry or {}).get("series") or []) if isinstance(retry, dict) else None,
+    n_series = (
+        len((retry or {}).get("series") or []) if isinstance(retry, dict) else None
     )
+    logger.warning("Retry of get-variation-data returned n_series=%s", n_series)
+    if isinstance(retry, dict) and retry.get("series"):
+        _plot_cache_put(state, key, retry)
     return retry
 
 
@@ -749,6 +806,7 @@ def execute_show_territorial_index_plot(
             "spatial_granularity": spatial_granularity,
             "selected_territories": selection["codes"],
         },
+        state,
     )
 
     logger.info(raw)
@@ -790,6 +848,7 @@ def execute_show_territorial_index_plot(
                     "spatial_granularity": _LEVEL_PROVINCIA,
                     "selected_territories": [],
                 },
+                state,
             )
             existing = {str(s.get("label")) for s in raw["series"]}
             raw["series"] = list(raw["series"]) + [
