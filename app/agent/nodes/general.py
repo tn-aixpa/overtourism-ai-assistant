@@ -111,6 +111,15 @@ def generate_output_message_node(state: AgentState) -> Command:
     current_turn_result_keys = state.cognitive.current_turn_result_keys()
     if current_turn_result_keys:
         messages: list[str] = list(state.cognitive.messages_to_include)
+        turn_tools = [k.split("__", 1)[0] for k in current_turn_result_keys]
+        # get_territorial_index_list is only a lookup step when the turn also
+        # ran another tool (plot/map/query): narrating it again just dumps
+        # the full index list after every chart. It is shown only when it is
+        # the actual answer, i.e. the user asked for the list.
+        list_is_lookup_only = "get_territorial_index_list" in turn_tools and any(
+            t not in _INTERNAL_ONLY_TOOLS and t != "get_territorial_index_list"
+            for t in turn_tools
+        )
         for result_key in current_turn_result_keys:
             tool_result = state.cognitive.tool_results.get(result_key)
             if tool_result is None:
@@ -118,6 +127,8 @@ def generate_output_message_node(state: AgentState) -> Command:
             # Strip a "__N" collision suffix to get back the real tool name.
             base_tool_name = result_key.split("__", 1)[0]
             if base_tool_name in _INTERNAL_ONLY_TOOLS:
+                continue
+            if base_tool_name == "get_territorial_index_list" and list_is_lookup_only:
                 continue
             messages.extend(
                 _build_messages_from_tool_result(base_tool_name, tool_result)
@@ -241,6 +252,14 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             if summary:
                 lines.append(
                     f"Chart parameters: {truncate_for_prompt(summary, max_chars=1000)}"
+                )
+            series_summary = output.get("series_summary")
+            if series_summary:
+                lines.append(
+                    "Series summary (computed from the plotted data; describe "
+                    "how values are distributed, constant series, peaks and "
+                    "how the series differ, using ONLY these figures): "
+                    f"{truncate_for_prompt(series_summary, max_chars=3500)}"
                 )
             return lines
 

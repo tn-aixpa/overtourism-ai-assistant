@@ -193,9 +193,15 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "overall provincial value alongside the selected municipalities/APTs. "
             "If the tool reports unmatched or ambiguous names, ask the user which "
             "territory they mean.\n\n"
-            "  - The tool returns only a small plot_summary of the parameters used, "
-            "NOT the plotted values — never state specific figures or trends for "
-            "the chart, only describe what was plotted.\n\n"
+            "  - After the chart is shown, finish with ONE short confirmation of what "
+            "was plotted. Do NOT repeat or list the available indexes (the list was "
+            "only a lookup step).\n\n"
+            "  - The tool returns a plot_summary of the parameters used and a "
+            "series_summary computed from the plotted data (min/max/mean, peaks, "
+            "constant series, trend, and how series differ). After the chart, "
+            "describe the result using ONLY the figures in series_summary; never "
+            "invent values, months or trends that are not in it. If "
+            "series_summary is absent, only describe what was plotted.\n\n"
             "  - show_territorial_index_plot is disabled outside standalone mode. "
             'Only treat it as absent if it appears under "Tools that exist but are '
             'NOT available in this execution mode"; otherwise do not claim a mode '

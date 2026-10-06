@@ -132,6 +132,21 @@ def react_step(
 
     guidelines_block = _assemble_guidelines(state)
 
+    failed = state.cognitive.last_failed_action
+    if failed:
+        failed_block = (
+            f"Tool: {failed.get('tool_name')}\n"
+            f"Arguments: {json.dumps(failed.get('arguments', {}), default=str, ensure_ascii=False)}\n"
+            f"Error: {failed.get('error')}\n"
+            "If the new user message asks to retry / try again / redo (in any "
+            "language, e.g. 'riprova', 'ritenta', 'ancora', 'try again'), call "
+            "this SAME tool again with these SAME arguments (adjust only what "
+            "the error or the user says to change). Do NOT finish with a "
+            "message and do NOT ask what to retry."
+        )
+    else:
+        failed_block = "None"
+
     prompt = f"""
 You are an assistant for a digital twin platform named AIxPA related to tourism management.
 
@@ -180,6 +195,9 @@ that refers to the most recent FAILED action: call the same tool again (same arg
 unless the user or the failure reason implies they should change) rather than finishing
 without acting:
 {prior_results_block}
+
+Last FAILED action (retry target):
+{failed_block}
 
 Conversation so far:
 {history_block}

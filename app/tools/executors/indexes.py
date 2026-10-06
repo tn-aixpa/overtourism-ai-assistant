@@ -2,6 +2,7 @@
 
 from typing import Any, Dict
 import logging
+import time
 
 from app.agent.state import AgentState
 
@@ -469,6 +470,193 @@ def _resolve_selected_territories(
     }
 
 
+def _fetch_plot(tool_fn, params: dict) -> dict:
+    """Call get-variation-data; if it comes back with no series, log the
+    exact request/response and retry ONCE (the backend has been seen to
+    return an empty payload for a repeated identical request)."""
+    raw = tool_fn.invoke(params)
+    if isinstance(raw, dict) and raw.get("series"):
+        return raw
+    logger.warning(
+        "Empty series from get-variation-data; params=%s raw=%s",
+        params,
+        str(raw)[:500],
+    )
+    time.sleep(0.5)
+    retry = tool_fn.invoke(params)
+    logger.warning(
+        "Retry of get-variation-data returned n_series=%s",
+        len((retry or {}).get("series") or []) if isinstance(retry, dict) else None,
+    )
+    return retry
+
+
+# ---------------------------------------------------------------------------
+# Plot summary (grounded facts about the plotted series, computed in Python)
+# ---------------------------------------------------------------------------
+_X_KEYS = ("x", "label", "date", "period", "name")
+_Y_KEYS = ("y", "value", "values", "index_value", "indice")
+_RAW_X_KEYS = ("labels", "categories", "x", "dates", "periods", "x_axis")
+_FLAT_REL_RANGE = 0.01  # range < 1% of the mean magnitude -> "constant"
+_PEAK_REL_THRESHOLD = 0.5  # a value is a peak if >= 50% above the series mean
+
+
+def _as_number(v):
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    return None
+
+
+def _series_points(series: dict, shared_x: list | None) -> list:
+    """[(x_label, value)] for one series, tolerating the shapes the backend
+    may use: a list of numbers (+ shared x labels), or a list of dicts."""
+    data = None
+    for key in ("data", "values", "points", "y"):
+        if isinstance(series.get(key), list):
+            data = series[key]
+            break
+    if not data:
+        return []
+    points = []
+    for i, item in enumerate(data):
+        if isinstance(item, dict):
+            x = next((item[k] for k in _X_KEYS if k in item), i)
+            y = next(
+                (
+                    _as_number(item[k])
+                    for k in _Y_KEYS
+                    if _as_number(item.get(k)) is not None
+                ),
+                None,
+            )
+        else:
+            x = shared_x[i] if shared_x and i < len(shared_x) else i
+            y = _as_number(item)
+        if y is not None:
+            points.append((str(x), y))
+    return points
+
+
+def _summarize_one_series(label: str, points: list) -> Dict[str, Any]:
+    values = [v for _, v in points]
+    n = len(values)
+    mean = sum(values) / n
+    lo_i = min(range(n), key=lambda i: values[i])
+    hi_i = max(range(n), key=lambda i: values[i])
+    rng = values[hi_i] - values[lo_i]
+    scale = max(abs(mean), 1e-12)
+    constant = rng / scale < _FLAT_REL_RANGE
+    first, last = values[0], values[-1]
+    change = last - first
+    if constant:
+        trend = "constant"
+    elif change > 0.05 * rng:
+        trend = "increasing"
+    elif change < -0.05 * rng:
+        trend = "decreasing"
+    else:
+        trend = "no clear trend (starts and ends at similar values)"
+    peaks = []
+    if not constant and mean > 0:
+        peaks = [
+            {"period": points[i][0], "value": round(values[i], 4)}
+            for i in range(n)
+            if values[i] >= mean * (1 + _PEAK_REL_THRESHOLD)
+        ]
+    out = {
+        "label": label,
+        "n_points": n,
+        "constant": constant,
+        "mean": round(mean, 4),
+        "min": {"period": points[lo_i][0], "value": round(values[lo_i], 4)},
+        "max": {"period": points[hi_i][0], "value": round(values[hi_i], 4)},
+        "first": {"period": points[0][0], "value": round(first, 4)},
+        "last": {"period": points[-1][0], "value": round(last, 4)},
+        "trend": trend,
+    }
+    if first not in (0, 0.0):
+        out["change_first_to_last_pct"] = round(change / abs(first) * 100, 1)
+    if peaks:
+        out["peaks"] = peaks[:5]
+    return out
+
+
+def _summarize_plot_series(raw: Any) -> Dict[str, Any] | None:
+    """Compact, LLM-safe facts about the plotted series (never the raw
+    arrays): per-series min/max/mean/trend/peaks/constant, plus, when there
+    are several series, how they differ (ranking by mean, ratio and gap
+    between highest and lowest, whether they share peak periods, and how
+    similar their shape is). Everything is computed here so the answer can
+    only cite real numbers. Returns None (and logs) when the series shape
+    is not recognised, so a summary problem never breaks the chart."""
+    try:
+        if not isinstance(raw, dict):
+            return None
+        shared_x = next(
+            (raw[k] for k in _RAW_X_KEYS if isinstance(raw.get(k), list)), None
+        )
+        per_series, aligned = [], {}
+        for s in raw.get("series") or []:
+            if not isinstance(s, dict):
+                continue
+            label = str(s.get("label", "?")).strip()
+            points = _series_points(s, shared_x)
+            if not points:
+                continue
+            per_series.append(_summarize_one_series(label, points))
+            aligned[label] = [v for _, v in points]
+        if not per_series:
+            logger.warning(
+                "Plot summary skipped: unrecognised series shape (series keys=%s)",
+                (
+                    list((raw.get("series") or [{}])[0].keys())
+                    if raw.get("series")
+                    else None
+                ),
+            )
+            return None
+
+        summary: Dict[str, Any] = {"series": per_series}
+        if len(per_series) > 1:
+            ranked = sorted(per_series, key=lambda x: x["mean"], reverse=True)
+            comparison: Dict[str, Any] = {
+                "ranking_by_mean": [
+                    {"label": x["label"], "mean": x["mean"]} for x in ranked
+                ],
+            }
+            top, bottom = ranked[0], ranked[-1]
+            comparison["gap_highest_vs_lowest"] = round(top["mean"] - bottom["mean"], 4)
+            if bottom["mean"] > 0:
+                comparison["highest_over_lowest_ratio"] = round(
+                    top["mean"] / bottom["mean"], 2
+                )
+            same_peak = {x["max"]["period"] for x in per_series}
+            comparison["peak_period_shared"] = len(same_peak) == 1
+            if len(same_peak) == 1:
+                comparison["shared_peak_period"] = next(iter(same_peak))
+            # Shape similarity: Pearson correlation between the first two
+            # series' values (only if same length and non-constant).
+            labels = list(aligned)
+            a, b = aligned[labels[0]], aligned[labels[1]]
+            if len(a) == len(b) and len(a) > 2:
+                ma, mb = sum(a) / len(a), sum(b) / len(b)
+                da = sum((x - ma) ** 2 for x in a) ** 0.5
+                db = sum((x - mb) ** 2 for x in b) ** 0.5
+                if da > 0 and db > 0:
+                    corr = sum((x - ma) * (y - mb) for x, y in zip(a, b)) / (da * db)
+                    comparison["shape_correlation"] = {
+                        "between": [labels[0], labels[1]],
+                        "value": round(corr, 2),
+                    }
+            summary["comparison"] = comparison
+        return summary
+    except Exception:
+        logger.exception("Plot summary failed; continuing without it")
+        return None
+
+
 def execute_show_territorial_index_plot(
     state: AgentState,
     index_id: str,
@@ -554,45 +742,54 @@ def execute_show_territorial_index_plot(
         "end_date": end_date,
         "granularity": granularity,
     }
-    raw = get_territorial_index_plot_data.invoke(
+    raw = _fetch_plot(
+        get_territorial_index_plot_data,
         {
             **base_params,
             "spatial_granularity": spatial_granularity,
             "selected_territories": selection["codes"],
-        }
+        },
     )
+
+    logger.info(raw)
 
     missing = []
     if spatial_granularity != _LEVEL_PROVINCIA:
-        # The backend silently drops codes it has no series for, so check
-        # what actually came back instead of plotting a partial chart.
+        # The backend silently drops territories it has no series for.
+        # IMPORTANT: the returned series identify territories by NAME in
+        # series["label"], not by the municipality/macro-area CODE.
         returned = {
-            str(s.get("label"))
+            str(s.get("label")).strip()
             for s in (raw.get("series") or [])
-            if isinstance(s, dict)
+            if isinstance(s, dict) and s.get("label") is not None
         }
+        returned_keys = {_normalize_name(label) for label in returned}
+
         missing = [
             name
-            for code, name in selection["code_to_name"].items()
-            if code not in returned
+            for name in selection["names"]
+            if _normalize_name(name) not in returned_keys
         ]
+
         if not returned:
             raise ValueError(
                 "The backend returned no series for the selected territories "
                 f"{selection['names']} in this period."
             )
+
         if missing:
             logger.warning(f"No series returned for territories: {missing}")
 
         # Overall provincial series: get-variation-data returns a single
         # spatial grain per call, so fetch it separately and append it.
         if selection["include_provincia"]:
-            prov = get_territorial_index_plot_data.invoke(
+            prov = _fetch_plot(
+                get_territorial_index_plot_data,
                 {
                     **base_params,
                     "spatial_granularity": _LEVEL_PROVINCIA,
                     "selected_territories": [],
-                }
+                },
             )
             existing = {str(s.get("label")) for s in raw["series"]}
             raw["series"] = list(raw["series"]) + [
@@ -602,10 +799,13 @@ def execute_show_territorial_index_plot(
             ]
 
     # The payload can be large: log its shape, not its content.
-    logger.debug(
-        "Plot data received (type=%s, keys=%s)",
-        raw.__class__.__name__,  # not type(raw): `type` is shadowed above
+    first = (raw.get("series") or [None])[0] if isinstance(raw, dict) else None
+    logger.info(
+        "Plot payload for %s: keys=%s, n_series=%s, first_series_keys=%s",
+        widget_name,
         list(raw.keys()) if isinstance(raw, dict) else None,
+        len(raw.get("series") or []) if isinstance(raw, dict) else None,
+        list(first.keys()) if isinstance(first, dict) else None,
     )
 
     action = {
@@ -616,9 +816,12 @@ def execute_show_territorial_index_plot(
         },
     }
 
+    series_summary = _summarize_plot_series(raw)
+
     return {
         "success": True,
         "response": "Ecco il grafico dell'indice richiesto:",
+        "series_summary": series_summary,
         "plot_summary": {
             "index_id": index_id,
             "start_date": start_date,

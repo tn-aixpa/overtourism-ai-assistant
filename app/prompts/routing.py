@@ -178,6 +178,10 @@ Rules:
   exist* (location) are different domains that happen to share
   vocabulary; a request for real platform data is a topic change even
   when the noun stays the same.
+- A request to retry / try again / redo / continue ("riprova", "ritenta",
+  "try again", "ancora", "fallo di nuovo") is ALWAYS a continuation of the
+  current route: set "topic_changed" to false and keep the current
+  second_level. Never answer "unclear" for it when a current route exists.
 - "second_level" must be null when top_level is "system_info" or "general"
   (they have no sub-areas).
 - Never invent a key that isn't listed above.

@@ -6,7 +6,7 @@ from enum import StrEnum, Enum
 import json
 
 MAX_CONTEXT_WINDOW = 20
-DEFAULT_REASONING_CONTEXT_SIZE = 5
+DEFAULT_REASONING_CONTEXT_SIZE = 8
 # Safety cap on Thought/Action/Observation cycles within a single turn, so a
 # reasoner that never emits "finish" (e.g. stuck bouncing between two tools)
 # cannot loop forever. See react_reasoner_node in nodes/reasoner.py.
@@ -190,6 +190,11 @@ class CognitiveState:
     # across turns so the reasoner can see what already ran and avoid
     # redundant calls). Trimmed by tool_executor._trim_tool_results.
     tool_results: Dict[str, Any] = field(default_factory=dict)
+    # The most recent tool call that FAILED: {"tool_name", "arguments",
+    # "error"}. Survives across turns (unlike the scratchpad, which is
+    # reset every turn) so a later "riprova"/"retry" can re-issue exactly the
+    # same call. Cleared when that same tool later succeeds.
+    last_failed_action: Optional[Dict[str, Any]] = None
     tool_confirmation_needed: bool = False
     # Set to True right after the user confirms a pending creation tool, so that
     # tool_executor knows to actually run it instead of pausing again.

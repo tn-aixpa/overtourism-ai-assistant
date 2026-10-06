@@ -258,6 +258,7 @@ The following messages represent the core findings of the answering process so f
 - Write your response in: **{language}**
 {terminology_block}
 - Be concise and directly address the user's question.
+- Never list or enumerate the available territorial indexes (or other catalogue items) unless the user's question explicitly asks for that list; after showing a chart or map, just confirm it and summarise it.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar.
 {additional_instructions}
 

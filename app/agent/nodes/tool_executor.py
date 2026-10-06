@@ -346,7 +346,10 @@ def tool_executor_node(state: AgentState) -> Command:
         # what made assistant_action_data show up inside prompts.
         raw_output = raw_result.get("output")
         clean_output, assistant_actions = split_assistant_actions(raw_output)
-        result = {**raw_result, "output": clean_output}
+        # Keep the arguments next to the outcome: without them a FAILED
+        # entry says *that* something failed but not with what, so a later
+        # "retry" had nothing to re-issue.
+        result = {**raw_result, "output": clean_output, "arguments": tool_arguments}
 
         state.cognitive.tool_result = result
 
@@ -392,7 +395,16 @@ def tool_executor_node(state: AgentState) -> Command:
 
         if not result["success"]:
             state.cognitive.error_details = result.get("error", "Unknown error")
+            state.cognitive.last_failed_action = {
+                "tool_name": tool_name,
+                "arguments": tool_arguments,
+                "error": result.get("error", "Unknown error"),
+            }
             return Command(update=state, goto="error")
+
+        failed = state.cognitive.last_failed_action
+        if failed and failed.get("tool_name") == tool_name:
+            state.cognitive.last_failed_action = None
 
         if assistant_actions:
             existing = state.assistant_action_data or []
@@ -418,4 +430,9 @@ def tool_executor_node(state: AgentState) -> Command:
     except Exception as e:
         logger.error(f"Exception in tool executor: {e}", exc_info=True)
         state.cognitive.error_details = str(e)
+        state.cognitive.last_failed_action = {
+            "tool_name": tool_name,
+            "arguments": tool_arguments,
+            "error": str(e),
+        }
         return Command(update=state, goto="error")
