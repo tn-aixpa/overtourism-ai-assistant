@@ -63,8 +63,7 @@ def create_show_territorial_index_map_tool() -> ToolDefinition:
             "'provincia'. If the user asks for an APT, use 'macro_area'. "
             "start_date/end_date must always be computed as YYYY-MM-DD, following these "
             "rules: for a full year (e.g. '2023'), start_date is that year's Jan 1st and "
-            "end_date is that same year's Dec 1st (the last month expressed as its own "
-            "first day, e.g. '2023-12-01' — NOT '2023-12-31'); for a single month (e.g. "
+            "end_date is that same year's Dec 31st; for a single month (e.g. "
             "'giugno 2023'), start_date and end_date are both that month's 1st (e.g. "
             "'2023-06-01'); for a range spanning several months/years, start_date is the "
             "first day of the first month and end_date is the first day of the last "
@@ -177,7 +176,9 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
     return ToolDefinition(
         name="show_territorial_index_plot",
         description=(
-            "Show a territorial index as a line or bar chart over a given period. "
+            "Show a territorial index as a line or bar chart over a given period, "
+            "for the whole province or for a selection of municipalities or "
+            "macro-areas (APT). "
             "Call this whenever the user wants to see how an index varies over time "
             "(e.g. 'puoi mostrarmi la variazione nel tempo?') or wants to compare "
             "selected areas (e.g. 'puoi mostrarmi la ricettività a Molveno e Trento?'). "
@@ -191,14 +192,24 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
             "The index_id must be resolved first — if it hasn't been listed yet this "
             "session, call get_territorial_index_list first and use the matching "
             "index's index_id, never a guessed or typed string. "
-            "Available temporal granularities are 'yearly', 'monthly', 'weekly' and "
-            "'daily'. The spatial_granularity selects the territorial level: 'comune' "
-            "(default), 'macro_area' (also referred to as APT, Azienda per il Turismo), "
-            "or 'provincia'. If the user asks for an APT, use 'macro_area'. "
+            "Available temporal granularities are 'annuale', 'mensile', "
+            "'settimanale' and 'giornaliero'. The territorial level is NOT a "
+            "parameter: it is inferred from selected_territories. Pass only "
+            "municipalities (comune level) OR only macro-areas (also referred to as "
+            "APT, Azienda per il Turismo) — never a "
+            "mix of the two; if the user asks for both kinds, ask them to choose one. "
+            "selected_territories can be omitted ONLY for a province-level plot (the "
+            "user asks about the whole province / Trentino as a whole, with no "
+            "specific municipality or APT); in every other case it is required. "
+            "When plotting municipalities or macro-areas, set include_provincia=true "
+            "if the user also wants the overall provincial value as a reference "
+            "line/bar. Territory names are resolved against the backend list of "
+            "available territories; names that cannot be matched (or are ambiguous) "
+            "make the tool fail with suggestions — ask the user to clarify instead of "
+            "guessing. "
             "start_date/end_date must always be computed as YYYY-MM-DD, following these "
             "rules: for a full year (e.g. '2023'), start_date is that year's Jan 1st and "
-            "end_date is that same year's Dec 1st (the last month expressed as its own "
-            "first day, e.g. '2023-12-01' — NOT '2023-12-31'); for a single month (e.g. "
+            "end_date is that same year's Dec 31st; for a single month (e.g. "
             "'giugno 2023'), start_date and end_date are both that month's 1st (e.g. "
             "'2023-06-01'); for a range spanning several months/years, start_date is the "
             "first day of the first month and end_date is the first day of the last "
@@ -250,32 +261,47 @@ def create_show_territorial_index_plot_tool() -> ToolDefinition:
             ToolParameter(
                 name="granularity",
                 description=(
-                    "Time interval of the x-axis: 'yearly', 'monthly', 'weekly' or "
-                    "'daily'. Omit to use the default, 'monthly'."
+                    "Time interval of the x-axis: 'annuale', 'mensile', "
+                    "'settimanale' or 'giornaliero'. Omit to use the default, "
+                    "'mensile'."
                 ),
                 type="string",
                 required=False,
-                default="monthly",
-                schema={"enum": ["yearly", "monthly", "weekly", "daily"]},
+                default="mensile",
+                schema={"enum": ["annuale", "mensile", "settimanale", "giornaliero"]},
             ),
             ToolParameter(
-                name="spatial_granularity",
+                name="selected_territories",
                 description=(
-                    "Territorial level being represented: 'comune' (municipality) or "
-                    "'macro_area' (also called APT, Azienda per il Turismo), or "
-                    "'provincia'. Use 'macro_area' for an APT. Omit to use the "
-                    "default, 'comune'."
+                    "Names of the territories to plot, as the user wrote them: either "
+                    "ONLY municipalities (e.g. ['Molveno', 'Trento']) or ONLY "
+                    "macro-areas/APT (e.g. ['Val di Non', 'Val di Fassa']) — never "
+                    "both kinds together. The territorial level (comune / macro_area) "
+                    "is inferred from these names. Required unless the plot is for "
+                    "the whole province, in which case omit it. Do not put "
+                    "'Provincia' here: use include_provincia instead."
                 ),
-                type="string",
+                type="array",
                 required=False,
-                default="comune",
-                schema={"enum": ["comune", "macro_area", "provincia"]},
+                schema={"items": {"type": "string"}},
+            ),
+            ToolParameter(
+                name="include_provincia",
+                description=(
+                    "Only meaningful together with selected_territories: set to true "
+                    "to also show the overall provincial value next to the selected "
+                    "municipalities/macro-areas. Defaults to false."
+                ),
+                type="boolean",
+                required=False,
+                default=False,
             ),
         ],
         output_description=(
             "'lineChart' or 'barChart' widget to display in the interface, already "
             "formatted for assistant_action_data, plus a small plot_summary of the "
-            "parameters used."
+            "parameters used (including the inferred spatial_granularity and the "
+            "resolved territories)."
         ),
         enabled=True,
         tags=["widget", "plot", "territorial-index", "standalone"],

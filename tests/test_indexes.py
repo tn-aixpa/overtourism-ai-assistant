@@ -50,6 +50,34 @@ class TestAdditionalTerritorialIndexParams:
             "incidenza-periodo", indicator="ricettivita", seasonality="Weekend"
         ) == {"indicator": "ricettivita", "seasonality": "weekend"}
 
+    def test_plot_executor_normalizes_italian_granularity_for_backend(self):
+        spatial_areas = {
+            "comuni": [{"code": "1", "name": "Molveno"}],
+            "areas": [],
+        }
+        response = {"series": [{"label": "Molveno"}]}
+
+        with (
+            patch.object(backend_tools, "get_spatial_areas") as mock_spatial_areas,
+            patch.object(
+                backend_tools,
+                "get_data",
+                return_value=response,
+            ) as mock_get,
+        ):
+            mock_spatial_areas.invoke.return_value = spatial_areas
+            result = index_executors.execute_show_territorial_index_plot(
+                state=None,
+                index_id="ricettivita",
+                start_date="2023-01-01",
+                end_date="2023-12-31",
+                granularity="mensile",
+                selected_territories=["Molveno"],
+            )
+
+        assert mock_get.call_args.kwargs["params"]["granularity"] == "mensile"
+        assert result["plot_summary"]["granularity"] == "mensile"
+
     def test_map_executor_passes_incidenza_arguments_to_backend(self):
         response = {"geo_data": {"data": {"features": []}}}
         with patch.object(

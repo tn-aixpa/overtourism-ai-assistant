@@ -299,8 +299,174 @@ def execute_show_territorial_index_map(
 
 _PLOT_WIDGETS = {"line": "lineChart", "bar": "barChart"}
 _DEFAULT_PLOT_TYPE = "line"
-_DEFAULT_GRANULARITY = "monthly"
-_DEFAULT_SPATIAL_GRANULARITY = "comune"
+_DEFAULT_GRANULARITY = "mensile"
+
+# Spatial levels. The level is never passed by the caller: it is inferred from
+# the kind of territories in `selected_territories` (see
+# _resolve_selected_territories).
+_LEVEL_COMUNE = "comune"
+_LEVEL_MACRO_AREA = "macro_area"
+_LEVEL_PROVINCIA = "provincia"
+
+# Entry present in BOTH lists returned by default/indexes/get-spatial-areas
+# ({"code": "-1", "name": "Provincia"}): the whole province. Never sent as a
+# selected territory (see _resolve_selected_territories).
+_PROVINCIA_CODE = "-1"
+_PROVINCIA_ALIASES = {
+    "1",  # _normalize_name("-1")
+    "provincia",
+    "provincia di trento",
+    "provincia autonoma di trento",
+}
+
+_KIND_TO_LEVEL = {"comuni": _LEVEL_COMUNE, "areas": _LEVEL_MACRO_AREA}
+_KIND_LABEL = {_LEVEL_COMUNE: "municipalities", _LEVEL_MACRO_AREA: "macro-areas (APT)"}
+
+
+def _build_territory_index(spatial_areas: Dict[str, Any]) -> list:
+    """Flatten the get-spatial-areas payload into
+    [{level, code, name, key, code_key}] (the "Provincia" entry is excluded:
+    it is handled separately via include_provincia)."""
+    entries = []
+    for kind, level in _KIND_TO_LEVEL.items():
+        for item in (spatial_areas or {}).get(kind, []) or []:
+            code = str(item.get("code", "")).strip()
+            name = str(item.get("name", "")).strip()
+            if not code or not name or code == _PROVINCIA_CODE:
+                continue
+            entries.append(
+                {
+                    "level": level,
+                    "code": code,
+                    "name": name,
+                    "key": _normalize_name(name),
+                    "code_key": _normalize_name(code),
+                }
+            )
+    return entries
+
+
+def _resolve_one_territory(requested: str, entries: list):
+    """Map one user-typed territory onto exactly one catalogue entry.
+
+    Returns (entry | None, suggestions). Order: exact (normalized) name or
+    code match; then a UNIQUE whole-word containment match over BOTH kinds at
+    once; otherwise unresolved with a few suggestions. Searching both kinds
+    together is deliberate: "San Martino di Castrozza" is contained in a
+    municipality AND in an APT name, which is ambiguous and must be reported
+    rather than silently picked. Containment is never used when it is not
+    unique, so "Trento" resolves to the municipality via the exact pass
+    (not to the APT "Trento, Monte Bondone e Altopiano di Pinè")."""
+    import difflib
+
+    key = _normalize_name(requested)
+    if not key:
+        return None, []
+
+    exact = [e for e in entries if key in (e["key"], e["code_key"])]
+    if len(exact) == 1:
+        return exact[0], []
+    if len(exact) > 1:
+        return None, [f"{e['name']} ({_KIND_LABEL[e['level']]})" for e in exact[:3]]
+
+    padded = f" {key} "
+    contained = [
+        e for e in entries if padded in f" {e['key']} " or f" {e['key']} " in padded
+    ]
+    if len(contained) == 1:
+        return contained[0], []
+    if contained:
+        return None, [f"{e['name']} ({_KIND_LABEL[e['level']]})" for e in contained[:3]]
+
+    by_key = {e["key"]: e for e in entries}
+    close = difflib.get_close_matches(key, list(by_key), n=3, cutoff=0.75)
+    return None, [
+        f"{by_key[k]['name']} ({_KIND_LABEL[by_key[k]['level']]})" for k in close
+    ]
+
+
+def _resolve_selected_territories(
+    selected_territories: Any,
+    include_provincia: bool,
+    spatial_areas: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Validate the requested territories against the backend catalogue and
+    infer the spatial granularity from them.
+
+    Returns {"spatial_granularity", "codes", "names", "include_provincia"}:
+    - no territories (or only "Provincia")  -> 'provincia'
+    - only municipalities                   -> 'comune'
+    - only macro-areas                      -> 'macro_area'
+    `codes` are the comune/macro-area IDs the backend filters series on.
+    The overall provincial series is NOT requested through `codes`: the
+    endpoint only returns one spatial grain per call, so the executor fetches
+    it separately when `include_provincia` is True. Raises ValueError for unknown/ambiguous names and for
+    mixed municipality + macro-area selections.
+    """
+    if isinstance(selected_territories, str):
+        # NOT split on commas: macro-area names contain them
+        # ("Trento, Monte Bondone e Altopiano di Pinè" is a single name).
+        selected_territories = [selected_territories]
+    requested = [
+        t.strip()
+        for t in (selected_territories or [])
+        if isinstance(t, str) and t.strip()
+    ]
+
+    entries = _build_territory_index(spatial_areas)
+    resolved, unresolved, seen = [], [], set()
+    wants_provincia = bool(include_provincia)
+
+    for name in requested:
+        if _normalize_name(name) in _PROVINCIA_ALIASES:
+            wants_provincia = True
+            continue
+        entry, suggestions = _resolve_one_territory(name, entries)
+        if entry is None:
+            item = {"requested": name}
+            if suggestions:
+                item["did_you_mean"] = suggestions
+            unresolved.append(item)
+        elif entry["code"] not in seen:
+            seen.add(entry["code"])
+            resolved.append(entry)
+
+    if unresolved:
+        raise ValueError(
+            "Could not match these territories to a unique municipality or "
+            f"macro-area: {unresolved}. Ask the user which one they mean."
+        )
+
+    levels = {e["level"] for e in resolved}
+    if len(levels) > 1:
+        by_level = {
+            _KIND_LABEL[lvl]: [e["name"] for e in resolved if e["level"] == lvl]
+            for lvl in sorted(levels)
+        }
+        raise ValueError(
+            "Municipalities and macro-areas (APT) cannot be mixed in the same "
+            f"plot, but the selection contains both: {by_level}. Ask the user "
+            "to choose a single level (comuni or macro-aree), optionally "
+            "together with the overall provincia."
+        )
+
+    if not resolved:
+        # Whole province only.
+        return {
+            "spatial_granularity": _LEVEL_PROVINCIA,
+            "codes": [],
+            "names": [],
+            "code_to_name": {},
+            "include_provincia": True,
+        }
+
+    return {
+        "spatial_granularity": levels.pop(),
+        "codes": [e["code"] for e in resolved],
+        "names": [e["name"] for e in resolved],
+        "code_to_name": {e["code"]: e["name"] for e in resolved},
+        "include_provincia": wants_provincia,
+    }
 
 
 def execute_show_territorial_index_plot(
@@ -310,30 +476,38 @@ def execute_show_territorial_index_plot(
     end_date: str,
     type: str = _DEFAULT_PLOT_TYPE,
     granularity: str = _DEFAULT_GRANULARITY,
-    spatial_granularity: str = _DEFAULT_SPATIAL_GRANULARITY,
+    selected_territories: list | None = None,
+    include_provincia: bool = False,
     **kwargs,
 ) -> Dict[str, Any]:
     """Build the 'lineChart' / 'barChart' widget for a single territorial
     index over a date range, from live backend data.
 
-    `type`, `granularity` and `spatial_granularity` default here (not only
-    in the tool definition) because validate_tool_arguments only enforces
-    *required* parameters and never applies ToolParameter.default: an
-    optional parameter the LLM omits simply doesn't arrive, so without
-    Python-level defaults this would raise a TypeError instead of using the
-    documented defaults. `type` shadows the builtin only because it is the
-    parameter name exposed to the LLM.
-    """
-    from app.tools.executor_backend_tools import get_territorial_index_plot_data
+    The territorial level is INFERRED from `selected_territories` (only
+    municipalities -> 'comune', only macro-areas -> 'macro_area', nothing ->
+    'provincia'); it is not an input. Names are resolved against
+    default/indexes/get-spatial-areas, mixed municipality/macro-area
+    selections are rejected, and `include_provincia` adds the overall
+    provincial series to a comune/macro_area plot.
 
-    # Validate BEFORE the backend call so a bad `type` doesn't cost a
+    `selected_territories` is optional in the tool schema (only a
+    province-level plot can omit it, which the schema cannot express), so the
+    "required unless provincia" rule is enforced here instead.
+
+    `type`, `granularity`, `include_provincia` default here (not only in the
+    tool definition) because validate_tool_arguments only enforces *required*
+    parameters and never applies ToolParameter.default. `type` shadows the
+    builtin only because it is the parameter name exposed to the LLM.
+    """
+    from app.tools.executor_backend_tools import (
+        get_spatial_areas,
+        get_territorial_index_plot_data,
+    )
+
+    # Validate BEFORE the backend plot call so a bad `type` doesn't cost a
     # request. Also tolerate an LLM passing null/empty/"Line" for the
     # optional parameters instead of omitting them.
     plot_type = (type or _DEFAULT_PLOT_TYPE).strip().lower()
-    granularity = (granularity or _DEFAULT_GRANULARITY).strip().lower()
-    spatial_granularity = (
-        (spatial_granularity or _DEFAULT_SPATIAL_GRANULARITY).strip().lower()
-    )
 
     widget_name = _PLOT_WIDGETS.get(plot_type)
     if widget_name is None:
@@ -341,21 +515,91 @@ def execute_show_territorial_index_plot(
             f"Unknown plot type '{type}': use one of {sorted(_PLOT_WIDGETS)}"
         )
 
+    # Guard against a stale/hallucinated legacy `spatial_granularity`: the
+    # level is now inferred, and silently dropping a comune/macro_area request
+    # that comes without territories would plot the whole province instead.
+    legacy_level = str(kwargs.get("spatial_granularity") or "").strip().lower()
+    has_territories = bool(
+        selected_territories
+        and (
+            [selected_territories]
+            if isinstance(selected_territories, str)
+            else selected_territories
+        )
+    )
+    if legacy_level in {_LEVEL_COMUNE, _LEVEL_MACRO_AREA} and not has_territories:
+        raise ValueError(
+            f"A {legacy_level}-level plot requires 'selected_territories' "
+            "(the municipalities/macro-areas to show). Ask the user which ones, "
+            "or omit the parameter only for a whole-province plot."
+        )
+
+    spatial_areas = get_spatial_areas.invoke({})
+    selection = _resolve_selected_territories(
+        selected_territories, include_provincia, spatial_areas
+    )
+    spatial_granularity = selection["spatial_granularity"]
+
     logger.info(
         f"Executing show_territorial_index_plot: {plot_type} plot for index "
         f"'{index_id}' ({start_date} -> {end_date}), granularity={granularity}, "
-        f"spatial_granularity={spatial_granularity}"
+        f"inferred spatial_granularity={spatial_granularity}, "
+        f"territories={selection['names']}, "
+        f"include_provincia={selection['include_provincia']}"
     )
 
+    base_params = {
+        "index": index_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+    }
     raw = get_territorial_index_plot_data.invoke(
         {
-            "index": index_id,
-            "start_date": start_date,
-            "end_date": end_date,
-            "granularity": granularity,
+            **base_params,
             "spatial_granularity": spatial_granularity,
+            "selected_territories": selection["codes"],
         }
     )
+
+    missing = []
+    if spatial_granularity != _LEVEL_PROVINCIA:
+        # The backend silently drops codes it has no series for, so check
+        # what actually came back instead of plotting a partial chart.
+        returned = {
+            str(s.get("label"))
+            for s in (raw.get("series") or [])
+            if isinstance(s, dict)
+        }
+        missing = [
+            name
+            for code, name in selection["code_to_name"].items()
+            if code not in returned
+        ]
+        if not returned:
+            raise ValueError(
+                "The backend returned no series for the selected territories "
+                f"{selection['names']} in this period."
+            )
+        if missing:
+            logger.warning(f"No series returned for territories: {missing}")
+
+        # Overall provincial series: get-variation-data returns a single
+        # spatial grain per call, so fetch it separately and append it.
+        if selection["include_provincia"]:
+            prov = get_territorial_index_plot_data.invoke(
+                {
+                    **base_params,
+                    "spatial_granularity": _LEVEL_PROVINCIA,
+                    "selected_territories": [],
+                }
+            )
+            existing = {str(s.get("label")) for s in raw["series"]}
+            raw["series"] = list(raw["series"]) + [
+                s
+                for s in (prov.get("series") or [])
+                if str(s.get("label")) not in existing
+            ]
 
     # The payload can be large: log its shape, not its content.
     logger.debug(
@@ -382,6 +626,9 @@ def execute_show_territorial_index_plot(
             "plot_type": plot_type,
             "granularity": granularity,
             "spatial_granularity": spatial_granularity,
+            "selected_territories": selection["names"],
+            "include_provincia": selection["include_provincia"],
+            "territories_without_data": missing,
         },
         "assistant_action_data": [action],
     }

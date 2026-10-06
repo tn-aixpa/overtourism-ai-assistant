@@ -741,16 +741,31 @@ def get_territorial_index_map_data(
 
 
 @tool
+def get_spatial_areas() -> dict:
+    """Fetch the territories that can be selected in plots: municipalities
+    ("comuni") and macro-areas/APT ("areas"), each as [{code, name}]. Both lists
+    also contain the entry {code: "-1", name: "Provincia"} (the whole province)."""
+    return get_data("default/indexes/get-spatial-areas")
+
+
+@tool
 def get_territorial_index_plot_data(
     index: str,
     start_date: str,
     end_date: str,
     granularity: str,
-    spatial_granularity: str = "comune",
+    spatial_granularity: str = "provincia",
+    selected_territories: list[str] | None = None,
 ) -> dict:
-    """Fetch the geo-referenced values (GeoJSON + value range) of a single
-    territorial index for the given date range from the API."""
-    url = f"default/indexes/get-variation-data"
+    """Fetch the time-series (variation) data of a single territorial index for
+    the given date range and territories from the API.
+
+    selected_territories holds the comune / macro-area IDs the endpoint filters
+    series on (matched against each series' label). It is sent as a repeated
+    query parameter and omitted when empty (e.g. provincia, which returns only
+    the province-wide series). spatial_granularity is read by the backend from
+    the query string (comune | macro_area | provincia)."""
+    url = "default/indexes/get-variation-data"
     params = {
         "index": index,
         "start_date": start_date,
@@ -758,4 +773,6 @@ def get_territorial_index_plot_data(
         "granularity": granularity,
         "spatial_granularity": spatial_granularity,
     }
+    if selected_territories:
+        params["selected_territories"] = list(selected_territories)
     return get_data(url, params=params)
