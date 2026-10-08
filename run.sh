@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 source "$ROOT_DIR/.venv/bin/activate"
 
 # Application configuration
-export BACKEND_URL="${BACKEND_URL:-http://0.0.0.0:8000/api/v2/}"
+export BACKEND_URL="${BACKEND_URL:-http://0.0.0.0:8000/api/}"
 export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-...}"
 export SMARTLAB_API_KEY="${SMARTLAB_API_KEY:-sk-..}"
 export AUTH_ENABLED="${AUTH_ENABLED:-true}"

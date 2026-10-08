@@ -556,3 +556,51 @@ async def get_usge_stats(
     from app.utils.token_tacking import get_usage_per_day
 
     return get_usage_per_day()
+
+
+# ---------------------------------------------------------------------------
+# Operational / health endpoints
+# ---------------------------------------------------------------------------
+# These endpoints intentionally do not require authentication so that
+# Kubernetes/load-balancer probes can call them without credentials.
+#
+# GET /health       - overall application health
+# GET /health/live  - liveness probe: process is alive and serving requests
+# GET /health/ready - readiness probe: application dependencies are initialized
+#
+# Keep these endpoints cheap and side-effect free. They should never invoke
+# the agent or perform an expensive backend operation.
+@router.get("/health", tags=["health"])
+async def health():
+    """Return the overall health of the API process."""
+    return {
+        "status": "ok",
+        "service": "api",
+    }
+
+
+@router.get("/health/live", tags=["health"])
+async def health_live():
+    """Kubernetes/container liveness probe."""
+    return {"status": "ok"}
+
+
+@router.get("/health/ready", tags=["health"])
+async def health_ready():
+    """Readiness probe for load balancers/orchestrators.
+
+    The route registry is initialized lazily by the application, so avoid
+    forcing initialization here. A successful response means this API process
+    is accepting requests; dependency-specific checks can be added here later
+    if they become available.
+    """
+    return {"status": "ready"}
+
+
+@router.get("/health/version", tags=["health"])
+async def health_version():
+    """Expose a lightweight service/version identifier for diagnostics."""
+    return {
+        "service": "api",
+        "version": os.environ.get("APP_VERSION", "unknown"),
+    }
