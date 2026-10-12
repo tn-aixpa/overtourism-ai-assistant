@@ -42,7 +42,6 @@ from app.utils.common import set_token
 from app.utils.authentication import (
     _require_bearer_token,
     check_authorization,
-    get_user_id,
 )
 from app.utils.backend_utils import get_allowed_territories
 
@@ -60,10 +59,10 @@ AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
 
 
 def _require_authorized_user(token: str) -> str:
-    authorized, role = check_authorization(token)
+    authorized, role, user_id = check_authorization(token)
     if not authorized:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    return role
+    return role, user_id
 
 
 def _run_agent(key: str, state: AgentState, token: str):
@@ -165,10 +164,9 @@ async def run_agent_endpoint(
     authorization: str | None = Header(default=None),
 ):
     # Verify authorization
-    user_role = "viewer"
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        user_role = _require_authorized_user(token)
+        user_role, user_id = _require_authorized_user(token)
     else:
         token = None
 
@@ -205,7 +203,6 @@ async def run_agent_endpoint(
         state = load_state(session_id)
 
         if state is None:
-            user_id = get_user_id(token)
 
             state = AgentState(
                 session_id=session_id,
@@ -465,7 +462,7 @@ async def run_selected_tools(
     user_role = "viewer"
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        user_role = _require_authorized_user(token)
+        user_role, user_id = _require_authorized_user(token)
     else:
         token = None
     if token:
@@ -481,7 +478,7 @@ async def run_selected_tools(
         )
 
     # Stateless, session-less scratch state — intentionally never saved.
-    user_id = get_user_id(token) + "-system"
+    user_id = user_id + "-system"
     state = AgentState(
         allowed_territories=allowed_territories,
         territory=territory,

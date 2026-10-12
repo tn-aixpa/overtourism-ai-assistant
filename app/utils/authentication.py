@@ -31,30 +31,11 @@ def _require_bearer_token(authorization: str | None) -> str:
     return token
 
 
-def get_user_id(token: str) -> str:
-    if token is None:
-        return "unidentified"
-
-    payload = jwt.decode(token, options={"verify_signature": False})
-
-    if "email" in payload:
-        return payload["email"]
-
-    if "given_name" in payload:
-        return payload["given_name"]
-
-    if "preferred_username" in payload:
-        return payload["preferred_username"]
-
-    return "unidentified"
-
-
 def check_authorization(token: str) -> tuple[bool, str]:
     """Return whether the backend authorizes the token and the user's role."""
-    api_response = get_data(
-        "auth/me", headers={"Authorization": f"Bearer {token}"}
-    )
+    api_response = get_data("auth/me", headers={"Authorization": f"Bearer {token}"})
     return (
         api_response.get("authenticated", False),
         api_response.get("role", "viewer"),
+        api_response.get("user_id"),
     )
