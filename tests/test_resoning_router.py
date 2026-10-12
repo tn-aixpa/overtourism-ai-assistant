@@ -15,6 +15,8 @@ from langgraph.types import Command
 
 from app.agent.nodes import reasoner as reasoner_module
 from app.agent.state import AgentState, ReActStep
+from app.prompts.react_guidelines import GUIDELINE_BLOCKS
+from app.tools.definitions.analysis_widgets import create_analysis_widget_tool
 from app.tools.definitions.indexes import create_show_territorial_index_map_tool
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
@@ -35,6 +37,33 @@ def react_step_response(**overrides):
     payload = {"thought": "reasoning...", "action": "finish", "message": "done"}
     payload.update(overrides)
     return json.dumps(payload)
+
+
+def test_scenario_guidelines_require_preview_plot_and_respect_viewer_permissions():
+    scenario_guidelines = "\n".join(
+        body for _, body in GUIDELINE_BLOCKS["scenario_analysis"]
+    )
+
+    assert "After create_new_temp_scenario returns created=true" in scenario_guidelines
+    assert "widget_type='load_plot'" in scenario_guidelines
+    assert "do not offer saving as an option" in scenario_guidelines
+    assert (
+        "Do NOT call a write tool, ask for a name/description/proposal"
+        in scenario_guidelines
+    )
+
+
+def test_existing_scenario_questions_always_include_evaluation_and_plot():
+    scenario_guidelines = "\n".join(
+        body for _, body in GUIDELINE_BLOCKS["scenario_analysis"]
+    )
+
+    assert "ALWAYS assume a request about an existing scenario" in scenario_guidelines
+    assert (
+        "call analyze_scenario_results to report its evaluation" in scenario_guidelines
+    )
+    assert "For a SINGLE existing scenario" in scenario_guidelines
+    assert "widget_type='load_plot'" in scenario_guidelines
 
 
 # ---------------------------------------------------------------------------
@@ -78,32 +107,18 @@ class TestInitializeTools:
     def test_widget_tools_are_visible_in_standalone_and_hidden_in_integrated_mode(
         self, fresh_state: AgentState
     ):
-        for name in [
-            "comparison_plot",
-            "kpi_comparison",
-            "show_capacity_plot",
-            "show_load_plot",
-        ]:
-            register_tool(name)
+        get_tool_registry().register_tool(create_analysis_widget_tool())
 
         fresh_state.integrated_mode = False
+        fresh_state.session_mode = "standalone"
         reasoner_module.initialize_tools(fresh_state)
-        assert {
-            "comparison_plot",
-            "kpi_comparison",
-            "show_capacity_plot",
-            "show_load_plot",
-        } <= set(fresh_state.cognitive.enabled_tools)
+        assert "show_analysis_widget" in fresh_state.cognitive.enabled_tools
 
         fresh_state.integrated_mode = True
+        fresh_state.session_mode = "internal"
         fresh_state.cognitive.enabled_tools = ["a"]
         reasoner_module.initialize_tools(fresh_state)
-        assert not {
-            "comparison_plot",
-            "kpi_comparison",
-            "show_capacity_plot",
-            "show_load_plot",
-        } & set(fresh_state.cognitive.enabled_tools)
+        assert "show_analysis_widget" not in fresh_state.cognitive.enabled_tools
 
     def test_territorial_index_map_is_available_in_standalone_mode(
         self, fresh_state: AgentState
@@ -174,6 +189,38 @@ class TestInitializeTools:
 
 
 class TestReactReasonerToolSelection:
+    def test_reports_role_and_mode_restrictions_separately(
+        self, fresh_state: AgentState
+    ):
+        register_tool("read_tool")
+        get_tool_registry().register_tool(
+            ToolDefinition(
+                name="save_tool",
+                description="d",
+                category=ToolCategory.UTILITY,
+                allowed_roles=("admin", "editor"),
+            )
+        )
+        get_tool_registry().register_tool(
+            ToolDefinition(
+                name="internal_tool",
+                description="d",
+                category=ToolCategory.UTILITY,
+                allowed_modes=("internal",),
+            )
+        )
+        fresh_state.user_role = "viewer"
+        fresh_state.session_mode = "standalone"
+        fresh_state.cognitive.enabled_tools = ["read_tool"]
+
+        with patch.object(
+            reasoner_module, "react_step", return_value=react_step_response()
+        ) as mock_react_step:
+            reasoner_module.react_reasoner_node(fresh_state)
+
+        assert mock_react_step.call_args.args[2] == ["internal_tool"]
+        assert mock_react_step.call_args.args[3] == ["save_tool"]
+
     def test_selects_enabled_tool_and_stages_it_for_execution(
         self, fresh_state: AgentState
     ):

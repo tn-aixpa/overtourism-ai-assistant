@@ -140,18 +140,24 @@ def react_reasoner_node(state: AgentState) -> Command:
         mode=state.session_mode,
     )
 
-    # Tools genuinely absent this session for an execution-mode reason
-    # (currently: widget/chart tools filtered out of known_tools when
-    # integrated_mode — see initialize_tools). NOT tools merely out of
-    # scope for the current routing domain: known_tools is the full
-    # session-wide candidate set BEFORE routing narrows enabled_tools, so
-    # diffing against the whole registry (not against enabled_tools) is
-    # what keeps this from re-conflating "genuinely unavailable" with
-    # "routed elsewhere" — see react_step's docstring.
-    all_registry_tools = set(registry.get_all_known_tools().keys())
-    mode_unavailable_tool_names = sorted(
-        all_registry_tools - set(state.cognitive.known_tools)
-    )
+    # Tell the reasoner why a tool is absent without conflating role and
+    # mode restrictions. These are whole-session candidate tools (before
+    # routing narrows enabled_tools), so out-of-scope tools are not reported.
+    role_unavailable_tool_names = []
+    mode_unavailable_tool_names = []
+    for name, tool in registry.get_all_known_tools().items():
+        role_allowed = (
+            tool.allowed_roles is None or state.user_role in tool.allowed_roles
+        )
+        mode_allowed = (
+            tool.allowed_modes is None or state.session_mode in tool.allowed_modes
+        )
+        if not role_allowed:
+            role_unavailable_tool_names.append(name)
+        if not mode_allowed:
+            mode_unavailable_tool_names.append(name)
+    role_unavailable_tool_names.sort()
+    mode_unavailable_tool_names.sort()
 
     if not tools_for_llm_enabled:
         logger.warning("No tools available for this context")
@@ -175,7 +181,12 @@ def react_reasoner_node(state: AgentState) -> Command:
         return Command(update=state, goto="generate_output_message")
 
     try:
-        raw = react_step(state, tools_for_llm_enabled, mode_unavailable_tool_names)
+        raw = react_step(
+            state,
+            tools_for_llm_enabled,
+            mode_unavailable_tool_names,
+            role_unavailable_tool_names,
+        )
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
         response_json = json.loads(raw)
     except Exception as e:

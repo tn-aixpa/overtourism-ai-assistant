@@ -94,6 +94,7 @@ def react_step(
     state: AgentState,
     tools_for_llm_enabled: List[Dict[str, Any]],
     mode_unavailable_tool_names: List[str],
+    role_unavailable_tool_names: List[str] | None = None,
 ) -> str:
     """
     Run a single ReAct reasoning step: given the conversation, everything
@@ -105,15 +106,10 @@ def react_step(
     turn — so unlike the old up-front planner, each decision is made with
     full knowledge of every observation gathered so far this turn.
 
-    `mode_unavailable_tool_names`: tools genuinely absent this session for
-    an execution-mode reason (currently: widget/chart tools outside
-    standalone mode) — NOT tools merely out of scope for the current
-    routing domain. Routing-scoped-out tools aren't passed here at all and
-    aren't mentioned to the model; only routing (app.agent.nodes.router)
-    decides what's in-scope this turn, and it already ran before this call
-    (see _assemble_guidelines / TOOL AVAILABILITY guideline for why
-    conflating the two would reintroduce a "this tool is unavailable" false
-    message for what's actually just a routing/topic mismatch).
+    `mode_unavailable_tool_names` and `role_unavailable_tool_names` list
+    tools excluded by those respective access controls, not tools merely
+    out of scope for the current routing domain. Routing-scoped-out tools
+    aren't mentioned to the model; only routing decides what's in-scope.
     """
 
     message = (state.get_last_user_message() or "").content
@@ -124,6 +120,7 @@ def react_step(
     history_block = format_messages(history) if history else "None"
 
     available_tools_json = json.dumps(tools_for_llm_enabled, indent=2)
+    role_unavailable_tool_names = role_unavailable_tool_names or []
 
     # Long-term memory (results from earlier turns this session).
     prior_results_block = build_prior_results_block(state.cognitive.tool_results)
@@ -187,6 +184,12 @@ absent, not just out of scope for this area — names only; if the request needs
 these, finish per the TOOL AVAILABILITY guideline):
 {json.dumps(mode_unavailable_tool_names, indent=2) if mode_unavailable_tool_names else "None"}
 
+Authenticated user role: {state.user_role}
+Tools unavailable because of this user's role (names only; never offer these actions or
+ask the user for their required arguments. If explicitly requested, explain the role
+restriction accurately rather than describing it as a mode limitation):
+{json.dumps(role_unavailable_tool_names, indent=2) if role_unavailable_tool_names else "None"}
+
 Prior tool results from earlier in this session (long-term memory — use for argument
 resolution; skip re-running a tool ONLY if it already SUCCEEDED and you don't need fresh
 data. A result marked FAILED means that attempt did NOT complete — never treat a failed
@@ -212,4 +215,3 @@ Return ONLY valid JSON.
 """
 
     return llm_interaction(state, prompt, lightweight_llm=False).strip()
-
