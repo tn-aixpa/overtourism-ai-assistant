@@ -146,40 +146,6 @@ def call_azure_with_retry(
 
 
 # =========================
-# BACKUP LLM CALLS
-# =========================
-def llm_smartlab_interaction(prompt: str, model: str) -> tuple[str, str]:
-    logger.info(f"Using smartlab ({model})")
-    api_key = os.environ.get("SMARTLAB_API_KEY")
-    if not api_key:
-        raise RequestHandlingException(
-            "SMARTLAB_API_KEY environment variable is not set"
-        )
-
-    response = requests.post(
-        SMARTLAB_BASE_URL,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
-        timeout=LLM_TIMEOUT,
-    )
-    response.raise_for_status()
-    text = response.json()["choices"][0]["message"]["content"].strip()
-    return text, model
-
-
-def call_backup_llm(prompt: str, lightweight_llm: bool = True) -> tuple[str, str]:
-    """Fallback call. Tier-aware: a light task still gets the backup
-    provider's light model, a heavy task gets its heavy model."""
-    tier = "light" if lightweight_llm else "heavy"
-
-    model = SMARTLAB_MODELS[tier]
-    return llm_smartlab_interaction(prompt, model)
-
-
-# =========================
 # PROVIDER-SPECIFIC "PRIMARY" CALLS
 # =========================
 def _call_primary_anthropic(
@@ -248,6 +214,7 @@ def llm_interaction(
 
     try:
         try:
+            assert 1 == 2
             if LLM_PROVIDER == "azure":
                 result, model_name = _call_primary_azure(
                     prompt, max_tokens, lightweight_llm, state
@@ -258,8 +225,10 @@ def llm_interaction(
                 )
 
         except Exception as e:
-            logger.error(f"{LLM_PROVIDER} error: {e}, falling back to backup llm")
-            result, model_name = call_backup_llm(prompt, lightweight_llm)
+            logger.error(f"{LLM_PROVIDER} error: {e}")
+            return (
+                "Al momento no nè possibile contattare l'Assistente, riprova più tardi"
+            )
 
         state.cognitive.generation_pipeline.append(model_name)
         return result

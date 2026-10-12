@@ -2,6 +2,26 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import logging
+
+LOG_FORMAT = (
+    "%(asctime)s.%(msecs)03d [%(threadName)s] %(levelname)-5s "
+    "%(name)s.%(funcName)s - %(message)s"
+)
+LOG_DATE_FORMAT = "%d-%m-%Y %H:%M:%S"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=LOG_FORMAT,
+    datefmt=LOG_DATE_FORMAT,
+    force=True,
+)
+
+# Uvicorn configures its own handlers, so update those formatters as well.
+uvicorn_formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for handler in logging.getLogger(logger_name).handlers:
+        handler.setFormatter(uvicorn_formatter)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -32,11 +52,6 @@ def validate_environment() -> None:
 validate_environment()
 
 from app.api.routes import router
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 
 app = FastAPI(
     title="Digital Twin Agent",

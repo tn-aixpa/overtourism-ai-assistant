@@ -178,27 +178,6 @@ def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, An
     }
 
 
-def execute_get_data_from_link(
-    state: AgentState,
-    url: str,
-    headers: dict | None = None,
-    params: dict | None = None,
-    **kwargs,
-) -> Dict[str, Any]:
-    """Execute get_data_from_link tool."""
-    from app.tools.other_tools import get_data_from_link
-
-    logger.info(f"Executing get_data_from_link for {url}")
-    result = get_data_from_link.invoke(
-        {
-            "url": url,
-            "headers": headers,
-            "params": params,
-        }
-    )
-    return result
-
-
 def execute_explain_workflow(
     state: AgentState, workflow_type: str = "auto", **kwargs
 ) -> Dict[str, Any]:
@@ -244,6 +223,5 @@ EXECUTORS = {
     "lookup_glossary": execute_lookup_glossary,
     "get_system_capabilities": execute_get_system_capabilities,
     "general_question_response": execute_general_question_response,
-    "get_data_from_link": execute_get_data_from_link,
     "explain_workflow": execute_explain_workflow,
 }

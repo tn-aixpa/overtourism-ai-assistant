@@ -24,7 +24,6 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_list_available_scenarios_tool(),
         create_get_context_ids_tool(),
         create_get_context_tool(),
-        create_get_data_from_link_tool(),
         create_get_base_scenario_tool(),
         create_get_configuration_parameters_tool(),
         create_get_territorial_index_list_tool(),

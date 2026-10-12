@@ -109,15 +109,9 @@ _LOCATION_SUBGROUPS: Dict[str, Set[str]] = {
     SUB_ANALYSIS: _SCENARIO_ANALYSIS_TOOLS,
 }
 
-# get_data_from_link, summary_generation, and report_generation are
-# deliberately NOT part of any route group above ("ONLY DIRECT CALL FOR
-# NOW"): summary_generation/report_generation are already excluded from
-# the ReAct tool registry entirely (enabled=False — they're only invoked
-# via the separate /agent/tool pipeline), and get_data_from_link, while
-# still a regular registered tool, is likewise not yet reachable through
-# router-driven chat — for now it's called directly through that same
-# other path, not selected by the ReAct reasoner under any of these four
-# domains.
+# summary_generation and report_generation are deliberately NOT part of any
+# route group above: they are excluded from the ReAct tool registry entirely
+# (enabled=False) and are only invoked via the separate /agent/tool pipeline.
 
 # Tools every LOCATION sub-group should keep access to regardless of which
 # one was picked: id/context resolution is a cross-cutting step used while

@@ -292,7 +292,6 @@ class TestGetToolExecutor:
             "list_available_scenarios",
             "get_context_ids",
             "get_context_details",
-            "get_data_from_link",
             "get_base_scenario",
             "analyze_scenario_results",
             "create_new_problem",

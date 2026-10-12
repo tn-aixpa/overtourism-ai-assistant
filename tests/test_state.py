@@ -8,6 +8,7 @@ from app.agent.state import (
     AssistantMessage,
     CognitiveState,
     ConversationBuffer,
+    DEFAULT_REASONING_CONTEXT_SIZE,
     ReActStep,
     TraceBuffer,
     TraceStep,
@@ -162,8 +163,9 @@ class TestAgentStateMessages:
     def test_get_reasoning_context_uses_default_size(self, fresh_state: AgentState):
         for i in range(10):
             fresh_state.add_user_message(str(i))
-        # DEFAULT_REASONING_CONTEXT_SIZE == 5
-        assert len(fresh_state.get_reasoning_context()) == 5
+        assert (
+            len(fresh_state.get_reasoning_context()) == DEFAULT_REASONING_CONTEXT_SIZE
+        )
 
 
 class TestAgentStateGeneratedBy:

@@ -116,33 +116,6 @@ def create_general_question_response_tool() -> ToolDefinition:
     )
 
 
-def create_get_data_from_link_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="get_data_from_link",
-        description=(
-            "Fetch data from a URL, following links found in problem or proposal fields, "
-            "and return the content or an error summary if the link cannot be retrieved."
-        ),
-        category=ToolCategory.DATA_RETRIEVAL,
-        long_description=(
-            "Fetch the content at the provided URL. If the URL points to a web page, return a text snippet and extracted title where available. "
-            "If the link is broken, blocked, or otherwise unavailable, return a clear error message."
-        ),
-        parameters=[
-            ToolParameter(
-                name="url",
-                description="The link to fetch data from.",
-                type="string",
-                required=True,
-            ),
-        ],
-        output_description="URL fetch result with content summary or error details",
-        tags=["data", "read-only", "link", "web"],
-        agent_tier="operative",
-        allowed_modes=("standalone", "internal"),
-    )
-
-
 def create_explain_workflow_tool() -> ToolDefinition:
     return ToolDefinition(
         name="explain_workflow",
@@ -206,7 +179,6 @@ def create_explain_workflow_tool() -> ToolDefinition:
 __all__ = [
     "create_get_system_capabilities_tool",
     "create_lookup_glossary_tool",
-    "create_get_data_from_link_tool",
     "create_general_question_response_tool",
     "create_explain_workflow_tool",
 ]
