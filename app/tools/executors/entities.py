@@ -60,4 +60,7 @@ def execute_list_available_entities(
 
 EXECUTORS = {
     "list_available_entities": execute_list_available_entities,
+    "list_available_problems": execute_list_available_entities,
+    "list_available_proposals": execute_list_available_entities,
+    "list_available_scenarios": execute_list_available_entities,
 }

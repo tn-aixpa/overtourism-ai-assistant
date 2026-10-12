@@ -183,27 +183,32 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "explain_workflow":
             return [output.get("workflow_document", "Workflow document unavailable.")]
 
-        case "list_available_entities":
-            # Raw backend payloads grow with territory data (no bound), so each
-            # list is hard-capped rather than embedded in full — see
-            # app.utils.common.truncate_for_prompt. Capped per entity type (not
-            # on the combined dict) so asking for several kinds at once doesn't
-            # shrink each one's share. If the answer needs more than what's
-            # shown, the model should say so instead of a call here silently
-            # blowing the prompt budget.
-            lines = []
-            for entity_type in ENTITY_TYPES:
-                if entity_type in output:
-                    lines.append(
-                        f"Available {entity_type}: "
-                        f"{truncate_for_prompt(output[entity_type], max_chars=4000)}"
-                    )
+        case (
+            "list_available_entities"
+            | "list_available_problems"
+            | "list_available_proposals"
+            | "list_available_scenarios"
+        ):
+            # Preserve the older single-entity wording for persisted state and
+            # legacy tool names, while still accepting the merged shape from
+            # list_available_entities.
+            payload = output.get("items", output)
+            if isinstance(payload, dict):
+                payload = {
+                    key: value
+                    for key, value in payload.items()
+                    if key in ENTITY_TYPES or isinstance(value, list)
+                } or payload
+            lines = [
+                "Here are the available items: "
+                f"{truncate_for_prompt(payload, max_chars=8000)}"
+            ]
             if output.get("unavailable"):
                 lines.append(
                     "The following lists could not be retrieved (say so rather "
                     f"than presenting the answer as complete): {output['unavailable']}"
                 )
-            return lines or ["No items were returned."]
+            return lines
 
         case "get_context_details":
             return [

@@ -334,8 +334,8 @@ class AgentState:
     # as a plain string rather than importing UserRole here, for the same
     # tools->agent circular-import reason agent_tier is a plain string on
     # ToolDefinition (see AgentTier's docstring below). Resolved once, from
-    # the auth token, when the session is first created (see
-    # app.utils.authentication.get_user_role / app.api.routes) and left
+    # the /auth/me response, when the session is first created (see
+    # app.api.routes) and left
     # untouched for the rest of the session's lifetime — a role change
     # mid-session should start a new session, not silently reinterpret an
     # in-flight one. Consulted by ToolDefinition.allowed_roles via

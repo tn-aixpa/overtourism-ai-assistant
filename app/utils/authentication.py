@@ -1,7 +1,8 @@
 from fastapi import HTTPException
 import jwt
-from app.utils.backend_utils import check_authorization
 import logging
+
+from app.utils.backend_utils import get_data
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +31,6 @@ def _require_bearer_token(authorization: str | None) -> str:
     return token
 
 
-def _authorize_territory(token: str, territory: str) -> None:
-    if not territory:
-        raise HTTPException(status_code=400, detail="territory is required")
-    if not check_authorization(token=token, territory=territory):
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-
 def get_user_id(token: str) -> str:
     if token is None:
         return "unidentified"
@@ -53,3 +47,14 @@ def get_user_id(token: str) -> str:
         return payload["preferred_username"]
 
     return "unidentified"
+
+
+def check_authorization(token: str) -> tuple[bool, str]:
+    """Return whether the backend authorizes the token and the user's role."""
+    api_response = get_data(
+        "auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    return (
+        api_response.get("authenticated", False),
+        api_response.get("role", "viewer"),
+    )

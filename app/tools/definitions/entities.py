@@ -55,4 +55,40 @@ def create_list_available_entities_tool() -> ToolDefinition:
     )
 
 
-__all__ = ["create_list_available_entities_tool"]
+def _create_legacy_list_tool(name: str, label: str) -> ToolDefinition:
+    """Compatibility shim for older code paths that still ask for a single-purpose list tool."""
+    return ToolDefinition(
+        name=name,
+        description=f"List the available {label} on this platform",
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            f"Legacy alias for list_available_entities that fetches the {label} list "
+            "for compatibility with existing reasoner prompts and persisted state."
+        ),
+        parameters=[],
+        output_description=f"List of available {label} records",
+        tags=["data", "read-only", "navigation"],
+        agent_tier="executor",
+        requires_territory=True,
+        allowed_modes=("standalone", "internal"),
+    )
+
+
+def create_list_available_problems_tool() -> ToolDefinition:
+    return _create_legacy_list_tool("list_available_problems", "problems")
+
+
+def create_list_available_proposals_tool() -> ToolDefinition:
+    return _create_legacy_list_tool("list_available_proposals", "proposals")
+
+
+def create_list_available_scenarios_tool() -> ToolDefinition:
+    return _create_legacy_list_tool("list_available_scenarios", "scenarios")
+
+
+__all__ = [
+    "create_list_available_entities_tool",
+    "create_list_available_problems_tool",
+    "create_list_available_proposals_tool",
+    "create_list_available_scenarios_tool",
+]

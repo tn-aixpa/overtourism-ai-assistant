@@ -96,61 +96,6 @@ def delete_data(url_string, headers=None, params=None):
     return response.json()
 
 
-def check_authorization(token: str) -> bool:
-    """Check authorization against the backend."""
-    url = f"auth/me"
-    headers = {"Authorization": f"Bearer {token}"}
-    api_response = get_data(url, headers=headers)
-    return api_response.get("authenticated", False)
-
-
-def get_user_role(token: str | None) -> str:
-    """Get the user's role from the backend."""
-    if not token:
-        return "viewer"
-
-    url = f"auth/roles"
-    headers = {"Authorization": f"Bearer {token}"}
-
-    try:
-        api_response = get_data(url, headers=headers)
-    except Exception:
-        logger.warning(
-            "Could not resolve user role from backend; defaulting to viewer."
-        )
-        return "viewer"
-
-    if not api_response:
-        return "viewer"
-
-    if isinstance(api_response, list):
-        payload = api_response[0] if api_response else {}
-    elif isinstance(api_response, dict):
-        payload = api_response
-    else:
-        return "viewer"
-
-    if isinstance(payload, dict):
-        role = payload.get("role")
-        if role:
-            return (
-                role
-                if role in {"admin", "multieditor", "editor", "viewer"}
-                else "viewer"
-            )
-
-        roles = payload.get("roles")
-        if isinstance(roles, list) and roles:
-            role = roles[0]
-            return (
-                role
-                if role in {"admin", "multieditor", "editor", "viewer"}
-                else "viewer"
-            )
-
-    return "viewer"
-
-
 def get_allowed_territories(token: str | None = None):
     url = f"default/territories"
     headers = {"Authorization": f"Bearer {token}"} if token else None

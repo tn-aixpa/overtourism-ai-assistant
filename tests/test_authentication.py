@@ -2,28 +2,30 @@ from unittest.mock import patch
 
 import pytest
 
-from app.utils.backend_utils import get_user_role
+from app.utils.authentication import check_authorization
 
 
 @pytest.mark.parametrize(
-    "payload, expected",
+    "payload, expected_authorized, expected_role",
     [
-        ([{"role": "admin"}], "admin"),
-        ([{"role": "multieditor"}], "multieditor"),
-        ([{"role": "editor"}], "editor"),
-        ([{"roles": ["viewer"]}], "viewer"),
-        ([{"role": "unknown"}], "viewer"),
-        ([{"role": "standard"}], "viewer"),
-        ([], "viewer"),
-        ([{}], "viewer"),
+        ({"authenticated": True, "role": "admin"}, True, "admin"),
+        ({"authenticated": True, "role": "multieditor"}, True, "multieditor"),
+        ({"authenticated": True, "role": "editor"}, True, "editor"),
+        ({"authenticated": True, "role": "viewer"}, True, "viewer"),
+        ({"authenticated": False, "role": "viewer"}, False, "viewer"),
     ],
 )
-def test_get_user_role_resolves_role_from_backend_and_defaults_to_viewer(
-    payload, expected
+def test_check_authorization_returns_status_and_role(
+    payload, expected_authorized, expected_role
 ):
-    with patch("app.utils.backend_utils.get_data", return_value=payload):
-        assert get_user_role("test-token") == expected
+    with patch("app.utils.authentication.get_data", return_value=payload):
+        assert check_authorization("test-token") == (expected_authorized, expected_role)
 
 
-def test_get_user_role_without_token_defaults_to_viewer():
-    assert get_user_role(None) == "viewer"
+def test_check_authorization_uses_auth_me_endpoint():
+    with patch("app.utils.authentication.get_data", return_value={}) as get_data:
+        assert check_authorization("test-token") == (False, "viewer")
+
+    get_data.assert_called_once_with(
+        "auth/me", headers={"Authorization": "Bearer test-token"}
+    )

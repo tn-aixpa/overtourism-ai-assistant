@@ -44,7 +44,7 @@ from app.utils.authentication import (
     check_authorization,
     get_user_id,
 )
-from app.utils.backend_utils import get_allowed_territories, get_user_role
+from app.utils.backend_utils import get_allowed_territories
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,13 @@ router = APIRouter()
 # or LLM call, ...) the client must still get a terminal "__done__" + result
 # instead of waiting forever.
 AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
+
+
+def _require_authorized_user(token: str) -> str:
+    authorized, role = check_authorization(token)
+    if not authorized:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return role
 
 
 def _run_agent(key: str, state: AgentState, token: str):
@@ -158,9 +165,10 @@ async def run_agent_endpoint(
     authorization: str | None = Header(default=None),
 ):
     # Verify authorization
+    user_role = "viewer"
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        user_role = _require_authorized_user(token)
     else:
         token = None
 
@@ -205,7 +213,7 @@ async def run_agent_endpoint(
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
                 allowed_territories=get_allowed_territories(token),
-                user_role=get_user_role(token),
+                user_role=user_role,
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
                 # later turn must branch on persisted state, not the raw
@@ -284,7 +292,7 @@ async def reset_session(
 
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        _require_authorized_user(token)
 
     lock = _get_lock(session_id)
     async with lock:
@@ -307,7 +315,7 @@ async def get_agent_result(
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        _require_authorized_user(token)
 
     if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -341,7 +349,7 @@ async def stream_events(
         if not auth_header and token:
             auth_header = f"Bearer {token}"
         token = _require_bearer_token(auth_header)
-        check_authorization(token)
+        _require_authorized_user(token)
 
     if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -409,7 +417,7 @@ async def submit_feedback_get(
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        _require_authorized_user(token)
 
     state = load_state(session_id)
     if state is None:
@@ -454,9 +462,10 @@ async def run_selected_tools(
     """
     from app.agent.nodes.tool_executor import execute_selected_tool
 
+    user_role = "viewer"
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        user_role = _require_authorized_user(token)
     else:
         token = None
     if token:
@@ -477,7 +486,7 @@ async def run_selected_tools(
         allowed_territories=allowed_territories,
         territory=territory,
         user_id=user_id,
-        user_role=get_user_role(token),
+        user_role=user_role,
         # This pipeline runs outside the normal chat surface entirely —
         # not "standalone" or "internal" — so it gets its own SessionMode
         # value. Tools that should ONLY ever be reachable through this
@@ -549,7 +558,7 @@ async def get_usge_stats(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        check_authorization(token)
+        _require_authorized_user(token)
     else:
         token = None
 
