@@ -142,17 +142,51 @@ SCENARIO_PARAMETERS = [
 SCENARIO_VALUES_PARAM = ToolParameter(
     name="values",
     description=(
-        "Mapping of configuration parameter index_id to its new numeric value, e.g. "
-        '{"excursionists_per_vehicle_average": 3.4, "excursionists_parking_turnover": 2.4}. '
-        "Only include the parameters the user actually wants to change; every key must be "
-        "an index_id returned by get_configuration_parameters. For relative changes "
-        "expressed in words (e.g. 'double the parking turnover', 'increase X by 20%'), "
-        "first fetch the current value with get_configuration_parameters and compute the "
-        "final numeric value yourself before calling this tool."
+        "The parameters to change, as a mapping from parameter name (the 'name' "
+        "returned by get_configuration_parameters) to the new value. Include only "
+        "what the user wants to change. The value depends on the parameter's kind:\n"
+        "- scalar: a number, e.g. 15\n"
+        "- categorical: one of its allowed values as text, e.g. \"rainy\"; null removes "
+        "the filter (all)\n"
+        "- distribution: a [low, high] range, e.g. [400, 500]; a single number means "
+        "the new central value of the range (its width is kept)\n"
+        "For relative changes do NOT compute the result yourself; pass an operation "
+        "instead: {\"multiply\": 2} for 'double', {\"percent\": 20} for '+20%' "
+        "(negative to reduce), {\"add\": 300} for '300 more'. These work on scalars "
+        "and on both ends of a range. For a range, {\"low\": 400} or {\"high\": 500} "
+        "changes just one end. "
+        'Example: {"parking price (euro per vehicle)": 15, "weather": "rainy", '
+        '"parking capacity (simultaneous cars)": {"multiply": 1.2}}.'
     ),
     type="object",
     required=True,
-    schema={"additionalProperties": {"type": "number"}},
+    schema={
+        "additionalProperties": {
+            "oneOf": [
+                {"type": "number"},
+                {"type": "string"},
+                {"type": "null"},
+                {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "set": {},
+                        "add": {"type": "number"},
+                        "multiply": {"type": "number"},
+                        "percent": {"type": "number"},
+                        "low": {"type": "number"},
+                        "high": {"type": "number"},
+                    },
+                    "additionalProperties": False,
+                },
+            ]
+        }
+    },
 )
 
 

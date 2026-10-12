@@ -6,21 +6,6 @@ from app.utils.backend_entities_parameters import (
 )
 
 
-def create_list_available_proposals_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="list_available_proposals",
-        description="List all available proposals from the backend",
-        category=ToolCategory.DATA_RETRIEVAL,
-        long_description="Fetches and displays all available proposals.",
-        parameters=[],
-        output_description="Dictionary containing all IDs, names, and relationships",
-        tags=["data", "read-only", "navigation"],
-        agent_tier="executor",
-        requires_territory=True,
-        allowed_modes=("standalone", "internal"),
-    )
-
-
 def create_new_proposal_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_proposal",
@@ -73,7 +58,6 @@ def delete_proposal_tool() -> ToolDefinition:
 
 
 __all__ = [
-    "create_list_available_proposals_tool",
     "create_new_proposal_tool",
     "edit_proposal_tool",
     "delete_proposal_tool",

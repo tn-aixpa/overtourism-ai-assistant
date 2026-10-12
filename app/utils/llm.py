@@ -214,7 +214,6 @@ def llm_interaction(
 
     try:
         try:
-            assert 1 == 2
             if LLM_PROVIDER == "azure":
                 result, model_name = _call_primary_azure(
                     prompt, max_tokens, lightweight_llm, state

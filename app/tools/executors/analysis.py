@@ -12,6 +12,8 @@ from app.agent.nodes.utils import _ensure_data_cached
 from app.prompts.scanarios import analyze_scenario, generate_summary
 from app.prompts.report import generate_report
 from app.utils.common import strip_plot_data
+from app.utils.configuration_parameters import build_catalog_view, load_indexes
+from app.utils.entity_lists import collect_listed_entities, normalize_entity_types
 
 from app.tools.executors.system_utility import execute_lookup_glossary
 
@@ -19,16 +21,21 @@ from app.tools.executors.system_utility import execute_lookup_glossary
 def execute_get_context_ids(
     state: AgentState,
     user_intent: str,
-    source_tools: list,
+    entity_types: list | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """
     Execute get_context_ids tool.
 
-    Reads raw list data that was already collected by list_available_problems /
-    list_available_proposals / list_available_scenarios (stored in
+    Reads the lists already fetched by list_available_entities (stored in
     state.cognitive.tool_results) and uses an LLM call to reason over every
     field of every object, returning only the IDs that match the user's intent.
+
+    ``entity_types`` narrows which lists are searched (default: every list
+    fetched so far). The legacy ``source_tools`` argument (names of the old
+    per-entity list tools) is still honoured when ``entity_types`` is absent,
+    so a model continuing a session that started before the tools were merged
+    doesn't fail.
 
     Returns:
         {
@@ -37,21 +44,30 @@ def execute_get_context_ids(
                 "problems":  [<id>, ...],
                 "proposals": [<id>, ...],
                 "scenarios": [<id>, ...],
-            }
+            },
+            # only present if a requested list had not been fetched yet:
+            "not_listed_yet": ["proposals"],
         }
     """
     import json
     import re
 
+    if entity_types is None:
+        entity_types = kwargs.get("source_tools")
+
     logger.info(
-        f"Executing get_context_ids | intent='{user_intent}' | sources={source_tools}"
+        f"Executing get_context_ids | intent='{user_intent}' | entity_types={entity_types}"
     )
 
     # ------------------------------------------------------------------ #
-    # 3. Call the LLM and parse
+    # Call the LLM and parse
     # ------------------------------------------------------------------ #
     try:
-        raw = get_relatet_context_ids(state, user_intent, source_tools)
+        requested = normalize_entity_types(entity_types)
+        listed = collect_listed_entities(state.cognitive.tool_results, requested)
+        not_listed_yet = [t for t in requested if t not in listed]
+
+        raw = get_relatet_context_ids(state, user_intent, listed)
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
         context_ids = json.loads(raw)
 
@@ -61,7 +77,7 @@ def execute_get_context_ids(
                 context_ids[key] = []
 
     except Exception as e:
-        logger.exception("get_context_ids: failed to parse LLM response")
+        logger.exception("get_context_ids: could not resolve ids")
         return {
             "success": False,
             "error": str(e),
@@ -74,10 +90,13 @@ def execute_get_context_ids(
     # New topic resolved: drop any cached objects that aren't part of it
     # anymore (see CognitiveState.prune_context_cache).
     state.cognitive.prune_context_cache()
-    return {
+    result = {
         "success": True,
         "context_ids": context_ids,
     }
+    if not_listed_yet:
+        result["not_listed_yet"] = not_listed_yet
+    return result
 
 
 def execute_get_context_details(
@@ -189,20 +208,33 @@ def execute_get_context_details(
     return retrieved_context
 
 
-def execute_get_configuration_parameters(state: AgentState, **kwargs) -> Dict[str, Any]:
+def execute_get_configuration_parameters(
+    state: AgentState,
+    names: list | str | None = None,
+    category: list | str | None = None,
+    search: str | None = None,
+    detail: str | None = None,
+    **kwargs,
+) -> Dict[str, Any]:
     """Execute get_configuration_parameters tool.
 
-    Fetches the backend's /widgets payload and flattens each entry down to
-    the fields relevant for tuning a scenario: id, name, description, a
-    single representative current value (the constant's "v", or the "loc"
-    of a distribution when there's no single constant), and the allowed
-    range/step.
+    Fetches the backend's /configuration "indexes" and describes them in a
+    uniform, kind-aware shape (see app.utils.configuration_parameters):
+    name, label, kind (scalar / categorical / distribution), unit, current
+    value and allowed values — optionally narrowed to the requested
+    names / category / search keywords so the model only reads what it needs.
     """
     from app.tools.executor_backend_tools import get_widgets
 
-    logger.info("Executing get_configuration_parameters tool")
+    logger.info(
+        "Executing get_configuration_parameters tool "
+        f"(names={names}, category={category}, search={search}, detail={detail})"
+    )
 
-    return get_widgets.invoke({"territory": state.territory})
+    indexes = load_indexes(get_widgets.invoke({"territory": state.territory}))
+    return build_catalog_view(
+        indexes, names=names, category=category, search=search, detail=detail
+    )
 
 
 def execute_analyze_scenario_results(

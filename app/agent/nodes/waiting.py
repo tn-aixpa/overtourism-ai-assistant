@@ -4,6 +4,7 @@ import re
 
 from app.agent.state import AgentState, ReActStep
 from app.agent.nodes.router import resolve_clarification_reply
+from app.utils.entity_lists import collect_listed_entities
 from app.utils.territory import match_territories, territory_question
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ def _resolve_proposal_name(state: AgentState, proposal_id: str) -> str:
     user sees the name they typed rather than the raw proposal_id. Falls
     back to the raw id if the proposal hasn't been fetched/listed yet this
     session (e.g. the id was typed explicitly rather than resolved from a
-    prior list_available_proposals call)."""
+    prior list_available_entities call)."""
     if not proposal_id:
         return proposal_id
 
@@ -22,17 +23,10 @@ def _resolve_proposal_name(state: AgentState, proposal_id: str) -> str:
     if cached.get("name"):
         return cached["name"]
 
-    for key, value in state.cognitive.tool_results.items():
-        if key == "list_available_proposals" or key.startswith(
-            "list_available_proposals__"
-        ):
-            if isinstance(value, list):
-                for item in value:
-                    if (
-                        isinstance(item, dict)
-                        and item.get("proposal_id") == proposal_id
-                    ):
-                        return item.get("name", proposal_id)
+    listed = collect_listed_entities(state.cognitive.tool_results, ["proposals"])
+    for item in listed.get("proposals", []):
+        if isinstance(item, dict) and item.get("proposal_id") == proposal_id:
+            return item.get("name", proposal_id)
 
     return proposal_id
 
@@ -59,9 +53,16 @@ def _wait_instructions(state: AgentState) -> str:
     ]:
         fields = dict(args)
         if pending_tool == "create_new_scenario":
-            pending_values = (state.cognitive.pending_temp_scenario or {}).get("values")
-            if pending_values:
-                fields["values"] = pending_values
+            pending = state.cognitive.pending_temp_scenario or {}
+            changes = pending.get("changes")
+            if changes:
+                # "label: from → to" per parameter, rather than raw backend
+                # names/values (which for ranges and choices read as noise).
+                fields["parameter changes"] = "\n" + "\n".join(
+                    f"  • {change['summary']}" for change in changes
+                )
+            elif pending.get("values"):
+                fields["values"] = pending["values"]
             proposal_id = fields.pop("proposal_id", None)
             if proposal_id:
                 fields["proposal"] = _resolve_proposal_name(state, proposal_id)

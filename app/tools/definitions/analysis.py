@@ -16,7 +16,8 @@ def create_get_context_ids_tool() -> ToolDefinition:
             "content of one or more already-fetched lists. "
             "Returns a structured dict {problems: [...], proposals: [...], scenarios: [...]} "
             "containing only the IDs that are relevant to the request. "
-            "Always run the required list tools first, then call this tool to extract relevant IDs."
+            "Always run list_available_entities first for the kinds of item involved, "
+            "then call this tool to extract relevant IDs."
         ),
         parameters=[
             ToolParameter(
@@ -26,15 +27,20 @@ def create_get_context_ids_tool() -> ToolDefinition:
                 required=True,
             ),
             ToolParameter(
-                name="source_tools",
+                name="entity_types",
                 description=(
-                    "List of tool result keys to search. "
-                    "Valid values: 'list_available_problems', 'list_available_proposals', "
-                    "'list_available_scenarios'."
+                    "Which already-fetched lists to search: any of 'problems', "
+                    "'proposals', 'scenarios'. Omit to search every list that "
+                    "list_available_entities has fetched so far."
                 ),
                 type="array",
-                required=True,
-                schema={"items": {"type": "string"}},
+                required=False,
+                schema={
+                    "items": {
+                        "type": "string",
+                        "enum": ["problems", "proposals", "scenarios"],
+                    }
+                },
             ),
         ],
         output_description="Dict with keys 'problems', 'proposals', 'scenarios', each a list of matching IDs.",
@@ -73,23 +79,68 @@ def create_get_configuration_parameters_tool() -> ToolDefinition:
     return ToolDefinition(
         name="get_configuration_parameters",
         description=(
-            "Retrieve all tunable simulation parameters (widgets) that scenarios can override"
+            "Look up the tunable simulation parameters that a scenario can override: "
+            "what they are, their current value and what values are allowed"
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
-            "Fetches every configurable index/parameter from the backend (parking, beach, "
-            "hotel, restaurant, and flow parameters), grouped by category, with its "
-            "index_id, current value, allowed range/step, and description. "
-            "Call this before create_new_temp_scenario whenever you need to: resolve a "
-            "parameter the user referred to by name (e.g. 'parking turnover'); read its "
-            "current value in order to compute a relative change (e.g. 'double X', "
-            "'increase Y by 20%'); or check the min/max/step bounds of a value the user "
-            "wants to set."
+            "Describes the configurable parameters of the territory's model, grouped by "
+            "category. Every parameter has a 'kind' that decides what a value looks like: "
+            "'scalar' (a number), 'categorical' (one choice out of a fixed list, or no "
+            "filter) or 'distribution' (a [low, high] range). Each record gives its name "
+            "(use THIS as the key in create_new_temp_scenario), label, kind, unit, "
+            "'current' value and 'allowed' values (min/max/step for numbers and ranges, "
+            "the list of choices for categorical ones). "
+            "Ask only for what you need: pass `names` for parameters you can already "
+            "identify (name or label), `search` keywords or a `category` for a topic "
+            "(e.g. search='parking'). With no arguments you get a compact overview of "
+            "every parameter — use that only to answer 'what can I change?'. "
+            "Call this before create_new_temp_scenario to identify the parameters the "
+            "user means, to learn their kind and current value, and to check what is "
+            "allowed; if the user gave no value or size of change, use it to ask them "
+            "a precise question."
         ),
-        parameters=[],
+        parameters=[
+            ToolParameter(
+                name="names",
+                description=(
+                    "Parameters to describe in full, by name or by label. Takes "
+                    "precedence over `category` and `search`."
+                ),
+                type="array",
+                required=False,
+                schema={"items": {"type": "string"}},
+            ),
+            ToolParameter(
+                name="category",
+                description="Only parameters in this category (or categories), e.g. 'Navetta'.",
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="search",
+                description=(
+                    "Keywords matched against names, labels, categories and "
+                    "descriptions, best match first (e.g. 'parking price')."
+                ),
+                type="string",
+                required=False,
+            ),
+            ToolParameter(
+                name="detail",
+                description=(
+                    "'summary' (no descriptions) or 'full' (adds descriptions and "
+                    "distribution shape). Default: summary without filters, full with."
+                ),
+                type="string",
+                required=False,
+                schema={"enum": ["summary", "full"]},
+            ),
+        ],
         output_description=(
-            "Widgets grouped by category, each with index_id, index_name, description, "
-            "current value, min, max, and step."
+            "total_parameters, categories, matched, parameters_by_category (each record: "
+            "name, label, kind, unit, current, allowed, and description when detailed), "
+            "plus 'unmatched' for names/categories that were not found."
         ),
         tags=["data", "read-only", "scenario", "parameters"],
         agent_tier="executor",

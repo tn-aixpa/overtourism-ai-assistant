@@ -8,16 +8,6 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 
-def execute_list_available_proposals(state: AgentState, **kwargs) -> Dict[str, Any]:
-    """Execute list_available_proposals tool."""
-    from app.tools.executor_backend_tools import get_all_proposals
-
-    logger.info("Executing list_available_proposals tool")
-    result = get_all_proposals.invoke({"territory": state.territory})
-
-    return result
-
-
 def execute_create_new_proposal(
     state: AgentState,
     name: str = "",
@@ -92,7 +82,6 @@ def execute_delete_proposal(
 
 
 EXECUTORS = {
-    "list_available_proposals": execute_list_available_proposals,
     "create_new_proposal": execute_create_new_proposal,
     "edit_proposal": execute_edit_proposal,
     "delete_proposal": execute_delete_proposal,

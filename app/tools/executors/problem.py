@@ -8,16 +8,6 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 
-def execute_list_available_problems(state: AgentState, **kwargs) -> Dict[str, Any]:
-    """Execute list_available_problems tool."""
-    from app.tools.executor_backend_tools import get_all_problems
-
-    logger.info("Executing list_available_problems tool")
-    result = get_all_problems.invoke({"territory": state.territory})
-
-    return result
-
-
 def execute_create_new_problem(
     state: AgentState,
     name: str,
@@ -83,7 +73,6 @@ def execute_delete_problem(
 
 
 EXECUTORS = {
-    "list_available_problems": execute_list_available_problems,
     "create_new_problem": execute_create_new_problem,
     "edit_problem": execute_edit_problem,
     "delete_problem": execute_delete_problem,

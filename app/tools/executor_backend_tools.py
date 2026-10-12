@@ -183,8 +183,10 @@ def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> di
 
 
 @tool
-def get_widgets(territory: str) -> dict:
-    """Fetch all tunable configuration parameters (widgets) from the API."""
+def get_widgets(territory: str) -> list:
+    """Fetch the raw list of tunable configuration parameters (the "indexes"
+    of the /configuration payload: scalar, categorical and distribution
+    entries). Shape them with app.utils.configuration_parameters."""
     url = f"{territory}/configuration"
     extracted_data = get_data(url)
     return extracted_data.get("indexes", [])

@@ -6,21 +6,6 @@ from app.utils.backend_entities_parameters import (
 )
 
 
-def create_list_available_problems_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="list_available_problems",
-        description="List all available problems from the backend",
-        category=ToolCategory.DATA_RETRIEVAL,
-        long_description="Fetches and displays all available problems.",
-        parameters=[],
-        output_description="Dictionary containing all IDs, names, and relationships",
-        tags=["data", "read-only", "navigation"],
-        agent_tier="executor",
-        requires_territory=True,
-        allowed_modes=("standalone", "internal"),
-    )
-
-
 def create_new_problem_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_problem",
@@ -74,7 +59,6 @@ def delete_problem_tool() -> ToolDefinition:
 
 
 __all__ = [
-    "create_list_available_problems_tool",
     "create_new_problem_tool",
     "edit_problem_tool",
     "delete_problem_tool",

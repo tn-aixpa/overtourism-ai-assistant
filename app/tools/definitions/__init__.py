@@ -6,6 +6,7 @@ from app.tools.tool_schema import ToolDefinition
 
 from app.tools.definitions.analysis_widgets import *
 from app.tools.definitions.analysis import *
+from app.tools.definitions.entities import *
 from app.tools.definitions.indexes import *
 from app.tools.definitions.problem import *
 from app.tools.definitions.proposal import *
@@ -19,9 +20,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_system_capabilities_tool(),
         create_explain_workflow_tool(),
         create_general_question_response_tool(),
-        create_list_available_problems_tool(),
-        create_list_available_proposals_tool(),
-        create_list_available_scenarios_tool(),
+        create_list_available_entities_tool(),
         create_get_context_ids_tool(),
         create_get_context_tool(),
         create_get_base_scenario_tool(),

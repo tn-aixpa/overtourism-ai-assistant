@@ -79,8 +79,16 @@ LOCATION_SUBLEVEL_LABELS: Dict[str, str] = {
 # that pairing depending on which of the two menu labels the user happened
 # to pick, even though both describe the same underlying capability from
 # the user's point of view.
-_SCENARIO_ANALYSIS_TOOLS: Set[str] = {
-    "list_available_scenarios",
+#
+# The single list tool (list_available_entities) is part of EVERY sub-group,
+# not just "its own": resolving a name to an id routinely needs a different
+# entity's list than the sub-group's own — a new proposal needs the PROBLEM
+# list for its parent id, a saved scenario may link to a PROPOSAL — which
+# with the old per-entity list tools was impossible from inside the
+# proposal/scenario sub-groups.
+_ENTITY_LISTING_TOOLS: Set[str] = {"list_available_entities"}
+
+_SCENARIO_ANALYSIS_TOOLS: Set[str] = _ENTITY_LISTING_TOOLS | {
     "get_base_scenario",
     "get_configuration_parameters",
     "create_new_temp_scenario",
@@ -93,14 +101,14 @@ _SCENARIO_ANALYSIS_TOOLS: Set[str] = {
 }
 
 _LOCATION_SUBGROUPS: Dict[str, Set[str]] = {
-    SUB_PROBLEM: {
-        "list_available_problems",
+    SUB_PROBLEM: _ENTITY_LISTING_TOOLS
+    | {
         "create_new_problem",
         "edit_problem",
         "delete_problem",
     },
-    SUB_PROPOSAL: {
-        "list_available_proposals",
+    SUB_PROPOSAL: _ENTITY_LISTING_TOOLS
+    | {
         "create_new_proposal",
         "edit_proposal",
         "delete_proposal",

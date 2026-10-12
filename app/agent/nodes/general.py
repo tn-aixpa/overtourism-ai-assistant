@@ -6,6 +6,7 @@ from app.agent.state import AgentState
 from app.utils.common import RequestHandlingException
 from app.utils.common import GraphError
 from app.utils.common import truncate_for_prompt, render_agent_message
+from app.utils.entity_lists import ENTITY_TYPES
 from app.prompts.answer_generation import generate_answer
 
 logger = logging.getLogger(__name__)
@@ -182,19 +183,27 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         case "explain_workflow":
             return [output.get("workflow_document", "Workflow document unavailable.")]
 
-        case (
-            "list_available_problems"
-            | "list_available_proposals"
-            | "list_available_scenarios"
-        ):
-            # Raw backend payloads grow with territory data (no bound), so this
-            # is hard-capped rather than embedded in full — see
-            # app.utils.common.truncate_for_prompt. If the answer needs more
-            # than what's shown, the model should say so instead of a call
-            # here silently blowing the prompt budget.
-            return [
-                f"Here are the available items: {truncate_for_prompt(output, max_chars=4000)}"
-            ]
+        case "list_available_entities":
+            # Raw backend payloads grow with territory data (no bound), so each
+            # list is hard-capped rather than embedded in full — see
+            # app.utils.common.truncate_for_prompt. Capped per entity type (not
+            # on the combined dict) so asking for several kinds at once doesn't
+            # shrink each one's share. If the answer needs more than what's
+            # shown, the model should say so instead of a call here silently
+            # blowing the prompt budget.
+            lines = []
+            for entity_type in ENTITY_TYPES:
+                if entity_type in output:
+                    lines.append(
+                        f"Available {entity_type}: "
+                        f"{truncate_for_prompt(output[entity_type], max_chars=4000)}"
+                    )
+            if output.get("unavailable"):
+                lines.append(
+                    "The following lists could not be retrieved (say so rather "
+                    f"than presenting the answer as complete): {output['unavailable']}"
+                )
+            return lines or ["No items were returned."]
 
         case "get_context_details":
             return [
@@ -279,17 +288,38 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             # app.utils.common._LARGE_BUDGET_TOOLS.
             return [
                 "Here are the tunable simulation parameters, grouped by "
-                f"category: {truncate_for_prompt(output, max_chars=6000)}"
+                "category (kind = scalar: a number; categorical: one of the "
+                "listed choices or no filter; distribution: a [low, high] "
+                f"range): {truncate_for_prompt(output, max_chars=12000)}"
             ]
 
         case "create_new_temp_scenario":
+            if output.get("created") is False:
+                lines = [
+                    "The temporary scenario was NOT created and nothing was "
+                    "evaluated, because the requested values could not be applied. "
+                    "Do not say it was evaluated. Explain what is wrong and ask the "
+                    "user how to proceed, quoting the allowed values: "
+                    f"{truncate_for_prompt(output.get('problems') or output.get('message'), max_chars=3000)}"
+                ]
+                return lines
             evaluation = output.get("evaluation", {})
-            return [
+            lines = [
                 "This is a TEMPORARY, unsaved scenario preview — if it isn't "
                 "saved it may be lost. Evaluation results (sustainability "
                 f"index and per-constraint breakdown): "
                 f"{truncate_for_prompt(evaluation, max_chars=4000)}"
             ]
+            changes = output.get("applied_changes") or []
+            if changes:
+                lines.append(
+                    "Parameter changes applied to the base scenario (state them "
+                    "to the user; if a change has a note, e.g. a value rounded "
+                    "to the allowed step or a single number read as the centre "
+                    f"of a range, mention it): "
+                    f"{truncate_for_prompt(changes, max_chars=3000)}"
+                )
+            return lines
 
         case "create_new_problem":
             return [

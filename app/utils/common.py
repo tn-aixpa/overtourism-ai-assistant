@@ -33,6 +33,9 @@ DEFAULT_MAX_CHARS_PER_ENTRY = 1200
 # distinguish from "that's everything", and results in incomplete or
 # invented answers. Give these a larger, still-bounded budget instead.
 _LARGE_BUDGET_TOOLS = {
+    # One result now carries up to three lists (problems, proposals,
+    # scenarios) that each used to have their own 1200-char entry budget.
+    "list_available_entities": 3600,
     # get_configuration_parameters' full catalog is ~9.9k chars as of the
     # current 5 groups / 23 parameters (measured, not guessed). 6000 was
     # silently dropping the last 2 groups. 14000 gives ~40% headroom for

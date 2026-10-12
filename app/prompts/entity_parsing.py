@@ -2,7 +2,6 @@ import logging
 import json
 from typing import Dict, Any, List
 
-
 from app.agent.state import AgentState
 from app.utils.llm import llm_interaction, format_messages
 from app.utils.common import condense_for_matching
@@ -13,46 +12,22 @@ logger = logging.getLogger(__name__)
 def get_relatet_context_ids(
     state: AgentState,
     user_intent: str,
-    source_tools: list,
+    listed_entities: Dict[str, List[Any]],
 ):
+    """Ask the LLM which of the already-fetched entities match `user_intent`.
 
-    # ------------------------------------------------------------------ #
-    # 1. Collect the raw list data from tool_results
-    # ------------------------------------------------------------------ #
-    tool_results = state.cognitive.tool_results
+    `listed_entities` maps an entity type ("problems" / "proposals" /
+    "scenarios") to its latest fetched list — see
+    app.utils.entity_lists.collect_listed_entities, which is what the caller
+    uses to build it. Raises ValueError if it is empty (nothing was listed
+    yet), with a message the reasoner can act on.
+    """
 
-    # Build a mapping  entity_type -> raw data, tolerating key variants
-    # (e.g. the selector might store them as "list_available_problems" or
-    #  with a collision suffix like "list_available_problems__1").
-    def _find_result(key_prefix: str) -> Any:
-        """Return the first tool_results value whose key starts with key_prefix."""
-        for k, v in tool_results.items():
-            if k == key_prefix or k.startswith(key_prefix + "__"):
-                return v
-        return None
-
-    sections: Dict[str, Any] = {}
-    for source in source_tools:
-        data = _find_result(source)
-        if data is None:
-            logger.warning(
-                f"get_context_ids: source '{source}' not found in tool_results "
-                f"(available keys: {list(tool_results.keys())})"
-            )
-        else:
-            sections[source] = data
-
-    if not sections:
-        return {
-            "success": False,
-            "error": (
-                "None of the requested source tools have results in tool_results. "
-                f"Requested: {source_tools}. "
-                f"Available: {list(tool_results.keys())}. "
-                "Run the list tools first."
-            ),
-            "context_ids": {"problems": [], "proposals": [], "scenarios": []},
-        }
+    if not listed_entities:
+        raise ValueError(
+            "No problem/proposal/scenario list has been fetched yet. "
+            "Call list_available_entities first, then get_context_ids."
+        )
 
     # Condense before injecting: matching only needs id/name/description-type
     # fields, not the full raw payload (which can carry large nested extras
@@ -60,12 +35,13 @@ def get_relatet_context_ids(
     # regardless of how much data the territory has, instead of growing with
     # the dataset. See app.utils.common.condense_for_matching.
     condensed_sections = {
-        source: condense_for_matching(data) for source, data in sections.items()
+        entity_type: condense_for_matching(data)
+        for entity_type, data in listed_entities.items()
     }
     sections_block = json.dumps(condensed_sections, indent=2, default=str)
 
     # ------------------------------------------------------------------ #
-    # 2. Build prompt
+    # Build prompt
     # ------------------------------------------------------------------ #
 
     prompt = f"""
@@ -84,7 +60,7 @@ items are a good match, say so in your reasoning rather than guessing.
 User intent:
 \"{user_intent}\"
 
-Available data (raw API responses, one section per list tool):
+Available data (raw API responses, one section per entity type):
 {sections_block}
 
 Return ONLY a valid JSON object with exactly these three keys (lists may be empty):

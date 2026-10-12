@@ -1,0 +1,58 @@
+"""Entity (problem / proposal / scenario) retrieval tool definitions."""
+
+from app.tools.tool_schema import ToolDefinition, ToolParameter, ToolCategory
+from app.utils.entity_lists import ENTITY_TYPES
+
+
+def create_list_available_entities_tool() -> ToolDefinition:
+    """One listing tool for problems, proposals and scenarios.
+
+    These used to be three zero-argument tools returning the same shape
+    (ids + names from one backend GET each). A single tool lets the model
+    fetch several kinds in one step (e.g. "which problems and scenarios do
+    we have?", or a proposal's parent problem list together with the
+    proposals) instead of one ReAct iteration per kind, and removes the
+    need for every route sub-group to carry its own copy.
+    """
+    return ToolDefinition(
+        name="list_available_entities",
+        description=(
+            "List the problems, proposals and/or scenarios available on the "
+            "platform (ids, names and relationships)"
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches the lists of existing problems, proposals and/or scenarios "
+            "from the backend in a single call. Pass entity_types to fetch only "
+            "what is needed — e.g. ['problems', 'proposals'] when the user asks "
+            "about both, or ['problems'] to find the parent of a new proposal. "
+            "Omit it to fetch all three. This is the first step for resolving an "
+            "item the user refers to by name: follow it with get_context_ids to "
+            "pick the matching id(s)."
+        ),
+        parameters=[
+            ToolParameter(
+                name="entity_types",
+                description=(
+                    "Which lists to fetch. Any of: "
+                    + ", ".join(f"'{t}'" for t in ENTITY_TYPES)
+                    + ". Omit to fetch all of them."
+                ),
+                type="array",
+                required=False,
+                schema={"items": {"type": "string", "enum": list(ENTITY_TYPES)}},
+            ),
+        ],
+        output_description=(
+            "Dictionary keyed by entity type ('problems', 'proposals', 'scenarios'), "
+            "each a list of {<type>_id, name, ...} items; only the requested types "
+            "are present."
+        ),
+        tags=["data", "read-only", "navigation"],
+        agent_tier="executor",
+        requires_territory=True,
+        allowed_modes=("standalone", "internal"),
+    )
+
+
+__all__ = ["create_list_available_entities_tool"]

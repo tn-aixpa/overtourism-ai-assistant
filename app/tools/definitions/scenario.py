@@ -7,21 +7,6 @@ from app.utils.backend_entities_parameters import (
 )
 
 
-def create_list_available_scenarios_tool() -> ToolDefinition:
-    return ToolDefinition(
-        name="list_available_scenarios",
-        description="List all available scenarios from the backend",
-        category=ToolCategory.DATA_RETRIEVAL,
-        long_description="Fetches and displays all scenarios.",
-        parameters=[],
-        output_description="Dictionary containing all IDs, names, and relationships",
-        tags=["data", "read-only", "navigation"],
-        agent_tier="executor",
-        requires_territory=True,
-        allowed_modes=("standalone", "internal"),
-    )
-
-
 def create_get_base_scenario_tool() -> ToolDefinition:
     return ToolDefinition(
         name="get_base_scenario",
@@ -47,21 +32,28 @@ def create_new_temp_scenario_tool() -> ToolDefinition:
         ),
         category=ToolCategory.SCENARIO_MANAGEMENT,
         long_description=(
-            "Applies the given parameter overrides on top of a base scenario, creates a "
+            "Applies the given parameter changes on top of a base scenario, creates a "
             "throwaway (temporary) scenario from them, and immediately evaluates it. Use this "
             "to preview the effect of a what-if change (e.g. 'what if I double the parking "
-            "turnover?') before deciding whether to save it as a real scenario. If the user "
-            "expresses the change in relative terms ('double', 'increase by 20%', ...), first "
-            "call get_configuration_parameters to resolve the parameter's current value and "
-            "compute the final numeric value yourself, then pass the resulting index_id -> "
-            "value mapping here. This tool does not require user confirmation and does not "
+            "turnover?') before deciding whether to save it as a real scenario. Parameters "
+            "are not all numbers: each has a kind (scalar / categorical / distribution) "
+            "that decides the shape of its value — see the 'values' argument. First call "
+            "get_configuration_parameters to identify the parameters, learn their kind and "
+            "current value and see what is allowed. Relative requests ('double', '+20%', "
+            "'300 more') are passed as an operation and computed by this tool, not by you. "
+            "Every value is validated against the parameter's allowed values; if any is not "
+            "valid NOTHING is created and the result has created=false with the list of "
+            "'problems' (with allowed values), so you can fix the call or ask the user. "
+            "This tool does not require user confirmation and does not "
             "persist anything permanently — nothing is saved until create_new_scenario is "
             "called afterwards on the scenario it produced."
         ),
         parameters=TEMP_SCENARIO_PARAMETERS,
         output_description=(
-            "The temporary scenario_id, its evaluation_id, and the evaluation results "
-            "(sustainability index and per-constraint breakdown)."
+            "created=true with the temporary scenario_id, its evaluation_id, the "
+            "applied_changes (parameter: from -> to, with notes such as a value rounded "
+            "to the allowed step) and the evaluation results (sustainability index and "
+            "per-constraint breakdown); or created=false with the 'problems' found."
         ),
         tags=["scenario", "simulation", "preview"],
         agent_tier="executor",
@@ -129,7 +121,6 @@ def delete_scenario_tool() -> ToolDefinition:
 
 
 __all__ = [
-    "create_list_available_scenarios_tool",
     "create_get_base_scenario_tool",
     "create_new_temp_scenario_tool",
     "create_new_scenario_tool",

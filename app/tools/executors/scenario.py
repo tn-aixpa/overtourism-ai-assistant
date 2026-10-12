@@ -4,18 +4,9 @@ from typing import Any, Dict
 import logging
 
 from app.agent.state import AgentState
+from app.utils.configuration_parameters import load_indexes, resolve_overrides
 
 logger = logging.getLogger(__name__)
-
-
-def execute_list_available_scenarios(state: AgentState, **kwargs) -> Dict[str, Any]:
-    """Execute list_available_scenarios tool."""
-    from app.tools.executor_backend_tools import get_all_scenarios
-
-    logger.info("Executing list_available_scenarios tool")
-    result = get_all_scenarios.invoke({"territory": state.territory})
-
-    return result
 
 
 def execute_get_base_scenario(
@@ -30,88 +21,62 @@ def execute_get_base_scenario(
     return result
 
 
-def _normalize_widget_overrides(state: AgentState, values: dict) -> dict:
-    """Normalize widget overrides to the format expected by the backend.
-
-    Current widget format:
-      - categorical widgets:
-          {"name": "...", "kind": "categorical", ...}
-
-        Values are passed through unchanged.
-
-      - distribution widgets:
-          {
-              "name": "...",
-              "kind": "distribution",
-              "default_range": [min, max],
-              ...
-          }
-
-        A 2-item list/tuple is treated as the complete new range.
-        A single scalar preserves the original lower bound and replaces
-        the upper bound.
-
-    Unknown widget names are passed through unchanged.
-    """
-    from app.tools.executor_backend_tools import get_widgets
-
-    widgets = get_widgets.invoke({"territory": state.territory})
-
-    logger.info("WIDGETS: %s", widgets)
-    logger.info("values: %s", values)
-
-    # Widgets are now returned as a flat list and are identified by "name".
-    by_name = {widget["name"]: widget for widget in widgets}
-
-    normalized = {}
-
-    for name, value in values.items():
-        widget = by_name.get(name)
-
-        # Unknown widgets and categorical widgets: pass through unchanged.
-        if not widget or widget.get("kind") != "distribution":
-            normalized[name] = value
-            continue
-
-        # Distribution widget.
-        if isinstance(value, (list, tuple)) and len(value) == 2:
-            normalized[name] = [value[0], value[1]]
-        else:
-            default_range = widget.get("default_range")
-
-            if isinstance(default_range, (list, tuple)) and len(default_range) == 2:
-                normalized[name] = [default_range[0], value]
-            else:
-                # Fallback if the widget definition is malformed.
-                normalized[name] = value
-
-    return normalized
-
-
 def execute_create_new_temp_scenario(
     state: AgentState,
     values: dict,
     base_scenario_id: str | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    """Create a temporary scenario from the given overrides and evaluate it.
+    """Create a temporary scenario from the requested parameter changes and
+    evaluate it.
 
-    Stashes the result on state.cognitive.pending_temp_scenario so a later
-    create_new_scenario call (in this or a following turn) can promote it.
+    ``values`` maps a parameter name to a new value whose shape depends on the
+    parameter's kind (number / choice / [low, high] range) or to a relative
+    operation — see app.utils.configuration_parameters. Everything is
+    validated against the backend's /configuration first; if any value is not
+    acceptable nothing is created and the result carries ``created: False``
+    plus the list of problems (returned as a normal observation, not raised,
+    so the reasoner can fix the call or ask the user instead of the turn
+    ending in the generic error path).
+
+    On success, stashes the result on state.cognitive.pending_temp_scenario
+    so a later create_new_scenario call (in this or a following turn) can
+    promote it.
     """
     from app.tools.executor_backend_tools import (
         create_temp_scenario,
         get_base_scenario,
         create_cration_session,
+        get_widgets,
     )
 
-    if not values:
+    if not isinstance(values, dict) or not values:
         raise ValueError(
-            "'values' must contain at least one parameter override "
-            "(index_id -> new numeric value)"
+            "'values' must contain at least one parameter change "
+            "(parameter name -> new value)"
         )
 
-    values = _normalize_widget_overrides(state, values)
+    indexes = load_indexes(get_widgets.invoke({"territory": state.territory}))
+    resolution = resolve_overrides(indexes, values)
+
+    if resolution["problems"] or not resolution["payload"]:
+        logger.info(f"Temp scenario not created. Problems: {resolution['problems']}")
+        rejected: Dict[str, Any] = {
+            "created": False,
+            "temporary": False,
+            "problems": resolution["problems"],
+            "requested_values": values,
+        }
+        if not resolution["problems"]:
+            rejected["message"] = (
+                "Every requested value equals the current one, so there is "
+                "nothing different to evaluate."
+            )
+            rejected["changes"] = resolution["changes"]
+        return rejected
+
+    changes = resolution["changes"]
+    values = resolution["payload"]
 
     logger.info(
         f"Creating temp scenario on base '{base_scenario_id}' with values: {values}"
@@ -157,13 +122,18 @@ def execute_create_new_temp_scenario(
         "base_scenario_id": base_scenario_id,
         "creation_session": creation_session,
         "values": values,
+        # Human-readable "label: from → to" lines, used by the save
+        # confirmation recap (see waiting._wait_instructions).
+        "changes": changes,
     }
 
     return {
+        "created": True,
         "scenario_id": scenario_id,
         "evaluation_id": evaluation_id,
         "base_scenario_id": base_scenario_id,
         "values": values,
+        "applied_changes": changes,
         "temporary": True,
         "evaluation": evaluation,
     }
@@ -248,7 +218,6 @@ def execute_delete_scenario(
 
 
 EXECUTORS = {
-    "list_available_scenarios": execute_list_available_scenarios,
     "get_base_scenario": execute_get_base_scenario,
     "create_new_temp_scenario": execute_create_new_temp_scenario,
     "create_new_scenario": execute_create_new_scenario,
