@@ -11,7 +11,11 @@ from app.prompts.entity_parsing import get_relatet_context_ids
 from app.agent.nodes.utils import _ensure_data_cached
 from app.prompts.scanarios import analyze_scenario, generate_summary
 from app.prompts.report import generate_report
-from app.utils.common import strip_plot_data
+from app.utils.common import strip_plot_data  # noqa: F401
+from app.utils.evaluation_summary import (
+    compact_evaluation,
+    get_configuration_metadata,
+)
 from app.utils.configuration_parameters import build_catalog_view, load_indexes
 from app.utils.entity_lists import collect_listed_entities, normalize_entity_types
 
@@ -179,7 +183,9 @@ def execute_get_context_details(
             # duplication bug: `cleaned` used to be spread into the cache
             # entry AND nested again under "evaluation_data", so plot_data
             # ended up stored twice for the same scenario.
-            cached_entry = strip_plot_data(cleaned)
+            cached_entry = compact_evaluation(
+                cleaned, get_configuration_metadata(state.territory)
+            )
             cache[f"scenarios {scenario_id}"] = {
                 **cached_entry,
                 "evaluation_data": cached_entry,

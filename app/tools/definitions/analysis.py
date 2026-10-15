@@ -161,8 +161,12 @@ def create_analyze_scenario_results_tool() -> ToolDefinition:
             "Uses the data previously retrieved by get_context_details to explain "
             "scenario evaluation results. This tool should only be used for requests "
             "about numerical indicators, charts, KPIs, simulation outputs, or "
-            "comparisons between scenarios. It is not intended for simply describing "
-            "a problem, proposal, or scenario."
+            "comparisons between scenarios. It also answers questions about the load "
+            "and capacity plots (e.g. how many days/dots are red, yellow or green, "
+            "what the axes mean, which constraint is critical): the plot points are "
+            "pre-counted by colour using the colour map of the /configuration "
+            "metadata, and KPIs carry their labels from that same metadata. It is "
+            "not intended for simply describing a problem, proposal, or scenario."
         ),
         parameters=[
             ToolParameter(

@@ -6,6 +6,10 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.tools.tool_schema import ToolDefinition
 from app.utils.common import strip_plot_data
+from app.utils.evaluation_summary import (
+    compact_evaluation,
+    get_configuration_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,12 +138,17 @@ def _ensure_data_cached(
                 "territory": state.territory,
             }
         )
+        metadata = get_configuration_metadata(state.territory)
         for key, eval_data in fetched_evals.items():
             if key in cache:
                 # Never let the heavy raw plot arrays enter long-lived
                 # state — see strip_plot_data's docstring. Nothing in the
                 # current codebase reads plot_data back out of the cache.
-                cache[key]["evaluation_data"] = strip_plot_data(eval_data)
+                # The raw points are replaced by a small labelled summary
+                # (colour counts, KPI labels from /configuration) so the
+                # LLM can still answer plot questions such as "how many red
+                # dots?" without the heavy arrays ever being cached.
+                cache[key]["evaluation_data"] = compact_evaluation(eval_data, metadata)
 
     state.cognitive.context_cache = cache
     return cache
