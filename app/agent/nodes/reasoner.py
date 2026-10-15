@@ -27,6 +27,7 @@ from app.tools.tool_registry import (
     _ensure_tool_registry,
 )
 from app.prompts.react_reasoning import react_step
+from app.utils.territory import switch_territory_if_requested
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +90,24 @@ def initialize_tools(state: AgentState) -> Command:
 
     logger.info(f"Available tools: {state.cognitive.enabled_tools}")
 
-    # Fresh user turn: reset the working memory for the ReAct loop. Long-term
-    # memory (tool_results) is intentionally left untouched.
+    # Fresh user turn. The session's territory was fixed by an earlier turn,
+    # but the user may now be asking about another one ("e a Fazzon?"):
+    # switch, and drop the old territory's results/caches so the reasoner
+    # queries the new territory instead of reusing the previous lists.
+    previous_territory = switch_territory_if_requested(state)
+    if previous_territory is not None:
+        logger.info(
+            f"Territory switched from '{previous_territory}' to '{state.territory}'"
+        )
+        state.add_trace(
+            "territory_switch",
+            node="initialize_tools",
+            data={"from": previous_territory, "to": state.territory},
+        )
+
+    # Reset the working memory for the ReAct loop. Long-term memory
+    # (tool_results) is intentionally left untouched (apart from the
+    # territory switch above, which clears it because it is territory data).
     state.assistant_action_data = None
     state.cognitive.scratchpad = []
     state.cognitive.selected_tool = None

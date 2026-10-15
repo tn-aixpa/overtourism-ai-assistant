@@ -124,6 +124,12 @@ def react_step(
 
     # Long-term memory (results from earlier turns this session).
     prior_results_block = build_prior_results_block(state.cognitive.tool_results)
+    territory_line = (
+        f"Current territory: {state.territory or 'not selected yet'}. "
+        "Every tool result below was obtained for THIS territory. If the user "
+        "asks about a different territory, the data below does not answer it "
+        "(call the tool again after the territory is switched)."
+    )
     # Working memory (this turn's own Thought/Action/Observation history).
     scratchpad_block = _format_scratchpad(state.cognitive.scratchpad)
 
@@ -197,6 +203,8 @@ attempt as "already done". If the user is asking to retry/try again/redo the las
 that refers to the most recent FAILED action: call the same tool again (same arguments,
 unless the user or the failure reason implies they should change) rather than finishing
 without acting:
+{territory_line}
+
 {prior_results_block}
 
 Last FAILED action (retry target):

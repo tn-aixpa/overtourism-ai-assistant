@@ -108,9 +108,11 @@ def _kpi_result_text(value: Any, metadata: Dict[str, Any]) -> str:
     if _is_num(value.get("value")):
         main.append(_it(value["value"], 1))
     if _is_num(value.get("share")):
-        main.append(f"pari al {_it(value['share'])}% del totale")
+        main.append(f"pari al {_it(value['share'] * 100)}% del totale")
     if _is_num(value.get("confidence")):
-        extra.append(f"incertezza di ±{_it(value['confidence'])} punti percentuali")
+        extra.append(
+            f"incertezza di ±{_it(value['confidence'])} punti percentuali"
+        )
     known = {"name", "level", "value", "share", "confidence"}
     for field, content in value.items():
         if field not in known:

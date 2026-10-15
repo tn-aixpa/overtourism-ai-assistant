@@ -78,3 +78,57 @@ def territory_question(allowed: List[str]) -> str:
         "Which territory do you want to work on? Available territories:\n"
         f"{options}\n\nYou can reply with the name or the number."
     )
+
+
+def mentioned_territory(state: AgentState) -> Optional[str]:
+    """The single allowed territory named (as a whole word) in the user's last
+    message, or None when none or several are named (ambiguous: never guess).
+    By-name only, like resolve_territory_if_trivial."""
+    last = state.get_last_user_message()
+    if last is None:
+        return None
+    text = _norm(last.content)
+    mentioned = [
+        t for t in state.allowed_territories
+        if re.search(rf"\b{re.escape(_norm(t))}\b", text)
+    ]
+    return mentioned[0] if len(mentioned) == 1 else None
+
+
+def reset_territory_scoped_state(state: AgentState) -> None:
+    """Forget everything that was fetched for the previous territory.
+
+    Tool results, cached/retrieved entities, the current context, plot data,
+    a pending temporary scenario and a retryable failed action all describe
+    ONE territory's data. Leaving them in place after a switch makes the
+    reasoner answer from the old territory's lists ("already retrieved")
+    instead of querying the new one. Conversation history, route and tier
+    consent are not territory data and are kept."""
+    cog = state.cognitive
+    cog.tool_results = {}
+    cog.context_cache = {}
+    cog.retrieved_context = {}
+    cog.plot_data_cache = {}
+    cog.current_context = {"problems": [], "proposals": [], "scenarios": []}
+    cog.pending_temp_scenario = None
+    cog.last_failed_action = None
+    cog.tool_result = None
+
+
+def switch_territory_if_requested(state: AgentState) -> Optional[str]:
+    """At the start of a fresh user turn: if the user names a different
+    allowed territory than the session's current one, switch to it and drop
+    the old territory's data. Returns the previous territory when a switch
+    happened, else None.
+
+    Not applied in integrated mode (the host application fixes the territory
+    there). A territory not in allowed_territories is never accepted."""
+    if state.integrated_mode:
+        return None
+    target = mentioned_territory(state)
+    if not target or target == state.territory:
+        return None
+    previous = state.territory
+    state.territory = target
+    reset_territory_scoped_state(state)
+    return previous
