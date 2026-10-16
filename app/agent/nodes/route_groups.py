@@ -9,11 +9,12 @@ of the full list. This is a pure lookup table — no LLM/state logic lives
 here, see app.agent.nodes.router for the node that actually drives the
 user through it.
 
-IMPORTANT: this routing tree is entirely orthogonal to AgentTier /
-ToolDefinition.agent_tier (see tool_schema.py and tool_executor_node). This
-module controls which tools are SELECTABLE this turn (scope/navigation);
-agent_tier controls the RESPONSE STYLE once a selected tool actually runs,
-and whether it needs one-time consent first. A tool's second-level group
+IMPORTANT: this routing tree is orthogonal to AgentTier /
+ToolDefinition.agent_tier (see tool_schema.py and tool_executor_node).
+This module controls which tools are SELECTABLE this turn by topic;
+agent_tier controls the RESPONSE STYLE once a selected tool actually runs
+and whether it needs one-time consent first. An explicit /agent force_role
+can additionally restrict tools by agent_tier. A tool's second-level group
 here and its agent_tier are independent — e.g. analyze_scenario_results
 lives in the LOCATION -> analysis sub-group (so it's only selectable when
 the conversation is routed there) but is tagged agent_tier="operative" (so

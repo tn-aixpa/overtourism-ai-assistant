@@ -17,8 +17,8 @@ B  test_baseline_*
 C  test_event_loop_is_not_blocked_by_slow_backend_calls (+ the slow-dump variant)
 D  test_result_fetch_does_not_wait_for_a_backend_auth_roundtrip
 
-Tests marked xfail(strict=True) reproduce a confirmed delay. The numbers they
-print (run with `-rx -s`, or `--runxfail`) are the evidence.
+The latency tests assert that the delays above stay bounded under simulated
+slow persistence and backend calls.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
-import pytest
 
 import sse_harness as h
 from sse_harness import AUTH, action, call, run_turn, sleep, thought
@@ -98,18 +97,6 @@ class TestBaseline:
 
 
 class TestAnswerReadyToDone:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "CONFIRMED CAUSE A: _run_agent calls save_state() -> AgentState.dump_to_file() "
-            "BEFORE _finish()/publish_done(). dump_to_file serialises the whole state with "
-            "json.dump(indent=2) (the pure-Python encoder - ~10x slower than the C one) and "
-            "writes it to disk, all synchronously, while the finished answer sits in `result` "
-            "waiting. On a 16 MB state it takes ~1.6 s here; the delay grows with "
-            "tool_results/trace size. Fix: update the in-memory store, publish_done(), and "
-            "persist to disk afterwards / off-thread."
-        ),
-    )
     def test_done_is_not_delayed_by_state_persistence(self, live, monkeypatch):
         marks = _record_answer_ready(live)
         orig = AgentState.dump_to_file
@@ -138,10 +125,7 @@ class TestAnswerReadyToDone:
 
 
 class TestEventLoopBlocking:
-    """The endpoints are `async def` but call sync `requests` (check_authorization,
-    get_allowed_territories) and write files (save_state) directly on the event
-    loop. While one of those runs, EVERY SSE generator in the process is frozen:
-    no events, no `done`, no keep-alives."""
+    """Slow auth/backend calls and state writes must not freeze SSE streams."""
 
     def _run_victim_and_aggressors(self, live, aggressor):
         """Turn `victim` emits an event every 100 ms for ~2 s. Meanwhile three
@@ -163,17 +147,6 @@ class TestEventLoopBlocking:
         gap = max(b - a for a, b in zip(times, times[1:]))
         return rec, gap, rec.t_done - marks["victim"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "CONFIRMED CAUSE C: routes.py calls check_authorization()/get_allowed_territories() "
-            "(blocking `requests.get`, 30 s timeout) inside `async def` handlers. With a backend "
-            "auth/me that takes 0.8 s, three other users hitting /agent/result or /agent/stream "
-            "stall every other user's stream for seconds. Fix: run them with "
-            "`await asyncio.to_thread(...)` (or use httpx.AsyncClient) and cache validated "
-            "tokens for a short TTL."
-        ),
-    )
     def test_event_loop_is_not_blocked_by_slow_backend_calls(self, live):
         def aggressor(i):
             with httpx.Client(base_url=live.base, timeout=30) as c:
@@ -187,14 +160,6 @@ class TestEventLoopBlocking:
         print(f"\nvictim: largest gap between events={gap:.2f}s (script: 0.10s); answer->done={lat:.2f}s")
         assert gap < 0.6, f"victim stream froze for {gap:.2f}s while others made auth calls"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "CONFIRMED CAUSE A2 (same family as C): POST /agent runs save_state() -> "
-            "dump_to_file() synchronously inside `async with lock` on the event loop, so "
-            "every new message freezes all other users' streams for as long as the dump takes."
-        ),
-    )
     def test_event_loop_is_not_blocked_by_saving_state_on_post(self, live, monkeypatch):
         orig = AgentState.dump_to_file
 
@@ -215,16 +180,6 @@ class TestEventLoopBlocking:
 
 
 class TestDoneToAnswerInHand:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "CONFIRMED CAUSE D: after `done` the frontend calls GET /agent/result, which "
-            "first does a full synchronous auth/me round-trip to the backend (and blocks the "
-            "event loop while doing it). Whatever auth/me costs in production is added to "
-            "every answer, and a slow/busy backend makes it seconds. Cache the token check "
-            "(short TTL) or skip re-validation for an already-authenticated session."
-        ),
-    )
     def test_result_fetch_does_not_wait_for_a_backend_auth_roundtrip(self, live):
         live.agent.script_for = lambda sid, m: [
             call(lambda: setattr(live, "auth_delay", 0.8)),  # backend gets slow mid-turn

@@ -51,10 +51,9 @@ def initialize_tools(state: AgentState) -> Command:
     registry = _ensure_tool_registry()
 
     allowlist = state.cognitive.known_tools or None
-    # No tier filtering here: which tools are selectable this turn is
-    # governed entirely by routing (top_level_router_node scopes
-    # enabled_tools further down below), not by the tier a tool's response
-    # would be generated under (see ToolDefinition.agent_tier).
+    # By default, the topic router scopes selectable tools independently
+    # of their response tier. An explicit force_role adds a separate tier
+    # restriction below, before topic routing narrows enabled_tools.
     #
     # role/mode filtering (ToolDefinition.allowed_roles / allowed_modes,
     # see app.tools.tool_schema) IS applied here, via state.user_role /
@@ -72,7 +71,6 @@ def initialize_tools(state: AgentState) -> Command:
         role=state.user_role,
         mode=state.session_mode,
     )
-
     state.cognitive.known_tools = list(known_tools.keys())
 
     if state.integrated_mode:
@@ -83,10 +81,17 @@ def initialize_tools(state: AgentState) -> Command:
         # above, so intersecting against it (instead of duplicating the
         # is_allowed_for check) keeps this in sync with it by construction.
         state.cognitive.enabled_tools = [
-            name for name in state.cognitive.enabled_tools if name in known_tools
+            name
+            for name in state.cognitive.enabled_tools
+            if name in known_tools
+            and state.allows_agent_tier(known_tools[name].agent_tier)
         ]
     else:
-        state.cognitive.enabled_tools = list(state.cognitive.known_tools)
+        state.cognitive.enabled_tools = [
+            name
+            for name, tool in known_tools.items()
+            if state.allows_agent_tier(tool.agent_tier)
+        ]
 
     logger.info(f"Available tools: {state.cognitive.enabled_tools}")
 
@@ -115,15 +120,15 @@ def initialize_tools(state: AgentState) -> Command:
     state.cognitive.pending_thought = ""
     state.cognitive.tool_confirmation_needed = False
     state.cognitive.tool_confirmed = False
-    # active_agent reflects the highest-tier tool actually used THIS turn
-    # (see tool_executor_node._bump_active_agent) — reset to the EXECUTOR
-    # baseline at the start of every fresh turn so a previous turn's tier
-    # never leaks into this one's response style. This is deliberately NOT
-    # persisted across turns, unlike top_level_route/second_level_route
-    # below and tier_consent (state.cognitive.tier_consent) — those track
-    # "where we are" / "what's been permitted", active_agent tracks "what
-    # kind of response this turn earned".
-    state.active_agent = AgentTier.EXECUTOR
+    # A forced role determines this turn's response tier; otherwise
+    # active_agent starts at EXECUTOR and rises to the highest-tier tool
+    # actually used. This is reset every fresh turn so a previous turn's
+    # response style never leaks into this one.
+    state.active_agent = (
+        AgentTier(state.force_role)
+        if state.force_role not in (None, "auto")
+        else AgentTier.EXECUTOR
+    )
 
     # Route the turn to the right domain (and scope enabled_tools to it)
     # before the ReAct loop starts reasoning about which specific tool to

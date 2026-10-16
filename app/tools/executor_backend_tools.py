@@ -684,7 +684,7 @@ def _strong_html_to_markdown(text: str) -> str:
 @tool
 def get_territorial_index_list() -> dict:
     """Fetch the list of available territorial indexes (with descriptions) from the API."""
-    url = f"default/indexes/get-index-list"
+    url = f"indexes/get-index-list"
     extracted_data = get_data(url)
 
     indicators = [
@@ -725,7 +725,7 @@ def get_territorial_index_map_data(
 ) -> dict:
     """Fetch the geo-referenced values (GeoJSON + value range) of a single
     territorial index for the given date range from the API."""
-    url = f"default/indexes/get_index_data"
+    url = f"indexes/get_index_data"
     params = {
         "index": index,
         "start_date": start_date,
@@ -747,7 +747,7 @@ def get_spatial_areas() -> dict:
     """Fetch the territories that can be selected in plots: municipalities
     ("comuni") and macro-areas/APT ("areas"), each as [{code, name}]. Both lists
     also contain the entry {code: "-1", name: "Provincia"} (the whole province)."""
-    return get_data("default/indexes/get-spatial-areas")
+    return get_data("indexes/get-spatial-areas")
 
 
 @tool
@@ -767,7 +767,7 @@ def get_territorial_index_plot_data(
     query parameter and omitted when empty (e.g. provincia, which returns only
     the province-wide series). spatial_granularity is read by the backend from
     the query string (comune | macro_area | provincia)."""
-    url = "default/indexes/get-variation-data"
+    url = "indexes/get-variation-data"
     params = {
         "index": index,
         "start_date": start_date,

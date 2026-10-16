@@ -16,6 +16,7 @@ import logging
 import asyncio
 import queue
 import threading
+from typing import Literal
 
 from app.schemas import AgentResponse, RunSelectedToolsRequest
 from app.agent.state import AgentState
@@ -57,12 +58,65 @@ router = APIRouter()
 # OWN pool so they can never starve the short blocking calls (auth, state save)
 # that share the default asyncio executor.
 from concurrent.futures import ThreadPoolExecutor as _TPE
-_TURN_POOL = _TPE(max_workers=int(os.environ.get("AGENT_MAX_CONCURRENT_TURNS", "64")), thread_name_prefix="agent-turn")
+
+_TURN_POOL = _TPE(
+    max_workers=int(os.environ.get("AGENT_MAX_CONCURRENT_TURNS", "64")),
+    thread_name_prefix="agent-turn",
+)
+
+
+def _finish_agent_turn(
+    key: str,
+    result: dict,
+    finished: threading.Event,
+    finish_lock: threading.Lock,
+    final_state: AgentState | None = None,
+) -> bool:
+    """Commit and publish one terminal result, unless this turn already timed out."""
+    with finish_lock:
+        if finished.is_set():
+            return False
+        if final_state is not None:
+            remember_state(final_state)
+        finished.set()
+
+    try:
+        publish_done(key, result)
+    except Exception:
+        logger.exception(f"publish_done failed for session {key}")
+    finally:
+        clear_in_flight(key)
+    return True
 
 
 async def _run_agent_in_pool(key, state, token):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(_TURN_POOL, _run_agent, key, state, token)
+    finished = threading.Event()
+    finish_lock = threading.Lock()
+
+    def _on_timeout() -> None:
+        logger.error(f"Agent turn for session {key} exceeded {AGENT_TURN_TIMEOUT}s")
+        _finish_agent_turn(
+            key,
+            {
+                "response": "The request took too long to complete. Please try again.",
+                "session_id": key,
+                "agent_type": state.active_agent.value,
+                "assistant_action_data": None,
+            },
+            finished,
+            finish_lock,
+        )
+
+    watchdog = threading.Timer(AGENT_TURN_TIMEOUT, _on_timeout)
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        await loop.run_in_executor(
+            _TURN_POOL, _run_agent, key, state, token, finished, finish_lock
+        )
+    finally:
+        watchdog.cancel()
 
 
 # Hard ceiling for one agent turn. If the turn thread is stuck (a hung backend
@@ -77,6 +131,7 @@ _AUTH_TTL = 30.0
 
 def _cached_check_authorization(token: str):
     import time as _t
+
     hit = _AUTH_CACHE.get(token)
     if hit and hit[0] > _t.monotonic():
         return hit[1]
@@ -93,40 +148,16 @@ def _require_authorized_user(token: str) -> str:
     return role, user_id
 
 
-def _run_agent(key: str, state: AgentState, token: str):
+def _run_agent(
+    key: str,
+    state: AgentState,
+    token: str,
+    finished: threading.Event,
+    finish_lock: threading.Lock,
+):
     """Runs synchronously inside a thread — never call from the event loop directly."""
-    finished = threading.Event()
-    finish_lock = threading.Lock()
-
-    def _finish(result: dict) -> None:
-        """Publish the final result exactly once (turn thread vs watchdog)."""
-        with finish_lock:
-            if finished.is_set():
-                return
-            finished.set()
-        try:
-            publish_done(key, result)
-        except Exception:
-            logger.exception(f"publish_done failed for session {key}")
-        finally:
-            # Must be cleared even on the error paths, or a session that
-            # fails once would stay "in flight" forever and every later
-            # /agent call for it would 409 permanently.
-            clear_in_flight(key)
-
-    def _on_timeout() -> None:
-        logger.error(f"Agent turn for session {key} exceeded {AGENT_TURN_TIMEOUT}s")
-        _finish(
-            {
-                "response": "The request took too long to complete. Please try again.",
-                "session_id": key,
-                "assistant_action_data": None,
-            }
-        )
-
-    watchdog = threading.Timer(AGENT_TURN_TIMEOUT, _on_timeout)
-    watchdog.daemon = True
-    watchdog.start()
+    if finished.is_set():
+        return
 
     result = {
         "response": "System error",
@@ -134,6 +165,7 @@ def _run_agent(key: str, state: AgentState, token: str):
         "assistant_action_data": None,
     }
     final_state = None
+    committed = False
     try:
         set_token(token)
         logger.info(f"Message sent from conversation {key}")
@@ -161,7 +193,9 @@ def _run_agent(key: str, state: AgentState, token: str):
             ),
         }
 
-        remember_state(final_state)  # fast; next turn's load_state() sees it
+        committed = _finish_agent_turn(
+            key, result, finished, finish_lock, final_state
+        )
 
     except BaseException as e:  # noqa: BLE001 - done MUST be sent, whatever happens
         logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
@@ -170,26 +204,28 @@ def _run_agent(key: str, state: AgentState, token: str):
             "session_id": key,
             "assistant_action_data": None,
         }
+        _finish_agent_turn(key, result, finished, finish_lock)
 
-    finally:
-        watchdog.cancel()
-        _finish(result)  # `done` goes out BEFORE the slow disk dump
-        if final_state is not None:
-            try:
-                persist_state(final_state)
-            except Exception:
-                logger.exception(f"persist_state failed for session {key}")
+    if final_state is not None and committed:
+        try:
+            persist_state(final_state)
+        except Exception:
+            logger.exception(f"persist_state failed for session {key}")
 
 
 @router.post("/agent", status_code=202)
 async def run_agent_endpoint(
     background_tasks: BackgroundTasks,
     message: str = Form(...),
-    user_lang: str = Form(default="English"),
+    user_lang: str = Form(default="Italian"),
     session_id: str = Form(...),
     files: list[UploadFile] = File([]),
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
+    force_role: Literal[
+        "executor", "operative", "methodological", "exploitative", "auto"
+    ]
+    | None = Form(default=None),
     authorization: str | None = Header(default=None),
 ):
     # Verify authorization
@@ -238,7 +274,9 @@ async def run_agent_endpoint(
                 user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
-                allowed_territories=await asyncio.to_thread(get_allowed_territories, token),
+                allowed_territories=await asyncio.to_thread(
+                    get_allowed_territories, token
+                ),
                 user_role=user_role,
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
@@ -246,6 +284,13 @@ async def run_agent_endpoint(
                 # form field).
                 session_mode="internal" if integrated_mode else "standalone",
             )
+        # A wait/resume request continues the same logical turn, so keep its
+        # forced role while the pending action or clarification is completed.
+        # Otherwise this is a new turn and the optional form value replaces
+        # the previous turn's role selection.
+        if state.waiting_for is None:
+            state.force_role = None if force_role in (None, "auto") else force_role
+
         # A session's mode is fixed for its whole lifetime (set once, above,
         # when the session is first created) — see reasoner.initialize_tools.
         # Always branch on the PERSISTED state.integrated_mode from here on,

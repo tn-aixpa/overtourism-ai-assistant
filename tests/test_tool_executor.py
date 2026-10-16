@@ -5,7 +5,7 @@ from langgraph.types import Command
 
 from app.agent.nodes import tool_executor as te
 from app.agent.nodes.utils import MAX_STORED_TOOL_RESULTS
-from app.agent.state import AgentState, ReActStep
+from app.agent.state import AgentState, AgentTier, ReActStep
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
 
@@ -218,6 +218,34 @@ class TestResolveReferencedId:
 
 
 class TestExecuteSelectedTool:
+    def test_rejects_tool_outside_forced_role_tier(self, fresh_state: AgentState):
+        get_tool_registry().register_tool(
+            ToolDefinition(
+                name="executor_tool",
+                description="d",
+                category=ToolCategory.UTILITY,
+                agent_tier="executor",
+            )
+        )
+        fresh_state.force_role = "methodological"
+
+        with pytest.raises(PermissionError, match="not allowed for forced role"):
+            te.execute_selected_tool("executor_tool", {}, fresh_state)
+
+    def test_operative_answer_tier_survives_executor_tool(self, fresh_state: AgentState):
+        fresh_state.force_role = "operative"
+        fresh_state.active_agent = AgentTier.OPERATIVE
+        executor_tool = ToolDefinition(
+            name="executor_tool",
+            description="d",
+            category=ToolCategory.UTILITY,
+            agent_tier="executor",
+        )
+
+        te._bump_active_agent(fresh_state, executor_tool)
+
+        assert fresh_state.active_agent is AgentTier.OPERATIVE
+
     def test_raises_if_tool_not_registered(self, fresh_state: AgentState):
         with pytest.raises(ValueError, match="not found in registry"):
             te.execute_selected_tool("nonexistent_tool", {}, fresh_state)

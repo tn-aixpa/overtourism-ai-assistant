@@ -35,6 +35,7 @@ from langgraph.types import Command
 from app.agent.state import AgentState
 from app.agent.nodes import route_groups as rg
 from app.prompts.routing import classify_route
+from app.tools.tool_registry import get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -160,9 +161,19 @@ def _apply_route(
         # (once per session, unless the registry/integrated_mode itself
         # changes) and is exactly "every tool this session could ever
         # select" — the right base to filter down from regardless of
-        # which path got us here.
+        # which path got us here. Apply force_role here as well, since this
+        # route-specific allowlist is rebuilt from known_tools.
         base = state.cognitive.known_tools or list(allowed)
-        state.cognitive.enabled_tools = [name for name in base if name in allowed]
+        routed_tools = [name for name in base if name in allowed]
+        if state.force_role in (None, "auto"):
+            state.cognitive.enabled_tools = routed_tools
+        else:
+            tools = get_tool_registry().get_all_known_tools()
+            state.cognitive.enabled_tools = [
+                name
+                for name in routed_tools
+                if name in tools and state.allows_agent_tier(tools[name].agent_tier)
+            ]
 
 
 def _pause_for_clarification(

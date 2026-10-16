@@ -140,7 +140,7 @@ def _fetch_index_features(
     seasonality: str | None = None,
 ):
     """Call the SAME backend endpoint the map widget uses
-    (get_territorial_index_map_data -> default/indexes/get_index_data) and
+    (get_territorial_index_map_data -> indexes/get_index_data) and
     return (features, min_value, max_value). The geometry is parsed only to
     reach the per-area properties; it never leaves this module."""
     import json
@@ -309,7 +309,7 @@ _LEVEL_COMUNE = "comune"
 _LEVEL_MACRO_AREA = "macro_area"
 _LEVEL_PROVINCIA = "provincia"
 
-# Entry present in BOTH lists returned by default/indexes/get-spatial-areas
+# Entry present in BOTH lists returned by indexes/get-spatial-areas
 # ({"code": "-1", "name": "Provincia"}): the whole province. Never sent as a
 # selected territory (see _resolve_selected_territories).
 _PROVINCIA_CODE = "-1"
@@ -731,7 +731,7 @@ def execute_show_territorial_index_plot(
     The territorial level is INFERRED from `selected_territories` (only
     municipalities -> 'comune', only macro-areas -> 'macro_area', nothing ->
     'provincia'); it is not an input. Names are resolved against
-    default/indexes/get-spatial-areas, mixed municipality/macro-area
+    indexes/get-spatial-areas, mixed municipality/macro-area
     selections are rejected, and `include_provincia` adds the overall
     provincial series to a comune/macro_area plot.
 

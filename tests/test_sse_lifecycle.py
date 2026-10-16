@@ -52,6 +52,37 @@ def tools_of(rec):
 # Basic shape of a turn
 # --------------------------------------------------------------------------- #
 class TestHappyPath:
+    @pytest.mark.parametrize(
+        ("force_role", "expected_role"),
+        [(None, None), ("auto", None), ("operative", "operative")],
+    )
+    def test_force_role_form_is_optional_and_saved_for_the_turn(
+        self, live, force_role, expected_role
+    ):
+        extra_form = {} if force_role is None else {"force_role": force_role}
+
+        rec = run_turn(
+            live.base,
+            f"force-role-{force_role or 'omitted'}",
+            "hello",
+            extra_form=extra_form,
+        )
+
+        assert rec.post_status == 202, rec.error
+        assert (
+            live.routes.load_state(rec.session).force_role == expected_role
+        )
+
+    def test_force_role_rejects_unknown_values(self, live):
+        rec = run_turn(
+            live.base,
+            "force-role-invalid",
+            "hello",
+            extra_form={"force_role": "unknown"},
+        )
+
+        assert rec.post_status == 422
+
     def test_status_events_in_order_then_exactly_one_done(self, live):
         live.agent.script_for = lambda sid, m: [
             thought("plan"),
@@ -341,40 +372,38 @@ class TestWatchdog:
         assert thoughts_of(rec) == ["new-1", "new-2"]
         assert tools_of(rec) == []
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "BUG/limitation: the watchdog Timer starts inside _run_agent, i.e. only once "
-            "a worker thread picked the turn up. Turns waiting for a free thread in the "
-            "default asyncio executor (shared with every other to_thread call, and "
-            "capped at min(32, cpu+4)) get no events, no `done`, and no timeout - the "
-            "user just sees a stuck spinner. Start the clock in the endpoint, and give "
-            "turns their own ThreadPoolExecutor. NOTE: this test emulates saturation by "
-            "patching asyncio.to_thread, so it will XPASS (for the wrong reason) once turns "
-            "stop using asyncio.to_thread - rewrite the emulation then."
-        ),
-    )
-    def test_turns_waiting_for_a_worker_thread_still_honour_the_timeout(self, live, monkeypatch):
-        import asyncio
+    def test_turns_waiting_in_the_agent_pool_still_honour_the_timeout(
+        self, live, monkeypatch
+    ):
         from concurrent.futures import ThreadPoolExecutor as TPE
 
-        pool = TPE(max_workers=2)  # a saturated worker pool
-        orig = asyncio.to_thread
+        pool = TPE(max_workers=2)
+        release_workers = threading.Event()
+        for _ in range(2):
+            pool.submit(release_workers.wait)
+        monkeypatch.setattr(live.routes, "_TURN_POOL", pool)
+        live.routes.AGENT_TURN_TIMEOUT = 1.0
+        live.agent.script_for = lambda sid, m: [thought("x")]
+        threading.Timer(1.6, release_workers.set).start()
 
-        async def limited(func, /, *args, **kwargs):
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(pool, lambda: func(*args, **kwargs))
+        try:
+            with ThreadPoolExecutor(6) as ex:
+                recs = list(
+                    ex.map(
+                        lambda i: run_turn(
+                            live.base, f"s{i}", "m", fetch_result=False
+                        ),
+                        range(6),
+                    )
+                )
+        finally:
+            release_workers.set()
+            pool.shutdown(wait=True)
 
-        monkeypatch.setattr(asyncio, "to_thread", limited)
-        live.routes.AGENT_TURN_TIMEOUT = 1.5
-        live.agent.script_for = lambda sid, m: [thought("x"), sleep(1.2)]
-
-        with ThreadPoolExecutor(6) as ex:
-            recs = list(ex.map(lambda i: run_turn(live.base, f"s{i}", "m", fetch_result=False), range(6)))
-        pool.shutdown(wait=False)
-        worst = max(r.t_done - r.t_post for r in recs if r.got_done)
+        assert all(rec.got_done for rec in recs), [rec.error for rec in recs]
+        worst = max(r.t_done - r.t_post for r in recs)
         assert worst < live.routes.AGENT_TURN_TIMEOUT + 0.5, (
-            f"slowest turn needed {worst:.1f}s from POST to done "
+            f"slowest queued turn needed {worst:.1f}s from POST to done "
             f"(timeout is {live.routes.AGENT_TURN_TIMEOUT}s)"
         )
 

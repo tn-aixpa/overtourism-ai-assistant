@@ -29,14 +29,13 @@ TIER_CONSENT_TTL = timedelta(hours=24)
 class AgentTier(StrEnum):
     """The four capability tiers, ordered lowest-license to highest.
 
-    Orthogonal to routing (app.agent.nodes.router / route_groups.py, which
-    decide which tools are SELECTABLE this turn): AgentTier instead decides
-    the RESPONSE style/policy once a tool has actually been used (see
-    ToolDefinition.agent_tier, tool_executor_node._bump_active_agent, and
-    _reasoning_policy in answer_generation.py), and — for tiers in
-    TIERS_REQUIRING_CONSENT — gates that tool behind one-time user consent.
-    EXECUTOR is the baseline every turn starts at; a turn's active_agent is
-    raised to the highest tier reached by any tool it actually calls.
+    Topic routing (app.agent.nodes.router / route_groups.py) decides which
+    tools are in scope for the turn. An explicit /agent force_role can
+    additionally restrict that set by AgentTier. The tier also decides the
+    RESPONSE style/policy (see ToolDefinition.agent_tier,
+    tool_executor_node._bump_active_agent, and _reasoning_policy in
+    answer_generation.py), and — for tiers in TIERS_REQUIRING_CONSENT —
+    gates tools behind one-time user consent.
     """
 
     EXECUTOR = "executor"
@@ -353,16 +352,25 @@ class AgentState:
     # (see app.api.routes) — that pipeline never sets integrated_mode at
     # all, so it needs its own explicit value rather than being derived.
     session_mode: str = "standalone"
+    # Optional per-turn capability tier restriction provided by /agent.
+    # "auto" is normalized to None at the API boundary.
+    force_role: Optional[str] = None
     # Which capability tier this turn's response is generated under (see
-    # AgentTier). Reset to the EXECUTOR baseline at the start of every
-    # fresh turn (see initialize_tools), then raised at most, never
-    # lowered, as tools actually run this turn (see
-    # tool_executor_node._bump_active_agent and ToolDefinition.agent_tier)
-    # — NOT persisted across turns, unlike top_level_route/second_level_
-    # route or tier_consent on CognitiveState. Stamped onto the outgoing
-    # message via add_assistant_message so callers can see which tier
+    # AgentTier). Set to force_role when one is requested; otherwise starts
+    # at the EXECUTOR baseline and rises as tools run (see
+    # tool_executor_node._bump_active_agent and ToolDefinition.agent_tier).
+    # Stamped onto the outgoing message so callers can see which tier
     # answered.
     active_agent: AgentTier = AgentTier.EXECUTOR
+
+    def allows_agent_tier(self, agent_tier: str) -> bool:
+        """Return whether a tool tier is selectable under this turn's role."""
+        if self.force_role in (None, "auto"):
+            return True
+        allowed_tiers = {self.force_role}
+        if self.force_role == AgentTier.OPERATIVE.value:
+            allowed_tiers.add(AgentTier.EXECUTOR.value)
+        return agent_tier in allowed_tiers
 
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)

@@ -97,6 +97,8 @@ def _bump_active_agent(state: AgentState, tool_def: ToolDefinition | None) -> No
     """
     if not tool_def:
         return
+    if state.force_role not in (None, "auto"):
+        return
     try:
         tool_tier = AgentTier(tool_def.agent_tier)
     except ValueError:
@@ -142,6 +144,12 @@ def execute_selected_tool(
 
     if not tool_def.enabled and not allow_disabled:
         raise ValueError(f"Tool '{tool_name}' is disabled")
+
+    if not state.allows_agent_tier(tool_def.agent_tier):
+        raise PermissionError(
+            f"Tool '{tool_name}' with agent tier '{tool_def.agent_tier}' "
+            f"is not allowed for forced role '{state.force_role}'"
+        )
 
     # Role/mode gating is enforced here too, not just at selection time
     # (ToolRegistry.get_context_tools, consulted by initialize_tools /

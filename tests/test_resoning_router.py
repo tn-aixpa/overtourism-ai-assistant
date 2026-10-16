@@ -14,6 +14,7 @@ import pytest
 from langgraph.types import Command
 
 from app.agent.nodes import reasoner as reasoner_module
+from app.agent.nodes import router as router_module
 from app.agent.state import AgentState, ReActStep
 from app.prompts.react_guidelines import GUIDELINE_BLOCKS
 from app.tools.definitions.analysis_widgets import create_analysis_widget_tool
@@ -72,6 +73,97 @@ def test_existing_scenario_questions_always_include_evaluation_and_plot():
 
 
 class TestInitializeTools:
+    @pytest.mark.parametrize(
+        ("force_role", "expected_tools", "expected_agent"),
+        [
+            (
+                None,
+                {"executor", "operative", "methodological", "exploitative"},
+                "executor",
+            ),
+            (
+                "auto",
+                {"executor", "operative", "methodological", "exploitative"},
+                "executor",
+            ),
+            ("executor", {"executor"}, "executor"),
+            ("operative", {"executor", "operative"}, "operative"),
+            ("methodological", {"methodological"}, "methodological"),
+            ("exploitative", {"exploitative"}, "exploitative"),
+        ],
+    )
+    def test_force_role_filters_agent_tiers(
+        self, fresh_state: AgentState, force_role, expected_tools, expected_agent
+    ):
+        for tier in ("executor", "operative", "methodological", "exploitative"):
+            get_tool_registry().register_tool(
+                ToolDefinition(
+                    name=tier,
+                    description="d",
+                    category=ToolCategory.UTILITY,
+                    agent_tier=tier,
+                )
+            )
+
+        fresh_state.force_role = force_role
+        reasoner_module.initialize_tools(fresh_state)
+
+        assert set(fresh_state.cognitive.enabled_tools) == expected_tools
+        assert fresh_state.active_agent.value == expected_agent
+
+    def test_changing_force_role_can_widen_back_to_all_known_tools(
+        self, fresh_state: AgentState
+    ):
+        for tier in ("executor", "operative", "methodological", "exploitative"):
+            get_tool_registry().register_tool(
+                ToolDefinition(
+                    name=tier,
+                    description="d",
+                    category=ToolCategory.UTILITY,
+                    agent_tier=tier,
+                )
+            )
+
+        fresh_state.force_role = "operative"
+        reasoner_module.initialize_tools(fresh_state)
+        assert set(fresh_state.cognitive.enabled_tools) == {"executor", "operative"}
+
+        fresh_state.force_role = "methodological"
+        reasoner_module.initialize_tools(fresh_state)
+
+        assert set(fresh_state.cognitive.enabled_tools) == {"methodological"}
+        assert set(fresh_state.cognitive.known_tools) == {
+            "executor",
+            "operative",
+            "methodological",
+            "exploitative",
+        }
+
+    def test_topic_router_preserves_forced_role_filter(self, fresh_state: AgentState):
+        for name, tier in (
+            ("get_system_capabilities", "executor"),
+            ("lookup_glossary", "executor"),
+            ("explain_workflow", "methodological"),
+        ):
+            get_tool_registry().register_tool(
+                ToolDefinition(
+                    name=name,
+                    description="d",
+                    category=ToolCategory.UTILITY,
+                    agent_tier=tier,
+                )
+            )
+        fresh_state.force_role = "methodological"
+        fresh_state.cognitive.known_tools = [
+            "get_system_capabilities",
+            "lookup_glossary",
+            "explain_workflow",
+        ]
+
+        router_module._apply_route(fresh_state, "system_info", None)
+
+        assert fresh_state.cognitive.enabled_tools == ["explain_workflow"]
+
     def test_registers_default_tools_when_registry_empty(self, fresh_state: AgentState):
         assert get_tool_registry().list_tool_names() == []
         reasoner_module.initialize_tools(fresh_state)
