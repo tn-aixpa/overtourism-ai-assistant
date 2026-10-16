@@ -69,13 +69,21 @@ def load_state(session_id: Optional[str]) -> Optional[AgentState]:
     return _STATE_STORE.get(session_id)
 
 
-def save_state(state: AgentState) -> None:
+def remember_state(state: AgentState) -> None:
+    """In-memory only (microseconds): what the next request's load_state() sees."""
     if not state.session_id:
         raise ValueError("AgentState must have a session_id before saving")
     _STATE_STORE[state.session_id] = state
-    logger.debug(f"State saved for session {state.session_id}")
 
+
+def persist_state(state: AgentState) -> None:
+    """Slow disk dump (debug/audit copy). Never call on the event loop or before publish_done."""
     state.dump_to_file(f"logs/state_{state.session_id}.json")
+
+
+def save_state(state: AgentState) -> None:
+    remember_state(state)
+    persist_state(state)
 
 
 def delete_state(session_id: str) -> None:

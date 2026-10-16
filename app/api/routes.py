@@ -23,6 +23,8 @@ from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import (
     load_state,
     save_state,
+    remember_state,
+    persist_state,
     delete_state,
     _get_lock,
     is_in_flight,
@@ -51,6 +53,17 @@ AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 
 router = APIRouter()
 
+# Agent turns are long (tens of seconds of LLM/backend waiting). Give them their
+# OWN pool so they can never starve the short blocking calls (auth, state save)
+# that share the default asyncio executor.
+from concurrent.futures import ThreadPoolExecutor as _TPE
+_TURN_POOL = _TPE(max_workers=int(os.environ.get("AGENT_MAX_CONCURRENT_TURNS", "64")), thread_name_prefix="agent-turn")
+
+
+async def _run_agent_in_pool(key, state, token):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(_TURN_POOL, _run_agent, key, state, token)
+
 
 # Hard ceiling for one agent turn. If the turn thread is stuck (a hung backend
 # or LLM call, ...) the client must still get a terminal "__done__" + result
@@ -58,8 +71,23 @@ router = APIRouter()
 AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
 
 
+_AUTH_CACHE: dict[str, tuple[float, tuple]] = {}
+_AUTH_TTL = 30.0
+
+
+def _cached_check_authorization(token: str):
+    import time as _t
+    hit = _AUTH_CACHE.get(token)
+    if hit and hit[0] > _t.monotonic():
+        return hit[1]
+    res = check_authorization(token)
+    if res[0]:
+        _AUTH_CACHE[token] = (_t.monotonic() + _AUTH_TTL, res)
+    return res
+
+
 def _require_authorized_user(token: str) -> str:
-    authorized, role, user_id = check_authorization(token)
+    authorized, role, user_id = _cached_check_authorization(token)
     if not authorized:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return role, user_id
@@ -105,6 +133,7 @@ def _run_agent(key: str, state: AgentState, token: str):
         "session_id": key,
         "assistant_action_data": None,
     }
+    final_state = None
     try:
         set_token(token)
         logger.info(f"Message sent from conversation {key}")
@@ -132,12 +161,7 @@ def _run_agent(key: str, state: AgentState, token: str):
             ),
         }
 
-        # A failure while persisting must not swallow an answer that was
-        # already generated successfully.
-        try:
-            save_state(final_state)
-        except Exception:
-            logger.exception(f"save_state failed for session {key}")
+        remember_state(final_state)  # fast; next turn's load_state() sees it
 
     except BaseException as e:  # noqa: BLE001 - done MUST be sent, whatever happens
         logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
@@ -149,7 +173,12 @@ def _run_agent(key: str, state: AgentState, token: str):
 
     finally:
         watchdog.cancel()
-        _finish(result)
+        _finish(result)  # `done` goes out BEFORE the slow disk dump
+        if final_state is not None:
+            try:
+                persist_state(final_state)
+            except Exception:
+                logger.exception(f"persist_state failed for session {key}")
 
 
 @router.post("/agent", status_code=202)
@@ -166,7 +195,7 @@ async def run_agent_endpoint(
     # Verify authorization
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        user_role, user_id = _require_authorized_user(token)
+        user_role, user_id = await asyncio.to_thread(_require_authorized_user, token)
     else:
         token = None
 
@@ -209,7 +238,7 @@ async def run_agent_endpoint(
                 user_id=user_id,
                 user_lang=user_lang,
                 integrated_mode=integrated_mode,
-                allowed_territories=get_allowed_territories(token),
+                allowed_territories=await asyncio.to_thread(get_allowed_territories, token),
                 user_role=user_role,
                 # Fixed for the session's whole lifetime, same as
                 # integrated_mode itself (see the note below on why every
@@ -261,13 +290,13 @@ async def run_agent_endpoint(
         # silently drift apart on which non-widget tools are available.
         state.cognitive.enabled_tools = []
 
-        save_state(state)
+        await asyncio.to_thread(save_state, state)
         mark_in_flight(session_id)
         # Drop the previous turn's leftover "__done__"/result so this turn's
         # stream can neither close early nor return a stale answer.
         begin_turn(session_id)
 
-    background_tasks.add_task(asyncio.to_thread, _run_agent, session_id, state, token)
+    background_tasks.add_task(_run_agent_in_pool, session_id, state, token)
     return {"session_id": session_id}
 
 
@@ -312,7 +341,7 @@ async def get_agent_result(
 ):
     if AUTH_ENABLED:
         token = _require_bearer_token(authorization)
-        _require_authorized_user(token)
+        await asyncio.to_thread(_require_authorized_user, token)
 
     if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -346,7 +375,7 @@ async def stream_events(
         if not auth_header and token:
             auth_header = f"Bearer {token}"
         token = _require_bearer_token(auth_header)
-        _require_authorized_user(token)
+        await asyncio.to_thread(_require_authorized_user, token)
 
     if load_state(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
