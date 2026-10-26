@@ -60,7 +60,6 @@ def build_scenarios_context(
     return context
 
 
-
 def analyze_scenario(state: AgentState, query: str, widget_hint: str | None = None):
     # Bounded the same way generate_summary/generate_report (below and in
     # app/prompts/report.py) already treat context_cache — this used to
@@ -163,11 +162,13 @@ FORMATTING RULES:
 
 <h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Descrizione simulazione</h6>
 <p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
-[fill in: Briefly explain, in plain language and using ONLY the glossary definitions provided below,
-what simulations are on this platform and what "sustainability" and "uncertainty" mean in this context.]
+Le simulazioni della piattaforma usano un <strong>gemello digitale</strong>, cioè una replica virtuale di una destinazione fisica,
+per valutare gli effetti di possibili decisioni di gestione e attuazione di misure attraverso la definizione di uno scenario prima di applicarle nel mondo reale.
+L'<strong>affollamento turistico</strong> si verifica quando la domanda supera una o più <strong>capacità di carico</strong> di una specifica località, generando impatti negativi.
+Le simulazioni definiranno una serie di indicatori grazie ai quali sarà possibile valutare la sostenibilità della simulazione proposta.
 </p>
 
-<h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati generali simulazione</h6>
+<h6 _ngcontent-ng-c2324380181="" class="text-primary mb-3 d-flex align-items-center gap-2">Risultati generali della simulazione</h6>
 <p _ngcontent-ng-c2324380181="" class="small text-muted mb-2">
 [fill in: Give a general, high-level summary of the overall overtourism level and results of
 the simulation(s), explicitly citing the overall sustainability KPI and the critical constraint KPI (which constraint it is and how sustainable it is), from the evaluation data below.
