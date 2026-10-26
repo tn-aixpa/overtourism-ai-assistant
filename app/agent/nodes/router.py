@@ -7,8 +7,7 @@ belongs to:
   2) location      — problems, proposals, scenarios, analysis for a specific
                       location (territory-scoped: Molveno, Altipiano di Fazzon)
   3) indexes       — territorial indexes for the whole region
-  4) general       — general_question_response, for on-topic questions
-                      nothing else can answer
+  4) general       — on-topic questions needing external facts or a broad answer
 
 Domains 2 and 3 have a second level that narrows further to a specific
 tool sub-group (see route_groups.py).

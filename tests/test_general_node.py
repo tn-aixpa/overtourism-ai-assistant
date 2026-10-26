@@ -137,6 +137,18 @@ class TestBuildMessagesFromToolResult:
         msgs = gn._build_messages_from_tool_result("lookup_glossary", result)
         assert msgs == ["No entries found."]
 
+    def test_web_search_message_preserves_source_urls(self):
+        result = {
+            "success": True,
+            "output": {
+                "answer": "Recent finding.",
+                "sources": [{"title": "Source", "url": "https://example.test/page"}],
+            },
+        }
+        msgs = gn._build_messages_from_tool_result("web_search", result)
+        assert "Recent finding." in msgs[0]
+        assert "https://example.test/page" in msgs[0]
+
     def test_unknown_tool_falls_back_to_safe_json_output(self):
         result = {"success": True, "output": {"foo": "bar"}}
         msgs = gn._build_messages_from_tool_result("some_unknown_tool", result)
@@ -230,6 +242,45 @@ class TestErrorRecoveryNode:
 
 
 class TestGenerateOutputMessageNode:
+    def test_appends_clickable_sources_to_final_web_search_answer(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.tool_results["web_search"] = {
+            "success": True,
+            "output": {
+                "answer": "Recent finding.",
+                "sources": [
+                    {"title": "Source one", "url": "https://example.test/one"},
+                    {"title": "Source two", "url": "https://example.test/two"},
+                ],
+            },
+        }
+        fresh_state.cognitive.scratchpad = [
+            ReActStep(tool_name="web_search", observation_key="web_search")
+        ]
+
+        with patch.object(gn, "generate_answer", return_value="Final answer"):
+            gn.generate_output_message_node(fresh_state)
+
+        answer = fresh_state.conversation.messages[-1].content
+        assert answer.startswith("Final answer")
+        assert "[Source one](https://example.test/one)" in answer
+        assert "[Source two](https://example.test/two)" in answer
+
+    def test_does_not_append_old_web_search_sources_to_current_turn(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.tool_results["web_search"] = {
+            "success": True,
+            "output": {
+                "sources": [{"title": "Old", "url": "https://example.test/old"}]
+            },
+        }
+        with patch.object(gn, "generate_answer", return_value="Final answer"):
+            gn.generate_output_message_node(fresh_state)
+
+        assert fresh_state.conversation.messages[-1].content == "Final answer"
+
     def test_builds_messages_from_scratchpad_when_none_prepared(
         self, fresh_state: AgentState
     ):

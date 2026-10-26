@@ -43,7 +43,10 @@ TOP_LEVEL_LABELS: Dict[str, str] = {
         "locality/destination/territory (Molveno, Altipiano di Fazzon)"
     ),
     TOP_INDEXES: "Territorial indexes/indicators for the whole region",
-    TOP_GENERAL: "A general, on-topic question not covered by platform data or any other tool",
+    TOP_GENERAL: (
+        "An on-topic question needing external facts or a broad answer, "
+        "not covered by platform data"
+    ),
 }
 
 # ---- Level 1: SYSTEM_INFO -------------------------------------------------
@@ -56,6 +59,7 @@ _SYSTEM_INFO_TOOLS: Set[str] = {
 # ---- Level 1: GENERAL (delegate to the exploitative tier) -----------------
 _GENERAL_TOOLS: Set[str] = {
     "general_question_response",
+    "web_search",
 }
 
 # ---- Level 2 under LOCATION -----------------------------------------------

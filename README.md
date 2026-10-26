@@ -33,6 +33,11 @@ uv sync --dev
 In order to run this project you need first to setup API KEYS and
 links in `run.sh` then use this script to run the code.
 
+The `web_search` tool uses the configured LLM provider's native web search,
+so it needs no separate search API key. It is available only in the
+exploitative agent tier and requires the tier's user consent. Azure
+deployments must support the Responses API web-search tool.
+
 # Dependencies
 
 You will additioanlly need these repos running:

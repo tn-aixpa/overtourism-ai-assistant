@@ -20,6 +20,7 @@ def get_all_agent_tools() -> List[ToolDefinition]:
         create_get_system_capabilities_tool(),
         create_explain_workflow_tool(),
         create_general_question_response_tool(),
+        create_web_search_tool(),
         create_list_available_entities_tool(),
         create_list_available_problems_tool(),
         create_list_available_proposals_tool(),

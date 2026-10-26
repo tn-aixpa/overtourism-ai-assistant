@@ -166,6 +166,18 @@ def execute_general_question_response(
     }
 
 
+def execute_web_search(
+    state: AgentState,
+    query: str,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Search the web using the configured LLM provider's native tool."""
+    from app.utils.llm import native_web_search
+
+    logger.info("Executing web_search")
+    return native_web_search(state, query)
+
+
 def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute get_system_capabilities tool."""
     from app.utils.system_capabilities import SYSTEM_DESCRIPTION
@@ -223,5 +235,6 @@ EXECUTORS = {
     "lookup_glossary": execute_lookup_glossary,
     "get_system_capabilities": execute_get_system_capabilities,
     "general_question_response": execute_general_question_response,
+    "web_search": execute_web_search,
     "explain_workflow": execute_explain_workflow,
 }

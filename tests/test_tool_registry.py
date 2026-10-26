@@ -50,6 +50,16 @@ class TestToolRegistryCRUD:
 
 
 class TestToolRegistryFiltering:
+    def test_web_search_is_exploitative_and_limited_to_general_route(self):
+        from app.agent.nodes.route_groups import TOP_GENERAL, resolve_allowed_tools
+        from app.tools.definitions import get_all_agent_tools
+
+        tools = {tool.name: tool for tool in get_all_agent_tools()}
+        web_search = tools["web_search"]
+
+        assert web_search.agent_tier == "exploitative"
+        assert "web_search" in resolve_allowed_tools(TOP_GENERAL, None)
+
     def test_get_context_tools_applies_role_and_mode_filters(self):
         reg = ToolRegistry()
         reg.register_tool(

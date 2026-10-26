@@ -545,13 +545,14 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
     ],
     "general": [
         (
-            "GENERAL / UNGROUNDED QUESTION",
-            "When the user wants an answer that cannot be grounded on platform "
-            "data or anything retrievable from the available tools, call "
-            "general_question_response. Before doing so, double-check it isn't "
-            "actually a methodology/process question (explain_workflow) or a "
-            "term definition (lookup_glossary) — those are grounded and should "
-            "be preferred whenever they apply.",
+            "GENERAL QUESTION / ONLINE FACTS",
+            "For a factual question that depends on current or externally "
+            "verifiable information, call web_search and base the answer on its "
+            "result, citing the returned source URLs. Use "
+            "general_question_response only for broad, creative, or opinion-based "
+            "answers that do not need external verification. Before either, "
+            "double-check the request is not better answered by platform data, "
+            "explain_workflow, or lookup_glossary.",
         ),
     ],
 }

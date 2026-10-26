@@ -116,6 +116,38 @@ def create_general_question_response_tool() -> ToolDefinition:
     )
 
 
+def create_web_search_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="web_search",
+        description=(
+            "Search the web for current, factual information related to tourism "
+            "management and answer using the retrieved sources."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Uses the configured LLM provider's native web-search capability. "
+            "Use this when a factual answer depends on recent or externally "
+            "verifiable information that is not available from platform data or "
+            "the knowledge documents. The result includes the provider's answer "
+            "and source URLs; cite those sources in the final response. This is "
+            "an exploitative-tier capability and requires the user's tier consent."
+        ),
+        parameters=[
+            ToolParameter(
+                name="query",
+                description="A concise web search query for the user's question.",
+                type="string",
+                required=True,
+            ),
+        ],
+        output_description="A web-grounded answer with source titles and URLs",
+        tags=["web", "search", "read-only", "exploitative-tier"],
+        agent_tier="exploitative",
+        allowed_modes=("standalone", "internal"),
+        allowed_roles=("admin", "multieditor", "editor"),
+    )
+
+
 def create_explain_workflow_tool() -> ToolDefinition:
     return ToolDefinition(
         name="explain_workflow",
@@ -180,5 +212,6 @@ __all__ = [
     "create_get_system_capabilities_tool",
     "create_lookup_glossary_tool",
     "create_general_question_response_tool",
+    "create_web_search_tool",
     "create_explain_workflow_tool",
 ]

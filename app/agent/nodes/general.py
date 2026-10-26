@@ -138,6 +138,15 @@ def generate_output_message_node(state: AgentState) -> Command:
 
     try:
         output_message = generate_answer(state)
+        sources = _current_turn_web_search_sources(state)
+        if sources:
+            output_message = (
+                f"{output_message}\n\nSources:\n"
+                + "\n".join(
+                    f"- [{source.get('title') or source['url']}]({source['url']})"
+                    for source in sources
+                )
+            )
     except Exception as e:
         logger.error(f"Error {e}")
         output_message = "System error"
@@ -157,6 +166,24 @@ def generate_output_message_node(state: AgentState) -> Command:
     state.cognitive.messages_to_include = []
 
     return Command(update=state, goto=END)
+
+
+def _current_turn_web_search_sources(state: AgentState) -> list[dict[str, str]]:
+    sources_by_url = {}
+    for result_key in state.cognitive.current_turn_result_keys():
+        if result_key.split("__", 1)[0] != "web_search":
+            continue
+        result = state.cognitive.tool_results.get(result_key, {})
+        if not result.get("success"):
+            continue
+        output = result.get("output") or {}
+        for source in output.get("sources", []):
+            url = source.get("url")
+            if url:
+                sources_by_url.setdefault(
+                    url, {"url": url, "title": source.get("title") or url}
+                )
+    return list(sources_by_url.values())
 
 
 def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[str]:
@@ -386,6 +413,24 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
                 if entry.get("examples"):
                     lines.append(f"  Examples: {'; '.join(entry['examples'])}")
             return ["\n".join(lines)]
+
+        case "web_search":
+            answer = output.get("answer", "")
+            sources = output.get("sources", [])
+            source_lines = [
+                f"- {source.get('title') or source['url']}: {source['url']}"
+                for source in sources
+                if source.get("url")
+            ]
+            if source_lines:
+                return [
+                    f"Web search findings: {answer}\nSources:\n"
+                    + "\n".join(source_lines)
+                ]
+            return [
+                f"Web search findings: {answer}\n"
+                "No source URLs were returned; do not present this as verified."
+            ]
 
         case _:
             # Never str(output) here: that dumps Python reprs of the full

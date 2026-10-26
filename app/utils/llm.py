@@ -1,6 +1,6 @@
 import os
 import logging
-import requests
+from typing import Any
 from time import sleep
 import anthropic
 import openai
@@ -197,6 +197,132 @@ def _call_primary_azure(
         state.user_id,
     )
     return result, model_name
+
+
+def _source(title: str | None, url: str | None) -> dict[str, str] | None:
+    if not url:
+        return None
+    source = {"url": url}
+    if title:
+        source["title"] = title
+    return source
+
+
+def _anthropic_web_search(query: str, state: AgentState) -> dict[str, Any]:
+    model_name = ANTHROPIC_MODELS["heavy"]
+    response = get_llm_client().messages.create(
+        model=model_name,
+        max_tokens=1200,
+        messages=[{"role": "user", "content": query}],
+        tools=[
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 5,
+            }
+        ],
+    )
+
+    answer_parts = []
+    sources = []
+    for block in response.content:
+        block_type = getattr(block, "type", "")
+        if block_type == "text":
+            text = getattr(block, "text", "").strip()
+            if text:
+                answer_parts.append(text)
+            for citation in getattr(block, "citations", None) or []:
+                source = _source(
+                    getattr(citation, "title", None),
+                    getattr(citation, "url", None),
+                )
+                if source:
+                    sources.append(source)
+        elif block_type == "web_search_tool_result":
+            for result in getattr(block, "content", None) or []:
+                source = _source(
+                    getattr(result, "title", None),
+                    getattr(result, "url", None),
+                )
+                if source:
+                    sources.append(source)
+
+    answer = "\n".join(answer_parts)
+    if not answer:
+        raise RequestHandlingException(
+            "The configured LLM provider returned no answer for the web search."
+        )
+
+    _log_costs(
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        model_name,
+        state.user_id,
+    )
+    state.cognitive.generation_pipeline.append(model_name)
+    return {"query": query, "answer": answer, "sources": _unique_sources(sources)}
+
+
+def _azure_web_search(query: str, state: AgentState) -> dict[str, Any]:
+    model_name = AZURE_MODELS["heavy"]
+    response = get_azure_client().responses.create(
+        model=model_name,
+        input=query,
+        tools=[{"type": "web_search_preview"}],
+        max_output_tokens=1200,
+    )
+
+    sources = []
+    for item in getattr(response, "output", None) or []:
+        if getattr(item, "type", None) != "message":
+            continue
+        for content in getattr(item, "content", None) or []:
+            for annotation in getattr(content, "annotations", None) or []:
+                if getattr(annotation, "type", None) == "url_citation":
+                    source = _source(
+                        getattr(annotation, "title", None),
+                        getattr(annotation, "url", None),
+                    )
+                    if source:
+                        sources.append(source)
+
+    answer = (getattr(response, "output_text", None) or "").strip()
+    if not answer:
+        raise RequestHandlingException(
+            "The configured LLM provider returned no answer for the web search."
+        )
+
+    usage = response.usage
+    _log_costs(
+        usage.input_tokens,
+        usage.output_tokens,
+        model_name,
+        state.user_id,
+    )
+    state.cognitive.generation_pipeline.append(model_name)
+    return {"query": query, "answer": answer, "sources": _unique_sources(sources)}
+
+
+def _unique_sources(sources: list[dict[str, str]]) -> list[dict[str, str]]:
+    unique = {}
+    for source in sources:
+        unique.setdefault(source["url"], source)
+    return list(unique.values())
+
+
+def native_web_search(state: AgentState, query: str) -> dict[str, Any]:
+    """Run a provider-native web search and return its answer and citations."""
+    query = query.strip()
+    if not query:
+        raise ValueError("Web search query cannot be empty")
+
+    if LLM_PROVIDER == "anthropic":
+        return _anthropic_web_search(query, state)
+    if LLM_PROVIDER == "azure":
+        return _azure_web_search(query, state)
+    raise RequestHandlingException(
+        f"Native web search is not supported for LLM_PROVIDER={LLM_PROVIDER!r}."
+    )
 
 
 # =========================
