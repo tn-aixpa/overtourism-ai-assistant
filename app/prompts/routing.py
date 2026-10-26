@@ -126,6 +126,18 @@ of an index for one or more named municipalities, or which/how many
 municipalities are above or below a given value — belong to index_query,
 even when they refer to what a map shows. For index_methodology, use top_level "indexes".
 
+In the LOCATION domain, "località", "destinazione", and "territorio"
+refer to the same territorial concept; understand them as synonyms, including
+when the user refers to one specific place. A request asking which localities,
+destinations, or territories are available (e.g. "che località ci sono?",
+"quali destinazioni sono disponibili?", "quali territori posso scegliere?")
+belongs to top_level "location", second_level "territory". Do not classify it
+as a request to list problems, proposals, or scenarios.
+When the user asks about the reference/base scenario or the current/as-is
+situation for a territory (e.g. "scenario di riferimento", "scenario base",
+"situazione attuale", "scenario as-is"), route to top_level "location",
+second_level "scenario".
+
 ============================================================
 CURRENT ROUTE FOR THIS SESSION
 ============================================================
@@ -178,6 +190,9 @@ Rules:
   exist* (location) are different domains that happen to share
   vocabulary; a request for real platform data is a topic change even
   when the noun stays the same.
+- A request about which territories/localities/destinations are available
+  is a LOCATION territory-catalog request, not a request about problems,
+  proposals, or scenarios. Use second_level "territory".
 - A request to retry / try again / redo / continue ("riprova", "ritenta",
   "try again", "ancora", "fallo di nuovo") is ALWAYS a continuation of the
   current route: set "topic_changed" to false and keep the current

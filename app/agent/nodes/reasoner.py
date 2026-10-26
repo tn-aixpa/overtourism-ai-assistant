@@ -181,13 +181,6 @@ def react_reasoner_node(state: AgentState) -> Command:
     role_unavailable_tool_names.sort()
     mode_unavailable_tool_names.sort()
 
-    if not tools_for_llm_enabled:
-        logger.warning("No tools available for this context")
-        state.cognitive.messages_to_include = [
-            "No tools are available in the current context."
-        ]
-        return Command(update=state, goto="generate_output_message")
-
     # Safety valve: never loop forever if the model keeps calling tools
     # without ever finishing.
     if len(state.cognitive.scratchpad) >= state.cognitive.max_react_steps:
@@ -242,8 +235,8 @@ def react_reasoner_node(state: AgentState) -> Command:
                 f"Reasoner selected unavailable tool '{tool_name}', finishing instead"
             )
             state.cognitive.messages_to_include = [
-                "The current request cannot be handled in the current context. "
-                "Please change context or use the standalone chat."
+                "I don't have enough information to answer that yet. "
+                "What specific information would you like to know?"
             ]
             return Command(update=state, goto="generate_output_message")
 

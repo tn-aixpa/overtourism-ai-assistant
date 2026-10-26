@@ -15,6 +15,7 @@ from app.utils.common import (
     truncate_for_prompt,
     _max_chars_for_tool,
 )
+from app.utils.territory import display_territory
 
 # Stable rendering order for domain guideline blocks when more than one
 # applies at once (only happens while a LOCATION second_level isn't
@@ -27,6 +28,7 @@ _BLOCK_ORDER = [
     "problem",
     "proposal",
     "scenario_analysis",
+    "territory",
     "general",
 ]
 
@@ -124,11 +126,22 @@ def react_step(
 
     # Long-term memory (results from earlier turns this session).
     prior_results_block = build_prior_results_block(state.cognitive.tool_results)
+    available_territories = (
+        ", ".join(display_territory(name) for name in state.allowed_territories)
+        if state.allowed_territories
+        else "none provided"
+    )
+    current_territory = (
+        display_territory(state.territory)
+        if state.territory
+        else "not selected yet"
+    )
     territory_line = (
-        f"Current territory: {state.territory or 'not selected yet'}. "
+        f"Current territory: {current_territory}. "
         "Every tool result below was obtained for THIS territory. If the user "
         "asks about a different territory, the data below does not answer it "
-        "(call the tool again after the territory is switched)."
+        "(call the tool again after the territory is switched).\n"
+        f"Available territories: {available_territories}."
     )
     # Working memory (this turn's own Thought/Action/Observation history).
     scratchpad_block = _format_scratchpad(state.cognitive.scratchpad)

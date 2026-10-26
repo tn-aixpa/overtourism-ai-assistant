@@ -35,17 +35,19 @@ UNIVERSAL_PRE: List[Block] = [
     (
         "TOOL AVAILABILITY",
         'If answering would require a tool listed under "Tools that exist but are '
-        'NOT available in this execution mode" below, finish immediately with a '
-        "message explaining the current context doesn't support that request. This "
+        'NOT available in this execution mode" below, do not attempt that action. '
+        "Explain the user-facing limitation briefly and offer a useful alternative; "
+        "never mention tools, execution modes, or that the current context has no "
+        "operative tools. This "
         "list is ONLY genuinely-absent tools (e.g. widget/chart tools outside "
         "standalone mode) — it does NOT include tools that simply belong to a "
         "different area of the platform than this conversation is currently routed "
         "to; those aren't listed here at all, because they're not what's actually "
         "wrong. If the user's request seems to need a tool you don't see anywhere "
         'in "Tools available" and it\'s NOT in the not-available list either, '
-        "that's a sign the conversation may need a different area entirely — say so "
-        "and ask, per the NOTHING ABOVE APPLIED guideline, rather than claiming a "
-        "mode restriction that isn't the real issue.",
+        "that's a sign the conversation may need a different area entirely — ask "
+        "what information the user needs rather than describing internal routing "
+        "or tool availability.",
     ),
 ]
 
@@ -251,6 +253,15 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
     ],
     "problem": [
         (
+            "LIST PROBLEMS",
+            "When the user asks for problems in a territory and the list has been "
+            "retrieved, report the problem names naturally as problems defined for "
+            "that territory (for one item, e.g. 'Per Fazzon è stato definito questo "
+            "problema: …'). Do not say 'Hai indicato il problema disponibile' or "
+            "imply that the user selected a problem when they only selected a "
+            "territory from a numbered territory menu.",
+        ),
+        (
             "DETAILS ABOUT AN EXISTING PROBLEM",
             "If the user refers to an existing problem — whether by an explicit id, "
             "by its literal name, or by a description that plausibly matches an "
@@ -330,6 +341,17 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
         ),
     ],
     "scenario_analysis": [
+        (
+            "REFERENCE / AS-IS / BASE SCENARIO",
+            "In the current territory, 'scenario di riferimento', 'scenario base', "
+            "'situazione attuale', 'scenario as-is' and 'situazione as-is' all refer "
+            "to the same designated base scenario. For any of these requests, call "
+            "get_base_scenario first, then use its returned ID to resolve that exact "
+            "scenario in the scenario list and retrieve its details. Do not treat "
+            "these phrases as separate scenarios or select a different scenario "
+            "because its name sounds more relevant. If the user asks about the "
+            "scenario's evaluation, follow the existing-scenario evaluation rules.",
+        ),
         (
             "DETAILS ABOUT AN EXISTING SCENARIO",
             "If the user refers to an existing scenario — whether by an explicit "
@@ -507,6 +529,18 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "edit/delete tool until that id is available. Once resolved, call the "
             "tool and OMIT the id field entirely from its arguments — it is "
             "auto-filled from the resolved context. Do not guess it.",
+        ),
+    ],
+    "territory": [
+        (
+            "AVAILABLE TERRITORIES",
+            "When the user asks which localities, destinations, or territories are "
+            "available, treat 'località', 'destinazione', and 'territorio' as "
+            "synonyms and answer directly from the Available territories in the "
+            "context. List those names only; do not ask which problem/proposal/"
+            "scenario area they mean, and do not claim the list is unavailable. "
+            "If the list is empty, ask which territory they mean instead of "
+            "inventing names.",
         ),
     ],
     "general": [

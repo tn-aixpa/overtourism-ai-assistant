@@ -38,7 +38,10 @@ TOP_GENERAL = "general"
 
 TOP_LEVEL_LABELS: Dict[str, str] = {
     TOP_SYSTEM_INFO: "General system information (what the platform can do, glossary/terminology, analysis workflow/methodology)",
-    TOP_LOCATION: "Problems, proposals, scenarios and analysis for a specific location (Molveno, Altipiano di Fazzon)",
+    TOP_LOCATION: (
+        "Problems, proposals, scenarios and analysis for a specific "
+        "locality/destination/territory (Molveno, Altipiano di Fazzon)"
+    ),
     TOP_INDEXES: "Territorial indexes/indicators for the whole region",
     TOP_GENERAL: "A general, on-topic question not covered by platform data or any other tool",
 }
@@ -60,12 +63,14 @@ SUB_PROBLEM = "problem"
 SUB_PROPOSAL = "proposal"
 SUB_SCENARIO = "scenario"
 SUB_ANALYSIS = "analysis"
+SUB_TERRITORY = "territory"
 
 LOCATION_SUBLEVEL_LABELS: Dict[str, str] = {
     SUB_PROBLEM: "Problems (list, create, edit, delete)",
     SUB_PROPOSAL: "Proposals (list, create, edit, delete)",
     SUB_SCENARIO: "Scenarios (list, preview/evaluate, save, edit, delete)",
     SUB_ANALYSIS: "Analysis, reports and comparison/summary widgets over existing data",
+    SUB_TERRITORY: "Available localities, destinations and territories",
 }
 
 # "scenario" and "analysis" are offered as two DISTINCT menu choices (the
@@ -81,12 +86,12 @@ LOCATION_SUBLEVEL_LABELS: Dict[str, str] = {
 # to pick, even though both describe the same underlying capability from
 # the user's point of view.
 #
-# The single list tool (list_available_entities) is part of EVERY sub-group,
-# not just "its own": resolving a name to an id routinely needs a different
-# entity's list than the sub-group's own — a new proposal needs the PROBLEM
-# list for its parent id, a saved scenario may link to a PROPOSAL — which
-# with the old per-entity list tools was impossible from inside the
-# proposal/scenario sub-groups.
+# The single list tool (list_available_entities) is part of every entity
+# sub-group, not just "its own": resolving a name to an id routinely needs a
+# different entity's list than the sub-group's own — a new proposal needs the
+# PROBLEM list for its parent id, a saved scenario may link to a PROPOSAL.
+# The territory-catalog sub-group needs no tools; its data comes from session
+# state.
 _ENTITY_LISTING_TOOLS: Set[str] = {"list_available_entities"}
 
 _SCENARIO_ANALYSIS_TOOLS: Set[str] = _ENTITY_LISTING_TOOLS | {
@@ -116,14 +121,15 @@ _LOCATION_SUBGROUPS: Dict[str, Set[str]] = {
     },
     SUB_SCENARIO: _SCENARIO_ANALYSIS_TOOLS,
     SUB_ANALYSIS: _SCENARIO_ANALYSIS_TOOLS,
+    SUB_TERRITORY: set(),
 }
 
 # summary_generation and report_generation are deliberately NOT part of any
 # route group above: they are excluded from the ReAct tool registry entirely
 # (enabled=False) and are only invoked via the separate /agent/tool pipeline.
 
-# Tools every LOCATION sub-group should keep access to regardless of which
-# one was picked: id/context resolution is a cross-cutting step used while
+# Tools every LOCATION entity sub-group should keep access to regardless of
+# which one was picked: id/context resolution is a cross-cutting step used while
 # working on a problem, proposal, *or* scenario (e.g. resolving a proposal's
 # parent problem id), so excluding it from, say, the "proposal" sub-group
 # would silently break normal argument resolution.
@@ -212,6 +218,7 @@ _LOCATION_SUBLEVEL_GUIDELINE_GROUPS: Dict[str, str] = {
     SUB_PROPOSAL: "proposal",
     SUB_SCENARIO: "scenario_analysis",
     SUB_ANALYSIS: "scenario_analysis",
+    SUB_TERRITORY: "territory",
 }
 
 
@@ -290,7 +297,9 @@ def resolve_allowed_tools(
         allowed: Set[str] = set()
         for key in valid_seconds:
             allowed |= subgroups[key]
-        if top_level == TOP_LOCATION:
+        if top_level == TOP_LOCATION and any(
+            key != SUB_TERRITORY for key in valid_seconds
+        ):
             allowed |= _LOCATION_SHARED_TOOLS
         return allowed
 

@@ -42,6 +42,10 @@ The identified elements and their relationships must be represented as a model o
 This activity should ideally be supervised or performed by a data analyst or other domain expert. One possible approach is to implement the model as a **Civic Digital Twin**, representing the relevant components of the locality, their relationships, constraints, and measurable behaviours.
 
 The model should describe the **As-is Scenario**, representing the current situation as accurately as possible using the available data.
+For a selected territory, the platform's designated **base scenario** represents
+this reference/current situation. In this context, *scenario di riferimento*,
+*scenario base*, *situazione attuale*, and *scenario/situazione as-is* all refer
+to that same base scenario, not to separate scenarios.
 
 Examples of relationships include:
 

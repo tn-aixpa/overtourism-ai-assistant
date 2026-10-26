@@ -15,6 +15,7 @@ from langgraph.types import Command
 
 from app.agent.nodes import reasoner as reasoner_module
 from app.agent.nodes import router as router_module
+from app.agent.nodes import route_groups
 from app.agent.state import AgentState, ReActStep
 from app.prompts.react_guidelines import GUIDELINE_BLOCKS
 from app.tools.definitions.analysis_widgets import create_analysis_widget_tool
@@ -65,6 +66,39 @@ def test_existing_scenario_questions_always_include_evaluation_and_plot():
     )
     assert "For a SINGLE existing scenario" in scenario_guidelines
     assert "widget_type='load_plot'" in scenario_guidelines
+
+
+def test_base_scenario_aliases_are_explicitly_equivalent():
+    scenario_guidelines = "\n".join(
+        body for _, body in GUIDELINE_BLOCKS["scenario_analysis"]
+    )
+
+    for phrase in (
+        "scenario di riferimento",
+        "scenario base",
+        "situazione attuale",
+        "scenario as-is",
+        "situazione as-is",
+    ):
+        assert phrase in scenario_guidelines
+    assert "get_base_scenario first" in scenario_guidelines
+
+
+def test_territory_catalog_has_a_direct_no_tool_route():
+    assert route_groups.SUB_TERRITORY in route_groups.sublevel_options(
+        route_groups.TOP_LOCATION
+    )
+    assert route_groups.resolve_allowed_tools(
+        route_groups.TOP_LOCATION, route_groups.SUB_TERRITORY
+    ) == set()
+    assert route_groups.guideline_groups(
+        route_groups.TOP_LOCATION, route_groups.SUB_TERRITORY
+    ) == {"territory"}
+    territory_guidelines = "\n".join(
+        body for _, body in GUIDELINE_BLOCKS["territory"]
+    )
+    for phrase in ("località", "destinazioni", "territori"):
+        assert phrase in territory_guidelines
 
 
 # ---------------------------------------------------------------------------
@@ -423,15 +457,20 @@ class TestReactReasonerToolSelection:
 
         assert result.goto == "generate_output_message"
 
-    def test_no_tools_available_at_all_finishes_immediately(
+    def test_no_tools_available_still_allows_answer_from_context(
         self, fresh_state: AgentState
     ):
-        # Registry has zero tools registered at all (not just zero enabled).
-        result = reasoner_module.react_reasoner_node(fresh_state)
+        # Registry has zero tools registered at all (not just zero enabled),
+        # but the model can still answer from session context.
+        raw = react_step_response(action="finish", message="Le località sono Fazzon.")
+        with patch.object(reasoner_module, "react_step", return_value=raw) as mock_step:
+            result = reasoner_module.react_reasoner_node(fresh_state)
+
         assert result.goto == "generate_output_message"
         assert fresh_state.cognitive.messages_to_include == [
-            "No tools are available in the current context."
+            "Le località sono Fazzon."
         ]
+        mock_step.assert_called_once()
 
     def test_max_react_steps_forces_finish_without_calling_llm(
         self, fresh_state: AgentState

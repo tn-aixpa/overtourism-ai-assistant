@@ -16,6 +16,11 @@ def _norm(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", (text or "").strip().lower()).strip()
 
 
+def display_territory(territory: str) -> str:
+    """Capitalize the first character for user-facing territory names."""
+    return territory[:1].upper() + territory[1:]
+
+
 def is_valid_territory(state: AgentState, territory: Optional[str]) -> bool:
     return bool(territory) and territory in state.allowed_territories
 
@@ -73,7 +78,10 @@ def resolve_territory_if_trivial(state: AgentState) -> bool:
 
 
 def territory_question(allowed: List[str]) -> str:
-    options = "\n".join(f"{i}. {t}" for i, t in enumerate(allowed, start=1))
+    options = "\n".join(
+        f"{i}. {display_territory(territory)}"
+        for i, territory in enumerate(allowed, start=1)
+    )
     return (
         "Which territory do you want to work on? Available territories:\n"
         f"{options}\n\nYou can reply with the name or the number."
