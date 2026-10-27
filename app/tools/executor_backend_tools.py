@@ -376,7 +376,6 @@ def get_evaluation_data(current_context, territory):
     Returns a dict keyed the same way as get_data_from_context's "retrieved"
     entries (e.g. "scenarios <id>") so the two can be merged easily.
     """
-    # TODO: split data according to need (fe action, useful info), here or in tool_executor
     evaluations = {}
     scenario_ids = current_context.get("scenarios", [])
     if not scenario_ids:
@@ -432,7 +431,6 @@ def create_new_problem(
         body["extras"]["objective"] = objective
     if additional_data:
         body["extras"]["additional_data"] = additional_data
-    # TODO: add other fields
 
     return post_data(url, json=body)
 
@@ -469,7 +467,6 @@ def create_new_proposal(
         body["extras"]["context"] = context
     if impact:
         body["extras"]["impact"] = impact
-    # TODO: add other fields
 
     return post_data(url, json=body)
 
@@ -503,7 +500,6 @@ def edit_problem(
         extras["objective"] = objective
     if additional_data:
         extras["additional_data"] = additional_data
-    # TODO: add other fields
 
     body = {
         "version": existing.get("version", 0),
@@ -549,7 +545,6 @@ def edit_proposal(
         extras["context"] = context
     if impact:
         extras["impact"] = impact
-    # TODO: add other fields
 
     body = {
         "version": existing.get("version", 0),

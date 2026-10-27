@@ -330,10 +330,6 @@ def enforce_prompt_budget(prompt: str, max_chars: int = MAX_PROMPT_CHARS) -> str
         "prompt so this doesn't need to trigger."
     )
 
-    # TODO remove
-    with open("logs/too_long_debug.txt", "w+") as fout:
-        fout.write(prompt)
-
     head_chars = max_chars // 2
     tail_chars = max_chars - head_chars
     omitted = len(prompt) - max_chars

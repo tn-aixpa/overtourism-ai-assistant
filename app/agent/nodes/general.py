@@ -32,7 +32,6 @@ def safe(node_fn, node_name):
             raise gi
 
         except (RequestHandlingException, GraphError, Exception) as e:
-            # Custom behaviour: no errors.txt logging, just surface to user
             logger.warning(f"Request handling error in node {node_name}: {e}")
             state.cognitive.error_details = f"Error in {node_name}: {e}"
             return Command(update=state, goto="error", graph=Command.PARENT)
@@ -53,9 +52,6 @@ def error_recovery_node(state: AgentState) -> Command:
         # etc.) stays in the logs for debugging — it must never be the
         # thing shown to the user.
         logger.error(state.cognitive.error_details)
-
-        with open("logs/errors.txt", "a+") as f:
-            f.write(f"{state.cognitive.error_details}\n")
 
     # This is an English "seed" for generate_answer, not user-facing text —
     # it goes through the normal messages_to_include -> generate_answer path
@@ -140,12 +136,9 @@ def generate_output_message_node(state: AgentState) -> Command:
         output_message = generate_answer(state)
         sources = _current_turn_web_search_sources(state)
         if sources:
-            output_message = (
-                f"{output_message}\n\nSources:\n"
-                + "\n".join(
-                    f"- [{source.get('title') or source['url']}]({source['url']})"
-                    for source in sources
-                )
+            output_message = f"{output_message}\n\nSources:\n" + "\n".join(
+                f"- [{source.get('title') or source['url']}]({source['url']})"
+                for source in sources
             )
     except Exception as e:
         logger.error(f"Error {e}")
@@ -201,8 +194,6 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
         output = {}
 
     match tool_name:
-
-        # TODO: check if I need to insert also other tools. Some don't actually have output are meant to be in-betweens
 
         case "get_system_capabilities":
             return [output.get("system_description", "System description unavailable.")]

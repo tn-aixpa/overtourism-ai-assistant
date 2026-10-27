@@ -42,8 +42,6 @@ PROBLEM_LINKS_PARAM = ToolParameter(
     required=False,
 )
 
-# TODO: add groups, extra?
-
 PROBLEM_PARAMETERS = [
     PROBLEM_NAME_PARAM,
     PROBLEM_DESCRIPTION_PARAM,
@@ -96,8 +94,6 @@ PROPOSAL_IMPACT_PARAM = ToolParameter(
     required=False,
 )
 
-# TODO: add status  (draft / submitted / accepted / rejected), extra?, related_scenario_ids
-
 PROPOSAL_PARAMETERS = [
     PROPOSAL_NAME_PARAM,
     PROPOSAL_PROBLEM_ID_PARAM,
@@ -146,14 +142,14 @@ SCENARIO_VALUES_PARAM = ToolParameter(
         "returned by get_configuration_parameters) to the new value. Include only "
         "what the user wants to change. The value depends on the parameter's kind:\n"
         "- scalar: a number, e.g. 15\n"
-        "- categorical: one of its allowed values as text, e.g. \"rainy\"; null removes "
+        '- categorical: one of its allowed values as text, e.g. "rainy"; null removes '
         "the filter (all)\n"
         "- distribution: a [low, high] range, e.g. [400, 500]; a single number means "
         "the new central value of the range (its width is kept)\n"
         "For relative changes do NOT compute the result yourself; pass an operation "
         "instead: {\"multiply\": 2} for 'double', {\"percent\": 20} for '+20%' "
         "(negative to reduce), {\"add\": 300} for '300 more'. These work on scalars "
-        "and on both ends of a range. For a range, {\"low\": 400} or {\"high\": 500} "
+        'and on both ends of a range. For a range, {"low": 400} or {"high": 500} '
         "changes just one end. "
         'Example: {"parking price (euro per vehicle)": 15, "weather": "rainy", '
         '"parking capacity (simultaneous cars)": {"multiply": 1.2}}.'
