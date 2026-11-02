@@ -535,8 +535,8 @@ class AgentState:
         # writing filepath directly: a plain open(filepath, "w") is
         # truncate-then-write, so any interruption mid-write (process
         # killed, disk full) — or, previously, two overlapping saves for
-        # the same session_id racing on this same path (see _IN_FLIGHT in
-        # app.agent.memory) — could leave a half-written/corrupt JSON file
+        # the same session_id racing on this same path (now prevented by
+        # TurnStore.start_turn in app.agent.events) — could leave a half-written/corrupt JSON file
         # on disk. os.replace is atomic on POSIX and Windows: readers only
         # ever see the fully-old or fully-new content, never a partial write.
         tmp_path = f"{filepath}.tmp-{os.getpid()}-{id(self)}"

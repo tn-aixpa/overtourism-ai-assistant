@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -8,6 +9,9 @@ from app.agent.nodes.utils import MAX_STORED_TOOL_RESULTS
 from app.agent.state import AgentState, AgentTier, ReActStep
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
+
+
+_KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "knowledge"
 
 
 def register_tool(name, params=None):
@@ -395,33 +399,152 @@ class TestTrimToolResults:
 # ---------------------------------------------------------------------------
 
 
+SAMPLE_GLOSSARY = [
+    {
+        "term": "proposal",
+        "definition": "A set of actions proposed to address a problem.",
+        "aliases": ["strategy", "intervention"],
+        "related_terms": ["problem", "scenario"],
+        "examples": ["Build a new tram line"],
+        "it": ["proposta", "strategia"],
+    },
+    {
+        "term": "scenario",
+        "definition": "A simulated future built from proposals.",
+        "aliases": [],
+        "related_terms": ["proposal"],
+        "examples": [],
+        "it": ["scenario"],
+    },
+    {
+        "term": "digital twin",
+        "definition": "A virtual model of the territory.",
+        "aliases": [],
+        "related_terms": [],
+        "examples": [],
+        "it": ["gemello digitale"],
+    },
+    {
+        "term": "problem",
+        "definition": "A critical situation on a territory.",
+        "aliases": ["criticality"],
+        "related_terms": [],
+        "examples": [],
+        "it": ["problema", "criticità"],
+    },
+]
+
+
+@pytest.fixture
+def glossary(monkeypatch):
+    """execute_lookup_glossary imports GLOSSARY at call time, so patching the
+    module attribute is enough. Keeps these tests independent of the
+    knowledge/ bundle (which is parsed from markdown files at import)."""
+    monkeypatch.setattr("app.utils.knowledge.GLOSSARY", SAMPLE_GLOSSARY)
+    return SAMPLE_GLOSSARY
+
+
+def _terms(result):
+    return {m["term"] for m in result["matches"]}
+
+
 class TestExecuteLookupGlossary:
     def test_empty_query_returns_failure(self, fresh_state: AgentState):
         result = te.execute_lookup_glossary(fresh_state, query="   ")
         assert result["success"] is False
         assert result["matches"] == []
 
-    def test_matches_by_term_name(self, fresh_state: AgentState):
+    def test_matches_by_term_name(self, fresh_state: AgentState, glossary):
         result = te.execute_lookup_glossary(fresh_state, query="proposal")
         assert result["success"] is True
-        terms = {m["term"] for m in result["matches"]}
-        assert "proposal" in terms
+        assert "proposal" in _terms(result)
 
-    def test_matches_by_alias(self, fresh_state: AgentState):
+    def test_matches_by_alias(self, fresh_state: AgentState, glossary):
         result = te.execute_lookup_glossary(fresh_state, query="strategy")
-        terms = {m["term"] for m in result["matches"]}
-        assert "proposal" in terms  # "strategy" is an alias of "proposal"
+        assert "proposal" in _terms(result)  # "strategy" is an alias of "proposal"
 
-    def test_no_match_returns_helpful_message(self, fresh_state: AgentState):
+    def test_matches_by_italian_translation(self, fresh_state: AgentState, glossary):
+        result = te.execute_lookup_glossary(fresh_state, query="criticità")
+        assert _terms(result) == {"problem"}
+
+    def test_matches_by_related_term(self, fresh_state: AgentState, glossary):
+        # "problem" is only a related_term of "proposal" (and the term of itself)
+        result = te.execute_lookup_glossary(fresh_state, query="problem")
+        assert _terms(result) == {"problem", "proposal"}
+
+    def test_is_case_insensitive(self, fresh_state: AgentState, glossary):
+        result = te.execute_lookup_glossary(fresh_state, query="STRATEGY")
+        assert "proposal" in _terms(result)
+
+    def test_no_match_returns_helpful_message(self, fresh_state: AgentState, glossary):
         result = te.execute_lookup_glossary(fresh_state, query="xyzzy_nonexistent")
         assert result["success"] is True
         assert result["matches"] == []
         assert "No glossary entries found" in result["message"]
 
-    def test_multi_token_query_matches_any_token(self, fresh_state: AgentState):
+    def test_multi_token_query_matches_any_token(self, fresh_state: AgentState, glossary):
         result = te.execute_lookup_glossary(fresh_state, query="unrelatedword scenario")
-        terms = {m["term"] for m in result["matches"]}
-        assert "scenario" in terms
+        assert "scenario" in _terms(result)
+
+    def test_stopwords_are_ignored_so_they_cannot_match_inside_other_words(
+        self, fresh_state: AgentState, glossary
+    ):
+        # "di" is a substring of "digital twin": without the stopword filter the
+        # query below would (wrongly) return that entry.
+        result = te.execute_lookup_glossary(fresh_state, query="di xyzzy_nonexistent")
+        assert result["matches"] == []
+
+    def test_query_made_only_of_stopwords_falls_back_to_the_raw_tokens(
+        self, fresh_state: AgentState, glossary
+    ):
+        result = te.execute_lookup_glossary(fresh_state, query="di")
+        assert result["success"] is True
+        assert "digital twin" in _terms(result)
+
+    def test_stopword_filtering_keeps_the_real_search_term(
+        self, fresh_state: AgentState, glossary
+    ):
+        result = te.execute_lookup_glossary(fresh_state, query="what is a scenario")
+        assert _terms(result) == {"scenario", "proposal"}  # proposal lists it as related
+
+    def test_italian_plural_tolerance_for_long_tokens(self, fresh_state: AgentState, glossary):
+        # "problemi" (plural) vs "problema": shares the first 5 letters, len >= 5
+        result = te.execute_lookup_glossary(fresh_state, query="problemi")
+        assert "problem" in _terms(result)
+
+    def test_short_tokens_do_not_get_fuzzy_matching(self, fresh_state: AgentState, glossary):
+        # "prop" is < 5 chars: only a plain substring match is allowed
+        assert te.execute_lookup_glossary(fresh_state, query="propx")["matches"] == []
+
+    def test_result_entries_have_the_documented_shape(self, fresh_state: AgentState, glossary):
+        result = te.execute_lookup_glossary(fresh_state, query="proposal")
+        entry = next(m for m in result["matches"] if m["term"] == "proposal")
+        assert set(entry) == {"term", "definition", "aliases", "related_terms", "examples", "it"}
+        assert entry["definition"].startswith("A set of actions")
+        assert entry["aliases"] == ["strategy", "intervention"]
+        assert result["query"] == "proposal"
+
+    def test_each_term_is_returned_once_even_if_several_tokens_match(
+        self, fresh_state: AgentState, glossary
+    ):
+        result = te.execute_lookup_glossary(fresh_state, query="proposal strategy proposta")
+        terms = [m["term"] for m in result["matches"]]
+        assert len(terms) == len(set(terms))
+
+    def test_empty_glossary_finds_nothing(self, fresh_state: AgentState, monkeypatch):
+        monkeypatch.setattr("app.utils.knowledge.GLOSSARY", [])
+        result = te.execute_lookup_glossary(fresh_state, query="proposal")
+        assert result["matches"] == []
+
+    @pytest.mark.skipif(
+        not (_KNOWLEDGE_DIR / "glossary").exists(),
+        reason="knowledge/glossary bundle is not part of this checkout",
+    )
+    def test_real_glossary_bundle_resolves_core_platform_terms(self, fresh_state: AgentState):
+        result = te.execute_lookup_glossary(fresh_state, query="proposal")
+        assert "proposal" in _terms(result)
+        result = te.execute_lookup_glossary(fresh_state, query="scenario")
+        assert "scenario" in _terms(result)
 
 
 # ---------------------------------------------------------------------------

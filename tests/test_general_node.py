@@ -1,5 +1,4 @@
 import json
-import os
 from unittest.mock import patch
 
 import pytest
@@ -209,31 +208,28 @@ class TestSafeWrapper:
 
 
 class TestErrorRecoveryNode:
-    def test_writes_error_details_to_log_file(self, fresh_state: AgentState, tmp_path):
+    def test_logs_error_details_and_sets_generic_recovery_message(
+        self, fresh_state: AgentState, caplog
+    ):
         fresh_state.cognitive.error_details = "something bad happened"
 
-        cwd = os.getcwd()
-        os.chdir(tmp_path)
-        try:
-            os.makedirs("logs", exist_ok=True)
-            result = gn.error_recovery_node(fresh_state)
-            with open("logs/errors.txt") as f:
-                content = f.read()
-        finally:
-            os.chdir(cwd)
+        result = gn.error_recovery_node(fresh_state)
 
-        assert "something bad happened" in content
+        assert "something bad happened" in caplog.text
+        assert fresh_state.cognitive.messages_to_include == [
+            "A technical error occurred and the request could not be completed."
+        ]
         assert result.goto == "generate_output_message"
 
-    def test_no_error_details_skips_log_write(self, fresh_state: AgentState, tmp_path):
+    def test_no_error_details_does_not_log_error(
+        self, fresh_state: AgentState, caplog
+    ):
         fresh_state.cognitive.error_details = ""
-        cwd = os.getcwd()
-        os.chdir(tmp_path)
-        try:
-            gn.error_recovery_node(fresh_state)
-            assert not os.path.exists("logs/errors.txt")
-        finally:
-            os.chdir(cwd)
+
+        result = gn.error_recovery_node(fresh_state)
+
+        assert not caplog.records
+        assert result.goto == "generate_output_message"
 
 
 # ---------------------------------------------------------------------------

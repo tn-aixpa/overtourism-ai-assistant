@@ -4,12 +4,13 @@
 Timeline of one turn, and which test measures which hop:
 
     answer generated            (ScriptedAgent.invoke returns)           t0
-      |  AgentState(**dict), save_state() -> dump_to_file()  <-- A: synchronous JSON dump
-    publish_done()              (result stored, "__done__" queued)        t1
-      |  SSE generator polls the queue every 0.25 s          <-- B: up to 250 ms
+      |  AgentState(**dict), store.finish(before_commit=remember_state)
+    turn is terminal            (result stored, session released)         t1
+      |  persist_state() -> dump_to_file() runs AFTER finish <-- A: slow JSON dump
+      |  SSE generator polls the event list every 0.25 s     <-- B: up to 250 ms
       |  event loop must be free to run the generator        <-- C: sync `requests` calls
     client receives `done`                                                t2
-      |  GET /agent/result -> check_authorization() -> sync auth/me call  <-- D
+      |  GET /agent/turns/{id} -> token cache / auth/me       <-- D
     client has the answer                                                 t3
 
 A  test_done_is_not_delayed_by_state_persistence
@@ -31,7 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 
 import sse_harness as h
-from sse_harness import AUTH, action, call, run_turn, sleep, thought
+from sse_harness import AUTH, action, auth_for, call, run_turn, sleep
 from app.agent import events, memory
 from app.agent.state import AgentState
 
@@ -50,7 +51,7 @@ def _turn_just_finished(state: AgentState) -> bool:
 class TestBaseline:
     def test_answer_to_done_latency_is_small_when_nothing_is_slow(self, live):
         marks = _record_answer_ready(live)
-        live.agent.script_for = lambda sid, m: [thought("x")]
+        live.agent.script_for = lambda sid, m: [action("x")]
         lat = []
         for i in range(15):
             rec = run_turn(live.base, f"s{i}", "hi")
@@ -60,7 +61,7 @@ class TestBaseline:
         assert max(lat) < 0.8
 
     def test_done_to_answer_in_hand_is_small_when_auth_is_fast(self, live):
-        live.agent.script_for = lambda sid, m: [thought("x")]
+        live.agent.script_for = lambda sid, m: [action("x")]
         lat = []
         for i in range(10):
             rec = run_turn(live.base, f"s{i}", "hi")
@@ -68,30 +69,37 @@ class TestBaseline:
         print(f"\ndone->result: median={statistics.median(lat)*1000:.0f}ms max={max(lat)*1000:.0f}ms")
         assert max(lat) < 0.5
 
-    def test_each_event_reaches_the_client_quickly_with_many_streams_open(self, live, monkeypatch):
+    def test_each_event_reaches_the_client_quickly_with_many_streams_open(self, live):
         """p95 publish->client lag for 40 simultaneous streams."""
         published: dict[str, float] = {}
-        real_publish = events.publish
+        real_append = live.store.append_event
 
-        def spy(session_id, event):
-            published[f"{session_id}|{event}"] = time.monotonic()
-            real_publish(session_id, event)
+        def spy(turn_id, payload):
+            published[payload] = time.monotonic()
+            return real_append(turn_id, payload)
 
-        monkeypatch.setattr(events, "publish", spy)
+        live.store.append_event = spy
         live.agent.script_for = lambda sid, m: [
-            thought(f"{sid}-{i}", delay=0.05) for i in range(10)
+            action(f"{sid}-{i}", delay=0.05) for i in range(10)
         ]
 
         with ThreadPoolExecutor(40) as ex:
-            recs = list(ex.map(lambda i: run_turn(live.base, f"s{i}", "m", fetch_result=False), range(40)))
+            recs = list(
+                ex.map(
+                    lambda i: run_turn(live.base, f"s{i}", "m", fetch_result=False), range(40)
+                )
+            )
         lags = []
         for rec in recs:
             for t, name, data in rec.sse_events:
-                if name == "status" and f"{rec.session}|{data}" in published:
-                    lags.append(t - published[f"{rec.session}|{data}"])
+                if name == "status" and data in published:
+                    lags.append(t - published[data])
         lags.sort()
         p95 = lags[int(len(lags) * 0.95)]
-        print(f"\nevent lag over {len(lags)} events: p50={statistics.median(lags)*1000:.0f}ms p95={p95*1000:.0f}ms max={lags[-1]*1000:.0f}ms")
+        print(
+            f"\nevent lag over {len(lags)} events: p50={statistics.median(lags)*1000:.0f}ms "
+            f"p95={p95*1000:.0f}ms max={lags[-1]*1000:.0f}ms"
+        )
         assert len(lags) == 400
         assert p95 < 0.6
 
@@ -107,7 +115,7 @@ class TestAnswerReadyToDone:
             return orig(self, path)
 
         monkeypatch.setattr(AgentState, "dump_to_file", slow_dump)
-        live.agent.script_for = lambda sid, m: [thought("x")]
+        live.agent.script_for = lambda sid, m: [action("x")]
         rec = run_turn(live.base, "s1", "hi")
         lat = rec.t_done - marks["s1"]
         print(f"\nanswer->done with 1.0s state dump: {lat:.2f}s")
@@ -116,7 +124,7 @@ class TestAnswerReadyToDone:
     def test_state_is_visible_to_next_turn_by_the_time_done_is_seen(self, live):
         """Safety net for the fix above: whatever order you persist in, the NEXT
         /agent call (which load_state()s) must already see this turn's answer."""
-        live.agent.script_for = lambda sid, m: [thought("x")]
+        live.agent.script_for = lambda sid, m: [action("x")]
         for i in range(10):
             rec = run_turn(live.base, "s1", f"m{i}", fetch_result=False)
             assert rec.got_done
@@ -131,7 +139,7 @@ class TestEventLoopBlocking:
         """Turn `victim` emits an event every 100 ms for ~2 s. Meanwhile three
         other clients run `aggressor`. Returns (victim_record, max_gap_between_events)."""
         marks = _record_answer_ready(live)
-        live.agent.script_for = lambda sid, m: [thought(f"t{i}", delay=0.1) for i in range(20)]
+        live.agent.script_for = lambda sid, m: [action(f"t{i}", delay=0.1) for i in range(20)]
         out = {}
         victim = threading.Thread(
             target=lambda: out.setdefault("rec", run_turn(live.base, "victim", "m"))
@@ -149,9 +157,14 @@ class TestEventLoopBlocking:
 
     def test_event_loop_is_not_blocked_by_slow_backend_calls(self, live):
         def aggressor(i):
+            # a NEW token every call: the 30 s token cache would otherwise turn
+            # all but the first into instant hits and nothing would be slow
             with httpx.Client(base_url=live.base, timeout=30) as c:
-                for _ in range(3):
-                    c.get("/agent/result/does-not-exist", headers=AUTH)
+                for k in range(3):
+                    c.get(
+                        "/agent/turns/does-not-exist",
+                        headers=auth_for(f"agg-{i}-{k}"),
+                    )
 
         # the victim's own POST + stream-open are fast; the backend only becomes
         # slow once its stream is running
@@ -160,7 +173,7 @@ class TestEventLoopBlocking:
         print(f"\nvictim: largest gap between events={gap:.2f}s (script: 0.10s); answer->done={lat:.2f}s")
         assert gap < 0.6, f"victim stream froze for {gap:.2f}s while others made auth calls"
 
-    def test_event_loop_is_not_blocked_by_saving_state_on_post(self, live, monkeypatch):
+    def test_event_loop_is_not_blocked_by_saving_state_on_init(self, live, monkeypatch):
         orig = AgentState.dump_to_file
 
         def slow_dump(self, path):
@@ -169,24 +182,28 @@ class TestEventLoopBlocking:
             return orig(self, path)
 
         def aggressor(i):
+            # /agent/init saves a brand-new state (-> slow dump_to_file)
             with httpx.Client(base_url=live.base, timeout=30) as c:
-                c.post("/agent", data={"message": "x", "session_id": f"other{i}"}, headers=AUTH)
+                assert c.post("/agent/init", headers=AUTH).status_code == 201
 
         # victim's own POST must not be slowed: install the slow dump after it started
         threading.Timer(0.45, lambda: monkeypatch.setattr(AgentState, "dump_to_file", slow_dump)).start()
         rec, gap, lat = self._run_victim_and_aggressors(live, aggressor)
         print(f"\nvictim: largest gap between events={gap:.2f}s (script: 0.10s)")
-        assert gap < 0.6, f"victim stream froze for {gap:.2f}s while others posted messages"
+        assert gap < 0.6, f"victim stream froze for {gap:.2f}s while others created sessions"
 
 
 class TestDoneToAnswerInHand:
     def test_result_fetch_does_not_wait_for_a_backend_auth_roundtrip(self, live):
+        """The token was validated when the turn started; the 30 s cache must
+        make the final GET /agent/turns/{id} independent of a now-slow backend."""
         live.agent.script_for = lambda sid, m: [
             call(lambda: setattr(live, "auth_delay", 0.8)),  # backend gets slow mid-turn
-            thought("x"),
+            action("x"),
         ]
         rec = run_turn(live.base, "s1", "hi")
         lat = rec.t_result - rec.t_done
         print(f"\ndone->result with a 0.8s auth backend: {lat:.2f}s")
         assert rec.result_status == 200
+        assert rec.done_payload == {"status": "done"}
         assert lat < 0.4, f"answer arrived {lat:.2f}s after `done`"

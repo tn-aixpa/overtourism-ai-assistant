@@ -7,9 +7,10 @@ Only the two external dependencies are scripted:
   * the LLM  -> `react_step` (the reasoning call) and `generate_answer`
   * the tools -> `execute_selected_tool`
 
-So the thoughts / actions that reach the stream are published by your actual
-node code, and every branch that leaves the reasoner (tool, finish, hallucinated
-tool, malformed JSON, LLM exception, tool failure, max-steps, answer-generation
+So the actions that reach the stream are published by your actual node code
+(thoughts are deliberately NOT streamed any more: publish_thought is a no-op),
+and every branch that leaves the reasoner (tool, finish, hallucinated tool,
+malformed JSON, LLM exception, tool failure, max-steps, answer-generation
 failure) must still end with a `done` event and a retrievable result.
 
 (initialize_tools / top_level_router are skipped: they need the backend and an
@@ -134,7 +135,8 @@ def real(live, monkeypatch):
 
 
 def kinds(rec):
-    return [(s["type"], s.get("tool") or s.get("content")) for s in rec.statuses]
+    """(type, tool) of every streamed event - only `action` events exist."""
+    return [(s["type"], s["tool"]) for s in rec.statuses]
 
 
 # --------------------------------------------------------------------------- #
@@ -145,10 +147,11 @@ class TestReasonerExits:
         real.real.llm["s"].extend([finish("hello", thought="easy one")])
         rec = h.run_turn(real.base, "s", "hi")
         assert rec.got_done and rec.error is None
-        assert kinds(rec) == [("thought", "easy one")]
+        assert kinds(rec) == [], "a thought is never streamed"
+        assert rec.done_payload == {"status": "done"}
         assert rec.result["response"].startswith("final(tools=0)")
 
-    def test_three_tool_loop_publishes_thought_action_pairs_in_order(self, real):
+    def test_three_tool_loop_publishes_actions_in_order(self, real):
         real.real.llm["s"].extend(
             [
                 use_tool("tool_a", thought="t1"),
@@ -159,17 +162,23 @@ class TestReasonerExits:
         )
         rec = h.run_turn(real.base, "s", "go")
         assert kinds(rec) == [
-            ("thought", "t1"),
             ("action", "tool_a"),
-            ("thought", "t2"),
             ("action", "tool_b"),
-            ("thought", "t3"),
             ("action", "tool_c"),
-            ("thought", "t4"),
         ]
         assert rec.result["response"].startswith("final(tools=3)")
 
-    def test_empty_thought_publishes_no_thought_event_but_turn_completes(self, real):
+    def test_reasoning_text_never_reaches_the_stream(self, real):
+        real.real.llm["s"].extend(
+            [use_tool("tool_a", thought="TOP-SECRET-PLAN"), finish(thought="MORE-SECRET")]
+        )
+        rec = h.run_turn(real.base, "s", "go")
+        raw = "".join(d for _, _, d in rec.sse_events)
+        assert "SECRET" not in raw
+        assert kinds(rec) == [("action", "tool_a")]
+        assert rec.got_done and rec.result
+
+    def test_empty_thought_does_not_break_the_turn(self, real):
         real.real.llm["s"].extend([use_tool("tool_a", thought=""), finish(thought="")])
         rec = h.run_turn(real.base, "s", "go")
         assert kinds(rec) == [("action", "tool_a")]
@@ -178,7 +187,7 @@ class TestReasonerExits:
     def test_hallucinated_tool_finishes_cleanly(self, real):
         real.real.llm["s"].extend([use_tool("does_not_exist", thought="try it")])
         rec = h.run_turn(real.base, "s", "go")
-        assert kinds(rec) == [("thought", "try it")]  # no action: tool was refused
+        assert kinds(rec) == []  # no action: the unknown tool was refused
         assert rec.got_done and rec.result["response"].startswith("final(")
 
     @pytest.mark.parametrize(
@@ -226,7 +235,7 @@ class TestReasonerExits:
             [use_tool("tool_a", thought="t1"), RuntimeError("boom on 2nd step")]
         )
         rec = h.run_turn(real.base, "s", "go")
-        assert kinds(rec)[:2] == [("thought", "t1"), ("action", "tool_a")]
+        assert kinds(rec) == [("action", "tool_a")]
         assert rec.got_done and rec.result is not None
 
     def test_tool_failure_routes_to_error_and_completes(self, real):
@@ -235,6 +244,7 @@ class TestReasonerExits:
         rec = h.run_turn(real.base, "s", "go")
         assert ("action", "tool_b") in kinds(rec)
         assert rec.got_done and rec.result is not None
+        assert rec.done_payload["status"] in ("done", "failed")
 
     def test_answer_generation_failure_still_sends_done(self, real):
         real.real.llm["s"].extend([finish()])
@@ -251,28 +261,6 @@ class TestReasonerExits:
         assert len(actions) == limit
         assert rec.got_done and rec.result is not None
         assert real.real.llm_calls["s"] == limit  # no extra LLM call past the limit
-
-    def test_error_recovery_node_failing_does_not_hang(self, real, monkeypatch):
-        """`safe()` routes any node failure to "error". If error_recovery_node
-        itself fails (e.g. logs/errors.txt not writable), safe() sends it back
-        to "error" again - a loop that only the LangGraph recursion limit (and
-        ultimately the watchdog) stops. The client must still get `done`."""
-        import builtins
-
-        real_open = builtins.open
-
-        def failing_open(path, *a, **kw):
-            if str(path).endswith("errors.txt"):
-                raise PermissionError("read-only fs")
-            return real_open(path, *a, **kw)
-
-        monkeypatch.setattr(builtins, "open", failing_open)
-        real.real.llm["s"].extend(["garbage"])
-        t0 = time.monotonic()
-        rec = h.run_turn(real.base, "s", "go", read_timeout=30)
-        assert rec.got_done, rec.error
-        assert time.monotonic() - t0 < 20
-
 
 # --------------------------------------------------------------------------- #
 # Many calls, different reasoning shapes, at the same time
@@ -351,13 +339,8 @@ class TestRealGraphUnderLoad:
             got_tools = [t for ty, t in kinds(rec) if ty == "action"]
             if got_tools != tools:
                 problems.append(f"{rec.session}[{shape}] tools {got_tools} != {tools}")
-            foreign = [
-                c
-                for ty, c in kinds(rec)
-                if ty == "thought" and not str(c).startswith(rec.session + "-")
-            ]
-            if foreign:
-                problems.append(f"{rec.session}[{shape}] foreign events {foreign}")
+            if any(ty != "action" for ty, _ in kinds(rec)):
+                problems.append(f"{rec.session}[{shape}] non-action events {kinds(rec)}")
         assert not problems, f"seed={seed}\n" + "\n".join(problems)
 
     def test_follow_up_turns_on_same_session_do_not_see_previous_turns_events(self, real):
@@ -367,9 +350,7 @@ class TestRealGraphUnderLoad:
             )
             rec = h.run_turn(real.base, "s", f"msg{turn}")
             assert rec.post_status == 202, rec.error
-            assert kinds(rec) == [
-                ("thought", f"turn{turn}-a"),
-                ("action", "tool_a"),
-                ("thought", f"turn{turn}-b"),
-            ]
+            assert kinds(rec) == [("action", "tool_a")]
             assert rec.got_done and rec.result is not None
+            # event ids restart per turn: a new turn never inherits the old log
+            assert rec.sse_events[0][2] == '{"type": "action", "tool": "tool_a"}'
