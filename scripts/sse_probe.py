@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Black-box probe for the /agent -> /agent/stream -> /agent/result flow.
+Black-box probe for the /agent session / turn / SSE flow.
 
 Run it against a REAL deployment (staging, or localhost) to find out where time
 goes and whether `done` ever goes missing. Unlike the pytest suite, it sees the
@@ -27,13 +27,12 @@ first_event   POST returned -> first status event   (queueing + router + 1st LLM
 last->done    last status event -> `done`            (final answer generation +
               state persistence + SSE polling; this is where "answer ready but
               not delivered" shows up)
-done->result  `done` -> GET /agent/result answered   (auth/me round trip + JSON)
+done->result  `done` -> GET /agent/turns/{id} answered (auth + JSON)
 total         POST sent -> answer in hand
 
-When a stream ends/stalls WITHOUT `done` the probe immediately calls
-GET /agent/result: 200 means "the turn had finished, the `done` was lost / the
-stream was cut" (stream or proxy problem); 404 means "the turn is genuinely
-still running" (slow LLM/backend or a hung turn).
+When a stream ends/stalls WITHOUT `done` the probe immediately checks the turn:
+a terminal status means the turn finished but `done` was lost / the stream was
+cut; a `running` status means the turn is genuinely still running.
 
 Correlating with the server log (optional: --server-log app.log)
 ----------------------------------------------------------------
@@ -142,9 +141,10 @@ def run_turn(args, session: str, index: int) -> Turn:
             if r.status_code != 202:
                 tr.outcome, tr.detail = "error", f"POST /agent -> {r.status_code} {r.text[:200]}"
                 return tr
+            turn_id = r.json()["turn_id"]
             params = {"token": args.token} if args.token_in_query else None
             try:
-                with c.stream("GET", f"/agent/stream/{session}", headers=headers, params=params) as s:
+                with c.stream("GET", f"/agent/turns/{turn_id}/events", headers=headers, params=params) as s:
                     if s.status_code != 200:
                         tr.outcome, tr.detail = "error", f"stream -> {s.status_code}"
                         return tr
@@ -160,19 +160,31 @@ def run_turn(args, session: str, index: int) -> Turn:
                         elif name == "done":
                             tr.t_done, tr.wall_done = now, dt.datetime.now()
                             break
+            except httpx.TimeoutException as e:
+                tr.detail = f"stream timeout: {type(e).__name__}"
             except (httpx.TransportError, httpx.StreamError) as e:
                 tr.detail = f"stream broke: {type(e).__name__}"
             if tr.t_done is None:
-                rr = c.get(f"/agent/result/{session}", headers=rheaders)
+                rr = c.get(f"/agent/turns/{turn_id}", headers=rheaders)
                 tr.t_result = time.monotonic()
-                tr.outcome = "no-done(result-ready)" if rr.status_code == 200 else "no-done(still-running)"
+                if rr.status_code == 200:
+                    tr.outcome = (
+                        "no-done(result-ready)"
+                        if rr.json()["status"] != "running"
+                        else "no-done(still-running)"
+                    )
+                else:
+                    tr.outcome = "error"
+                    tr.detail += f" turn status -> {rr.status_code}"
                 tr.detail += f" result->{rr.status_code}"
                 return tr
-            rr = c.get(f"/agent/result/{session}", headers=rheaders)
+            rr = c.get(f"/agent/turns/{turn_id}", headers=rheaders)
             tr.t_result = time.monotonic()
-            tr.outcome = "ok" if rr.status_code == 200 else "error"
-            if rr.status_code != 200:
-                tr.detail = f"/agent/result -> {rr.status_code} {rr.text[:200]}"
+            if rr.status_code == 200 and rr.json()["status"] == "done":
+                tr.outcome = "ok"
+            else:
+                tr.outcome = "error"
+                tr.detail = f"/agent/turns/{turn_id} -> {rr.status_code} {rr.text[:200]}"
     except httpx.TimeoutException as e:
         tr.outcome, tr.detail = "no-done(timeout)", f"{type(e).__name__} after {args.timeout}s"
     except Exception as e:  # noqa: BLE001
@@ -181,7 +193,33 @@ def run_turn(args, session: str, index: int) -> Turn:
 
 
 def run_session(args, i: int) -> list[Turn]:
-    session = f"probe-{uuid.uuid4().hex[:8]}"
+    form = {"integrated_mode": str(args.integrated).lower()}
+    if args.context:
+        form["context"] = args.context
+    try:
+        with httpx.Client(
+            base_url=args.base,
+            timeout=httpx.Timeout(args.timeout),
+            verify=not args.insecure,
+        ) as c:
+            response = c.post(
+                "/agent/init",
+                data=form,
+                headers={"Authorization": f"Bearer {args.token}"},
+            )
+        if response.status_code != 201:
+            detail = f"POST /agent/init -> {response.status_code} {response.text[:200]}"
+            return [
+                Turn(f"probe-{i}", k, outcome="error", detail=detail)
+                for k in range(args.turns)
+            ]
+        session = response.json()["session_id"]
+    except (httpx.TimeoutException, httpx.TransportError, ValueError) as e:
+        detail = f"{type(e).__name__}: {e}"
+        return [
+            Turn(f"probe-{i}", k, outcome="error", detail=detail)
+            for k in range(args.turns)
+        ]
     out = []
     for k in range(args.turns):
         if args.stagger:
@@ -241,6 +279,7 @@ def main(argv=None):
     ap.add_argument("--timeout", type=float, default=180, help="max seconds to wait for `done`")
     ap.add_argument("--token-in-query", action="store_true", help="auth the stream via ?token= like EventSource")
     ap.add_argument("--integrated", action="store_true")
+    ap.add_argument("--context", nargs="*", default=[], help="integrated session context values")
     ap.add_argument("--insecure", action="store_true")
     ap.add_argument("--server-log", help="server log file, to print per-hop server-side timings")
     args = ap.parse_args(argv)

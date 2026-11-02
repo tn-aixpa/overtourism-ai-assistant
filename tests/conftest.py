@@ -38,17 +38,24 @@ def fresh_state() -> AgentState:
 
 
 # ---------------------------------------------------------------------------
-# Live-server fixtures for the SSE / turn-lifecycle tests (see sse_harness.py)
+# API fixtures for the route / SSE / turn-lifecycle tests (see sse_harness.py)
 # ---------------------------------------------------------------------------
 @pytest.fixture
-def live(monkeypatch, tmp_path):
+def api_env(monkeypatch, tmp_path):
     """
-    A real uvicorn server running the real FastAPI routes, with the LangGraph
-    agent replaced by a ScriptedAgent and the backend auth calls faked.
+    The real FastAPI routes + events + memory, wired to a ScriptedAgent and
+    faked backend calls. Nothing is served yet: `live` serves `.app` over real
+    HTTP (uvicorn), `client` drives it in-process with TestClient.
 
-    Yields a namespace: .base (URL), .agent (ScriptedAgent), .routes (module),
-    .auth_delay / .territories_delay (settable seconds of *blocking* sleep,
-    emulating a slow backend, exactly like the sync `requests` calls do).
+    Namespace:
+      .app / .routes / .store / .agent   - the pieces under test
+      .users                             - token -> user_id (default "user-1")
+      .role                              - role every faked token gets
+      .authorized                        - set False to make the backend reject
+      .auth_calls                        - list of tokens check_authorization saw
+      .territories                       - what get_allowed_territories returns
+      .auth_delay / .territories_delay   - seconds of *blocking* sleep, like the
+                                           sync `requests` calls in production
     """
     import time
     import types
@@ -62,17 +69,26 @@ def live(monkeypatch, tmp_path):
     # state dumps (logs/state_<sid>.json) must not pollute the repo
     monkeypatch.chdir(tmp_path)
 
-    ns = types.SimpleNamespace(auth_delay=0.0, territories_delay=0.0)
+    ns = types.SimpleNamespace(
+        auth_delay=0.0,
+        territories_delay=0.0,
+        users={},
+        role="viewer",
+        authorized=True,
+        auth_calls=[],
+        territories=["test-territory"],
+    )
 
     def fake_check_authorization(token):
+        ns.auth_calls.append(token)
         if ns.auth_delay:
             time.sleep(ns.auth_delay)  # blocking, like requests.get
-        return True, "viewer", "user-1"
+        return ns.authorized, ns.role, ns.users.get(token, "user-1")
 
     def fake_territories(token=None):
         if ns.territories_delay:
             time.sleep(ns.territories_delay)
-        return ["test-territory"]
+        return list(ns.territories)
 
     agent = h.ScriptedAgent()
     monkeypatch.setattr(routes, "check_authorization", fake_check_authorization)
@@ -81,25 +97,51 @@ def live(monkeypatch, tmp_path):
     monkeypatch.setattr(routes, "agent_app", agent)
     monkeypatch.setattr(routes, "AUTH_ENABLED", True)
     monkeypatch.setattr(routes, "AGENT_TURN_TIMEOUT", 30.0)
+    # the 30 s token cache is process-wide: isolate it per test
+    monkeypatch.setattr(routes, "_AUTH_CACHE", {})
 
-    # isolate process-wide singletons
-    for d in (events._queues, events._results, memory._STATE_STORE, memory._LOCKS):
+    # Isolate the per-turn event store and state singletons.
+    monkeypatch.setattr(events, "store", events.TurnStore())
+    monkeypatch.setattr(routes, "store", events.store)
+    for d in (memory._STATE_STORE, memory._LOCKS):
         d.clear()
-    memory._IN_FLIGHT.clear()
 
     app = FastAPI()
     app.include_router(routes.router)
-    server = h.LiveServer(app)
-    server.start()
 
-    ns.base = server.base
+    ns.app = app
     ns.agent = agent
     ns.routes = routes
-    ns.server = server
+    ns.store = events.store
     try:
         yield ns
     finally:
-        server.stop()
-        for d in (events._queues, events._results, memory._STATE_STORE, memory._LOCKS):
+        for d in (memory._STATE_STORE, memory._LOCKS):
             d.clear()
-        memory._IN_FLIGHT.clear()
+
+
+@pytest.fixture
+def live(api_env):
+    """`api_env` served by a real uvicorn server (needed for streaming/timing
+    tests: in-process transports buffer the whole body). Adds `.base`."""
+    import sse_harness as h
+
+    server = h.LiveServer(api_env.app)
+    server.start()
+    api_env.base = server.base
+    api_env.server = server
+    try:
+        yield api_env
+    finally:
+        server.stop()
+
+
+@pytest.fixture
+def client(api_env):
+    """In-process TestClient. Background work (the agent turn) has finished by
+    the time a POST /agent returns, which makes route tests deterministic."""
+    from fastapi.testclient import TestClient
+
+    with TestClient(api_env.app) as c:
+        api_env.client = c
+        yield c

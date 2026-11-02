@@ -1,152 +1,284 @@
+# SPDX-License-Identifier: Apache-2.0
 """
-SSE event bus used to stream agent progress to the front-end while a request
-is being processed in the background.
+Per-turn event log and result store (single process, in memory).
 
-Each session has:
-- a persistent event queue used by the SSE endpoint;
-- a final result stored separately so the client can reliably retrieve the
-  completed answer even if the SSE connection is interrupted or established
-  after the agent has already finished.
+Model
+-----
+session -- has many --> turn
+turn    -- has --> append-only event log (seq 1, 2, 3, ...) + status + result
 
-The final result is deliberately NOT consumed by get_result(). This makes the
-result endpoint idempotent and allows the frontend to retry after transient
-network/proxy failures such as ERR_INCOMPLETE_CHUNKED_ENCODING.
+Rules that fix the "sometimes the frontend hangs / gets the wrong answer" class
+of bugs:
+
+* Events are never consumed. A reader keeps a cursor (the SSE Last-Event-ID),
+  so streams can drop and re-attach without losing events, and two streams on
+  the same turn cannot steal events from each other.
+* A turn is terminal once status != "running". finish() is first-wins and
+  append_event() refuses to write to a terminal turn, so a late / zombie agent
+  thread can neither overwrite a timeout result nor leak events anywhere.
+* A stream ends when ITS turn is terminal, not when "the session has a result".
+* start_turn() is idempotent per (session, idempotency_key): a retried POST
+  gets the same turn_id back instead of starting a second turn.
+
+This module is the only thing that would change if you later move to Redis /
+a DB: keep the TurnStore method names and swap the internals.
 """
 
+import asyncio
 import json
 import logging
+import os
 import threading
-from queue import Queue, Empty
-from collections import defaultdict
+import time
+import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
-# One queue per session. Queues are created lazily and remain available until
-# clear_session() is called.
-_queues: dict[str, Queue] = defaultdict(Queue)
-
-# Final results are stored separately from SSE events. Access is protected by
-# a lock because the agent runs in a worker thread while HTTP handlers may
-# read the result concurrently.
-_results: dict[str, dict] = {}
-_results_lock = threading.RLock()
+# Finished turns (events + result) are kept this long, then swept.
+TURN_TTL_SECONDS = float(os.environ.get("TURN_TTL_SECONDS", "3600"))
+TERMINAL_STATUSES = frozenset({"done", "failed", "timeout"})
 
 
-def get_queue(session_id: str) -> Queue:
-    """Return the persistent SSE queue for a session."""
-    return _queues[session_id]
+class TurnInProgress(Exception):
+    """Raised by start_turn() when the session already has a running turn."""
+
+    def __init__(self, turn_id: str):
+        super().__init__(f"turn {turn_id} is still running")
+        self.turn_id = turn_id
 
 
-def publish(session_id: str, event: str) -> None:
-    """Push a raw string onto the session's SSE queue."""
-    logger.info("Publishing event to session %s: %s", session_id, event)
-    _queues[session_id].put(event)
+@dataclass
+class _Turn:
+    turn_id: str
+    session_id: str
+    status: str = "running"  # running | done | failed | timeout
+    events: list[tuple[int, str]] = field(default_factory=list)  # (seq, payload)
+    result: dict | None = None
+    finished_at: float | None = None
 
 
-def _publish_json(session_id: str, payload: dict) -> None:
-    publish(
-        session_id,
-        json.dumps(payload, default=str, ensure_ascii=False),
-    )
+class TurnStore:
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._turns: dict[str, _Turn] = {}
+        self._active: dict[str, str] = {}  # session_id -> running turn_id
+        self._latest: dict[str, str] = {}  # session_id -> most recent turn_id
+        self._idem: dict[tuple[str, str], str] = {}  # (session_id, key) -> turn_id
+
+    # ------------------------------------------------------------------ write
+    def start_turn(
+        self, session_id: str, idempotency_key: str | None = None
+    ) -> tuple[str, bool]:
+        """Return (turn_id, created).
+
+        created=False means this is a replay of an earlier request with the
+        same idempotency key: do NOT run the agent again.
+        Raises TurnInProgress if a different turn is still running.
+        """
+        with self._lock:
+            self._sweep_locked()
+            if idempotency_key:
+                known = self._idem.get((session_id, idempotency_key))
+                if known in self._turns:
+                    return known, False
+            active = self._active.get(session_id)
+            if active is not None:
+                raise TurnInProgress(active)
+            turn_id = uuid.uuid4().hex
+            self._turns[turn_id] = _Turn(turn_id, session_id)
+            self._active[session_id] = turn_id
+            self._latest[session_id] = turn_id
+            if idempotency_key:
+                self._idem[(session_id, idempotency_key)] = turn_id
+            return turn_id, True
+
+    def append_event(self, turn_id: str, payload: str) -> int | None:
+        """Append to a RUNNING turn. Returns the seq, or None if dropped."""
+        with self._lock:
+            t = self._turns.get(turn_id)
+            if t is None or t.status != "running":
+                return None
+            seq = len(t.events) + 1
+            t.events.append((seq, payload))
+            return seq
+
+    def finish(
+        self,
+        turn_id: str,
+        status: str,
+        result: dict | None,
+        before_commit: Callable[[], None] | None = None,
+    ) -> bool:
+        """Move a running turn to a terminal status. First caller wins.
+
+        before_commit runs under the store lock, only for the winner, and
+        BEFORE the turn becomes terminal / the session becomes free for a new
+        turn. Use it to publish the final AgentState (remember_state) so the
+        next turn can never load a stale state. If it raises, nothing changes.
+        """
+        if status not in TERMINAL_STATUSES:
+            raise ValueError(f"not a terminal status: {status!r}")
+        with self._lock:
+            t = self._turns.get(turn_id)
+            if t is None or t.status != "running":
+                return False
+            if before_commit is not None:
+                before_commit()
+            t.result = result
+            t.status = status
+            t.finished_at = time.monotonic()
+            if self._active.get(t.session_id) == turn_id:
+                del self._active[t.session_id]
+            return True
+
+    def clear_session(self, session_id: str) -> None:
+        """Forget every turn of a session (reset). Zombie threads become no-ops."""
+        with self._lock:
+            gone = {tid for tid, t in self._turns.items() if t.session_id == session_id}
+            for tid in gone:
+                del self._turns[tid]
+            self._active.pop(session_id, None)
+            self._latest.pop(session_id, None)
+            self._idem = {k: v for k, v in self._idem.items() if v not in gone}
+        logger.info("Cleared turns for session %s", session_id)
+
+    # ------------------------------------------------------------------- read
+    def read_events(
+        self, turn_id: str, after: int
+    ) -> tuple[list[tuple[int, str]], str] | None:
+        """Events with seq > after, plus the status read in the same critical
+        section. If status is terminal and the list is empty, there is
+        provably nothing more to send. None = unknown turn."""
+        with self._lock:
+            t = self._turns.get(turn_id)
+            if t is None:
+                return None
+            return list(t.events[max(after, 0) :]), t.status
+
+    def get(self, turn_id: str) -> dict | None:
+        with self._lock:
+            t = self._turns.get(turn_id)
+            if t is None:
+                return None
+            return {
+                "turn_id": t.turn_id,
+                "session_id": t.session_id,
+                "status": t.status,
+                "last_event_id": len(t.events),
+                "result": dict(t.result) if t.result is not None else None,
+            }
+
+    def active_turn(self, session_id: str) -> str | None:
+        with self._lock:
+            return self._active.get(session_id)
+
+    def latest_turn(self, session_id: str) -> str | None:
+        with self._lock:
+            tid = self._latest.get(session_id)
+            return tid if tid in self._turns else None
+
+    # --------------------------------------------------------------- internal
+    def _sweep_locked(self) -> None:
+        now = time.monotonic()
+        expired = {
+            tid
+            for tid, t in self._turns.items()
+            if t.finished_at is not None and now - t.finished_at > TURN_TTL_SECONDS
+        }
+        if not expired:
+            return
+        for tid in expired:
+            del self._turns[tid]
+        self._idem = {k: v for k, v in self._idem.items() if v not in expired}
+        self._latest = {s: t for s, t in self._latest.items() if t not in expired}
 
 
-def publish_thought(session_id: str, content: str) -> None:
-    """A reasoning step in the ReAct loop, before an action is decided."""
-    _publish_json(
-        session_id,
-        {"type": "thought", "content": content},
-    )
+store = TurnStore()
+
+
+# ---------------------------------------------------------------------------
+# Publishing from the agent code (signatures kept so callers don't change)
+# ---------------------------------------------------------------------------
+_current_turn: ContextVar[str | None] = ContextVar("current_turn", default=None)
+
+
+@contextmanager
+def turn_context(turn_id: str):
+    """Bind the running turn to this thread/context while the agent executes."""
+    token = _current_turn.set(turn_id)
+    try:
+        yield
+    finally:
+        _current_turn.reset(token)
 
 
 def publish_action(session_id: str, tool_name: str) -> None:
     """The tool the reasoner decided to call next."""
-    _publish_json(
-        session_id,
-        {"type": "action", "tool": tool_name},
+    # Prefer the turn bound to this context (immune to zombie threads); fall
+    # back to the session's active turn if the context did not propagate
+    # (e.g. LangGraph running a node in its own worker thread).
+    turn_id = _current_turn.get() or store.active_turn(session_id)
+    if turn_id is None:
+        return
+    payload = json.dumps(
+        {"type": "action", "tool": tool_name}, default=str, ensure_ascii=False
     )
+    store.append_event(turn_id, payload)
 
 
-def begin_turn(session_id: str) -> None:
-    """
-    Reset per-turn event state right before a new agent turn is started.
-
-    The queue and the result are per SESSION, not per turn, so anything left
-    over from the previous turn would otherwise leak into this one: a stale
-    "__done__" (the previous stream never read it, e.g. the client
-    disconnected) makes the new stream close immediately and hand the client
-    the OLD answer, while a stale stored result makes "is the turn finished?"
-    impossible to tell. Dropping both here means that, from now on, "a result
-    is stored" == "this turn has finished".
-    """
-    q = _queues[session_id]
-    try:
-        while True:
-            q.get_nowait()
-    except Empty:
-        pass
-    with _results_lock:
-        _results.pop(session_id, None)
-
-
-def has_result(session_id: str) -> bool:
-    with _results_lock:
-        return session_id in _results
-
-
-def publish_done(session_id: str, result: dict) -> None:
-    """
-    Store the final result BEFORE signalling completion on SSE.
-
-    The ordering is intentional: once the frontend observes `__done__`, the
-    result must already be available through get_result().
-    """
-    with _results_lock:
-        _results[session_id] = result
-
-    logger.info("Agent completed session %s", session_id)
-
-    # Signal completion after storing the result. A stream that is already
-    # connected receives this event; a stream that connects later can still
-    # obtain the final answer through get_result().
-    _queues[session_id].put("__done__")
-
-
-def get_result(session_id: str) -> dict | None:
-    """
-    Return the final result without consuming it.
-
-    This is intentionally idempotent so a frontend can retry the request
-    after a failed SSE connection or transient network error.
-    """
-    with _results_lock:
-        result = _results.get(session_id)
-        if result is None:
-            return None
-
-        # Return a shallow copy so callers cannot accidentally replace the
-        # stored result object.
-        return dict(result)
+def publish_thought(session_id: str, content: str) -> None:
+    """No-op: thoughts are not shown. Delete the callers, then this stub."""
+    return None
 
 
 def clear_session(session_id: str) -> None:
+    store.clear_session(session_id)
+
+
+# ---------------------------------------------------------------------------
+# SSE
+# ---------------------------------------------------------------------------
+def _sse(event: str, data: str, event_id: int | None = None) -> str:
+    head = f"id: {event_id}\n" if event_id is not None else ""
+    return f"{head}event: {event}\ndata: {data}\n\n"
+
+
+async def iter_sse(
+    turn_id: str,
+    after: int = 0,
+    poll_interval: float = 0.25,
+    keepalive_every: float = 15.0,
+):
+    """Yield SSE frames for one turn, starting after event id `after`.
+
+    Safe to call many times for the same turn (reconnects, multiple tabs).
+    Polling an in-memory list every 250 ms is cheap and, unlike a blocking
+    queue.get in a worker thread, is cancelled cleanly on client disconnect.
     """
-    Drop all queued events and the stored result for a session.
-
-    Called on session reset so a stale stream from a previous conversation
-    cannot leak into a new one.
-    """
-    # Keep the queue object (streams hold a reference to it; popping it would
-    # leave them waiting on a queue nobody publishes to anymore) and just
-    # empty it. stream_events ends on its own once the session is gone.
-    q = _queues.get(session_id)
-    if q is not None:
-        try:
-            while True:
-                q.get_nowait()
-        except Empty:
-            pass
-
-    with _results_lock:
-        _results.pop(session_id, None)
-
-    logger.info("Cleared event state for session %s", session_id)
+    cursor = max(after, 0)
+    idle = 0.0
+    yield "retry: 2000\n\n"
+    while True:
+        snap = store.read_events(turn_id, cursor)
+        if snap is None:  # swept, reset, or never existed
+            yield _sse("done", json.dumps({"status": "gone"}))
+            return
+        events, status = snap
+        if events:
+            for seq, payload in events:
+                cursor = seq
+                yield _sse("status", payload, seq)
+            idle = 0.0
+            continue  # re-read: more events or the terminal state may have landed
+        if status != "running":
+            yield _sse("done", json.dumps({"status": status}), cursor + 1)
+            return
+        await asyncio.sleep(poll_interval)
+        idle += poll_interval
+        if idle >= keepalive_every:
+            idle = 0.0
+            yield ": keep-alive\n\n"

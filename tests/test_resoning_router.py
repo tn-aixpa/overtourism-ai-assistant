@@ -97,7 +97,7 @@ def test_territory_catalog_has_a_direct_no_tool_route():
     territory_guidelines = "\n".join(
         body for _, body in GUIDELINE_BLOCKS["territory"]
     )
-    for phrase in ("località", "destinazioni", "territori"):
+    for phrase in ("località", "destinations", "territori"):
         assert phrase in territory_guidelines
 
 
@@ -310,6 +310,190 @@ class TestInitializeTools:
 
 
 # ---------------------------------------------------------------------------
+# topic routing
+# ---------------------------------------------------------------------------
+
+
+class TestTopicRouter:
+    def test_unclear_top_level_pauses_for_clarification(
+        self, fresh_state: AgentState
+    ):
+        classification = {
+            "top_level": "unclear",
+            "topic_changed": True,
+            "second_level": "unclear",
+        }
+
+        with patch.object(
+            router_module, "classify_route", return_value=classification
+        ):
+            result = router_module.top_level_router_node(fresh_state)
+
+        assert result.goto == "generate_output_message"
+        assert fresh_state.cognitive.pending_route_clarification == "top"
+        assert fresh_state.waiting_for == AgentState.WaitingFor.ROUTE_CLARIFICATION
+        assert "General system information" in fresh_state.cognitive.messages_to_include[0]
+        assert fresh_state.cognitive.top_level_route is None
+
+    def test_initial_route_scopes_tools_to_resolved_subgroup(
+        self, fresh_state: AgentState
+    ):
+        tools = [
+            "list_available_entities",
+            "create_new_problem",
+            "create_new_proposal",
+            "get_context_ids",
+            "lookup_glossary",
+        ]
+        fresh_state.cognitive.known_tools = tools
+        classification = {
+            "top_level": route_groups.TOP_LOCATION,
+            "topic_changed": True,
+            "second_level": route_groups.SUB_PROBLEM,
+        }
+
+        with patch.object(
+            router_module, "classify_route", return_value=classification
+        ) as classify:
+            result = router_module.top_level_router_node(fresh_state)
+
+        assert result.goto == "react_reasoner"
+        assert fresh_state.cognitive.top_level_route == route_groups.TOP_LOCATION
+        assert fresh_state.cognitive.second_level_route == [route_groups.SUB_PROBLEM]
+        assert set(fresh_state.cognitive.enabled_tools) == {
+            "list_available_entities",
+            "create_new_problem",
+            "get_context_ids",
+        }
+        classify.assert_called_once_with(fresh_state, None, None)
+
+    def test_unclear_second_level_pauses_with_domain_scoped_tools(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.known_tools = [
+            "list_available_entities",
+            "create_new_problem",
+            "create_new_proposal",
+            "create_new_scenario",
+            "get_context_ids",
+        ]
+        classification = {
+            "top_level": route_groups.TOP_LOCATION,
+            "topic_changed": True,
+            "second_level": "unclear",
+        }
+
+        with patch.object(
+            router_module, "classify_route", return_value=classification
+        ):
+            result = router_module.top_level_router_node(fresh_state)
+
+        assert result.goto == "generate_output_message"
+        assert fresh_state.cognitive.top_level_route == route_groups.TOP_LOCATION
+        assert fresh_state.cognitive.second_level_route is None
+        assert (
+            fresh_state.cognitive.pending_route_clarification == "second"
+        )
+        assert (
+            fresh_state.waiting_for == AgentState.WaitingFor.ROUTE_CLARIFICATION
+        )
+        assert "Problems" in fresh_state.cognitive.messages_to_include[0]
+        expected_tools = route_groups.resolve_allowed_tools(
+            route_groups.TOP_LOCATION, None
+        ) & set(fresh_state.cognitive.known_tools)
+        assert set(fresh_state.cognitive.enabled_tools) == expected_tools
+
+    def test_same_domain_classification_can_switch_subgroup(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.top_level_route = route_groups.TOP_INDEXES
+        fresh_state.cognitive.second_level_route = [route_groups.SUB_INDEX_LIST]
+        fresh_state.cognitive.known_tools = [
+            "get_territorial_index_list",
+            "show_territorial_index_map",
+            "show_territorial_index_plot",
+        ]
+        classification = {
+            "top_level": route_groups.TOP_INDEXES,
+            "topic_changed": False,
+            "second_level": route_groups.SUB_INDEX_MAP,
+        }
+
+        with patch.object(
+            router_module, "classify_route", return_value=classification
+        ):
+            result = router_module.top_level_router_node(fresh_state)
+
+        assert result.goto == "react_reasoner"
+        assert fresh_state.cognitive.second_level_route == [
+            route_groups.SUB_INDEX_MAP
+        ]
+        assert fresh_state.cognitive.enabled_tools == [
+            "get_territorial_index_list",
+            "show_territorial_index_map",
+        ]
+
+    def test_topic_change_resets_old_subgroup_and_scopes_new_domain(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.top_level_route = route_groups.TOP_LOCATION
+        fresh_state.cognitive.second_level_route = [route_groups.SUB_PROPOSAL]
+        fresh_state.cognitive.known_tools = [
+            "create_new_proposal",
+            "get_system_capabilities",
+            "lookup_glossary",
+            "explain_workflow",
+        ]
+        classification = {
+            "top_level": route_groups.TOP_SYSTEM_INFO,
+            "topic_changed": True,
+            "second_level": None,
+        }
+
+        with patch.object(
+            router_module, "classify_route", return_value=classification
+        ):
+            result = router_module.top_level_router_node(fresh_state)
+
+        assert result.goto == "react_reasoner"
+        assert fresh_state.cognitive.top_level_route == route_groups.TOP_SYSTEM_INFO
+        assert fresh_state.cognitive.second_level_route is None
+        assert set(fresh_state.cognitive.enabled_tools) == {
+            "get_system_capabilities",
+            "lookup_glossary",
+            "explain_workflow",
+        }
+
+    def test_numeric_multi_choice_resolves_second_level_without_classifier(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.cognitive.top_level_route = route_groups.TOP_LOCATION
+        fresh_state.cognitive.pending_route_clarification = "second"
+        fresh_state.waiting_for = AgentState.WaitingFor.ROUTE_CLARIFICATION
+        fresh_state.user_input = "1 e 3"
+        allowed_tools = route_groups.resolve_allowed_tools(
+            route_groups.TOP_LOCATION,
+            [route_groups.SUB_PROBLEM, route_groups.SUB_SCENARIO],
+        )
+        fresh_state.cognitive.known_tools = sorted(allowed_tools)
+
+        with patch.object(router_module, "classify_route") as classify:
+            result = router_module.resolve_clarification_reply(
+                fresh_state, "second"
+            )
+
+        assert result.goto == "react_reasoner"
+        assert fresh_state.cognitive.second_level_route == [
+            route_groups.SUB_PROBLEM,
+            route_groups.SUB_SCENARIO,
+        ]
+        assert set(fresh_state.cognitive.enabled_tools) == allowed_tools
+        assert fresh_state.waiting_for is None
+        assert fresh_state.cognitive.pending_route_clarification is None
+        classify.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # react_reasoner_node — tool selection
 # ---------------------------------------------------------------------------
 
@@ -383,8 +567,8 @@ class TestReactReasonerToolSelection:
         assert result.goto == "generate_output_message"
         assert fresh_state.cognitive.selected_tool is None
         assert fresh_state.cognitive.messages_to_include == [
-            "The current request cannot be handled in the current context. "
-            "Please change context or use the standalone chat."
+            "I don't have enough information to answer that yet. "
+            "What specific information would you like to know?"
         ]
 
     def test_hallucinated_tool_name_finishes_safely(self, fresh_state: AgentState):

@@ -1,24 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
+import asyncio
+import logging
 import os
+import time as _t
+import uuid
+from concurrent.futures import ThreadPoolExecutor as _TPE
+from typing import Literal
+
 from fastapi import (
     APIRouter,
-    HTTPException,
-    Header,
-    Query,
-    UploadFile,
     BackgroundTasks,
     File,
     Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
 )
 from fastapi.responses import StreamingResponse
-import logging
-import asyncio
-import queue
-import threading
-from typing import Literal
 
-from app.schemas import AgentResponse, RunSelectedToolsRequest
+from app.schemas import RunSelectedToolsRequest
 from app.agent.state import AgentState
 from app.agent.graph_agentic import app as agent_app
 from app.agent.memory import (
@@ -28,17 +30,13 @@ from app.agent.memory import (
     persist_state,
     delete_state,
     _get_lock,
-    is_in_flight,
-    mark_in_flight,
-    clear_in_flight,
 )
 from app.agent.events import (
-    get_queue,
-    publish_done,
-    get_result,
+    TurnInProgress,
     clear_session,
-    begin_turn,
-    has_result,
+    iter_sse,
+    store,
+    turn_context,
 )
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
@@ -52,86 +50,30 @@ logger = logging.getLogger(__name__)
 
 AUTH_ENABLED = os.environ.get("AUTH_ENABLED", "true").lower() == "true"
 
+# Hard ceiling for one agent turn. If the turn thread is stuck (a hung backend
+# or LLM call, ...) the turn is closed as "timeout" so the client always gets
+# a terminal state instead of waiting forever.
+AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
+
 router = APIRouter()
 
 # Agent turns are long (tens of seconds of LLM/backend waiting). Give them their
 # OWN pool so they can never starve the short blocking calls (auth, state save)
 # that share the default asyncio executor.
-from concurrent.futures import ThreadPoolExecutor as _TPE
-
 _TURN_POOL = _TPE(
     max_workers=int(os.environ.get("AGENT_MAX_CONCURRENT_TURNS", "64")),
     thread_name_prefix="agent-turn",
 )
 
 
-def _finish_agent_turn(
-    key: str,
-    result: dict,
-    finished: threading.Event,
-    finish_lock: threading.Lock,
-    final_state: AgentState | None = None,
-) -> bool:
-    """Commit and publish one terminal result, unless this turn already timed out."""
-    with finish_lock:
-        if finished.is_set():
-            return False
-        if final_state is not None:
-            remember_state(final_state)
-        finished.set()
-
-    try:
-        publish_done(key, result)
-    except Exception:
-        logger.exception(f"publish_done failed for session {key}")
-    finally:
-        clear_in_flight(key)
-    return True
-
-
-async def _run_agent_in_pool(key, state, token):
-    loop = asyncio.get_running_loop()
-    finished = threading.Event()
-    finish_lock = threading.Lock()
-
-    def _on_timeout() -> None:
-        logger.error(f"Agent turn for session {key} exceeded {AGENT_TURN_TIMEOUT}s")
-        _finish_agent_turn(
-            key,
-            {
-                "response": "The request took too long to complete. Please try again.",
-                "session_id": key,
-                "agent_type": state.active_agent.value,
-                "assistant_action_data": None,
-            },
-            finished,
-            finish_lock,
-        )
-
-    watchdog = threading.Timer(AGENT_TURN_TIMEOUT, _on_timeout)
-    watchdog.daemon = True
-    watchdog.start()
-    try:
-        await loop.run_in_executor(
-            _TURN_POOL, _run_agent, key, state, token, finished, finish_lock
-        )
-    finally:
-        watchdog.cancel()
-
-
-# Hard ceiling for one agent turn. If the turn thread is stuck (a hung backend
-# or LLM call, ...) the client must still get a terminal "__done__" + result
-# instead of waiting forever.
-AGENT_TURN_TIMEOUT = float(os.environ.get("AGENT_TURN_TIMEOUT", "300"))
-
-
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
 _AUTH_CACHE: dict[str, tuple[float, tuple]] = {}
 _AUTH_TTL = 30.0
 
 
 def _cached_check_authorization(token: str):
-    import time as _t
-
     hit = _AUTH_CACHE.get(token)
     if hit and hit[0] > _t.monotonic():
         return hit[1]
@@ -141,334 +83,328 @@ def _cached_check_authorization(token: str):
     return res
 
 
-def _require_authorized_user(token: str) -> str:
+def _require_authorized_user(token: str) -> tuple[str, str]:
     authorized, role, user_id = _cached_check_authorization(token)
     if not authorized:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return role, user_id
 
 
-def _run_agent(
-    key: str,
-    state: AgentState,
-    token: str,
-    finished: threading.Event,
-    finish_lock: threading.Lock,
-):
-    """Runs synchronously inside a thread — never call from the event loop directly."""
-    if finished.is_set():
-        return
+async def _authenticate(authorization: str | None) -> tuple[str | None, str, str]:
+    """-> (token, role, user_id). Also works with AUTH_ENABLED=false (the old
+    code left user_id/user_role unbound in that case)."""
+    if not AUTH_ENABLED:
+        return None, "viewer", "anonymous"
+    token = _require_bearer_token(authorization)
+    role, user_id = await asyncio.to_thread(_require_authorized_user, token)
+    return token, role, user_id
 
-    result = {
-        "response": "System error",
-        "session_id": key,
-        "assistant_action_data": None,
+
+def _assert_owner(session_id: str, user_id: str) -> AgentState:
+    """404 (not 403) so session ids can't be probed."""
+    state = load_state(session_id)
+    if state is None or state.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return state
+
+
+def _result(
+    session_id: str,
+    response: str,
+    agent_type: str | None = None,
+    assistant_action_data=None,
+) -> dict:
+    out = {
+        "response": response,
+        "session_id": session_id,
+        "assistant_action_data": assistant_action_data,
     }
-    final_state = None
-    committed = False
-    try:
-        set_token(token)
-        logger.info(f"Message sent from conversation {key}")
+    if agent_type is not None:
+        out["agent_type"] = agent_type
+    return out
 
-        updated = agent_app.invoke(
-            state,
-            config={"configurable": {"token": token, "thread_id": key}},
+
+def _apply_context(state: AgentState, context: list[str]) -> None:
+    def _extract(prefix: str) -> list[str]:
+        return [c.split(":", 1)[1] for c in context if c.startswith(prefix)]
+
+    state.cognitive.current_context = {
+        "problems": _extract("problem:"),
+        "proposals": _extract("proposal:"),
+        "scenarios": _extract("scenario:"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Running a turn
+# ---------------------------------------------------------------------------
+async def _run_agent_in_pool(
+    session_id: str, turn_id: str, state: AgentState, token: str | None
+):
+    loop = asyncio.get_running_loop()
+
+    def _on_timeout() -> None:
+        logger.error(
+            f"Turn {turn_id} (session {session_id}) exceeded {AGENT_TURN_TIMEOUT}s"
         )
+        store.finish(
+            turn_id,
+            "timeout",
+            _result(
+                session_id,
+                "The request took too long to complete. Please try again.",
+                state.active_agent.value,
+            ),
+        )
+
+    # call_later runs on the event loop: no extra Timer thread per turn.
+    watchdog = loop.call_later(AGENT_TURN_TIMEOUT, _on_timeout)
+    try:
+        await loop.run_in_executor(
+            _TURN_POOL, _run_agent, session_id, turn_id, state, token
+        )
+    except BaseException:
+        # e.g. executor refused the job: never leave the turn "running".
+        store.finish(turn_id, "failed", _result(session_id, "System error"))
+        raise
+    finally:
+        watchdog.cancel()
+
+
+def _run_agent(session_id: str, turn_id: str, state: AgentState, token: str | None):
+    """Runs in a pool thread. Always ends with exactly one store.finish()."""
+    status = "failed"
+    result = _result(session_id, "System error")
+    final_state: AgentState | None = None
+
+    try:
+        with turn_context(turn_id):
+            set_token(token)
+            logger.info(f"Turn {turn_id} started for session {session_id}")
+            updated = agent_app.invoke(
+                state,
+                config={"configurable": {"token": token, "thread_id": session_id}},
+            )
 
         state_dict = {k: v for k, v in updated.items() if k != "__interrupt__"}
         final_state = AgentState(**state_dict)
 
         last_msg = final_state.get_last_message()
-        response_text = (
-            last_msg.content
-            if last_msg and last_msg.role == "assistant"
-            else "System error"
+        if last_msg and last_msg.role == "assistant":
+            status = "done"
+            result = _result(
+                session_id,
+                last_msg.content,
+                final_state.active_agent.value,
+                getattr(final_state, "assistant_action_data", None),
+            )
+    except BaseException as e:  # noqa: BLE001 - a terminal status MUST be set
+        logger.exception(f"Unhandled error in turn {turn_id}: {e}")
+        status, result, final_state = (
+            "failed",
+            _result(session_id, "System error"),
+            None,
         )
-        result = {
-            "response": response_text,
-            "session_id": key,
-            "agent_type": final_state.active_agent.value,
-            "assistant_action_data": getattr(
-                final_state, "assistant_action_data", None
+
+    try:
+        committed = store.finish(
+            turn_id,
+            status,
+            result,
+            before_commit=(
+                (lambda: remember_state(final_state))
+                if final_state is not None
+                else None
             ),
-        }
-
-        committed = _finish_agent_turn(
-            key, result, finished, finish_lock, final_state
         )
+    except Exception:
+        logger.exception(f"Committing turn {turn_id} failed")
+        final_state = None
+        committed = store.finish(turn_id, "failed", _result(session_id, "System error"))
 
-    except BaseException as e:  # noqa: BLE001 - done MUST be sent, whatever happens
-        logger.exception(f"Unhandled error in _run_agent for session {key}: {e}")
-        result = {
-            "response": "System error",
-            "session_id": key,
-            "assistant_action_data": None,
-        }
-        _finish_agent_turn(key, result, finished, finish_lock)
-
-    if final_state is not None and committed:
+    # Slow I/O only AFTER the client can already see the result. If the
+    # watchdog won the race, committed is False and nothing is persisted.
+    if committed and final_state is not None:
         try:
             persist_state(final_state)
         except Exception:
-            logger.exception(f"persist_state failed for session {key}")
+            logger.exception(f"persist_state failed for session {session_id}")
+
+
+# ---------------------------------------------------------------------------
+# Session / turn endpoints
+# ---------------------------------------------------------------------------
+@router.post("/agent/init", status_code=201)
+async def init_session(
+    user_lang: str = Form(default="Italian"),
+    integrated_mode: bool = Form(default=False),
+    context: list[str] = Form(default=[]),
+    authorization: str | None = Header(default=None),
+):
+    """Create a session. Everything fixed for the session's lifetime is
+    resolved here, once: owner, role, allowed territories, mode, language."""
+    token, role, user_id = await _authenticate(authorization)
+    if integrated_mode and not context:
+        raise HTTPException(
+            status_code=400, detail="Context is required in integrated mode"
+        )
+
+    session_id = uuid.uuid4().hex
+    state = AgentState(
+        session_id=session_id,
+        user_id=user_id,
+        user_lang=user_lang,
+        integrated_mode=integrated_mode,
+        allowed_territories=await asyncio.to_thread(get_allowed_territories, token),
+        user_role=role,
+        # Fixed for the session's whole lifetime, same as integrated_mode.
+        session_mode="internal" if integrated_mode else "standalone",
+    )
+    if integrated_mode:
+        _apply_context(state, context)
+    await asyncio.to_thread(save_state, state)
+
+    return {
+        "session_id": session_id,
+        "session_mode": state.session_mode,
+        "allowed_territories": state.allowed_territories,
+    }
 
 
 @router.post("/agent", status_code=202)
 async def run_agent_endpoint(
     background_tasks: BackgroundTasks,
     message: str = Form(...),
-    user_lang: str = Form(default="Italian"),
     session_id: str = Form(...),
     files: list[UploadFile] = File([]),
-    integrated_mode: bool = Form(default=False),
-    context: list[str] = Form(default=[]),
-    force_role: Literal[
-        "executor", "operative", "methodological", "exploitative", "auto"
-    ]
-    | None = Form(default=None),
+    context: list[str] = Form(default=[]),  # optional update, integrated mode
+    force_role: (
+        Literal["executor", "operative", "methodological", "exploitative", "auto"]
+        | None
+    ) = Form(default=None),
+    idempotency_key: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
 ):
-    # Verify authorization
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        user_role, user_id = await asyncio.to_thread(_require_authorized_user, token)
-    else:
-        token = None
-
-    # Check session key
-    if not session_id or session_id == "":
-        raise HTTPException(status_code=400, detail="No session_id provided")
-
+    """Start a turn on an existing session. Returns immediately with turn_id."""
+    token, _role, user_id = await _authenticate(authorization)
     if not message or not message.strip():
         raise HTTPException(status_code=400, detail="No message provided")
 
-    # Get status and proceed with the request
-    lock = _get_lock(session_id)
+    async with _get_lock(session_id):
+        state = _assert_owner(session_id, user_id)
 
-    async with lock:
-        # Reject a second message for this session while the previous one's
-        # background turn is still running, instead of silently racing on
-        # it (see the long comment on _IN_FLIGHT in memory.py for exactly
-        # what that race does: shared-object corruption, a non-atomically
-        # overwritten JSON dump, and a completed response that's generated
-        # but never reaches the frontend because the SSE stream already
-        # closed after the OTHER turn's "__done__"). Checked/marked inside
-        # this same lock so two requests arriving back-to-back can't both
-        # pass the check before either sets the flag.
-        if is_in_flight(session_id):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "A previous message for this session is still being "
-                    "processed. Wait for it to finish before sending "
-                    "another."
-                ),
-            )
-
-        state = load_state(session_id)
-
-        if state is None:
-
-            state = AgentState(
-                session_id=session_id,
-                user_id=user_id,
-                user_lang=user_lang,
-                integrated_mode=integrated_mode,
-                allowed_territories=await asyncio.to_thread(
-                    get_allowed_territories, token
-                ),
-                user_role=user_role,
-                # Fixed for the session's whole lifetime, same as
-                # integrated_mode itself (see the note below on why every
-                # later turn must branch on persisted state, not the raw
-                # form field).
-                session_mode="internal" if integrated_mode else "standalone",
-            )
-        # A wait/resume request continues the same logical turn, so keep its
-        # forced role while the pending action or clarification is completed.
-        # Otherwise this is a new turn and the optional form value replaces
-        # the previous turn's role selection.
-        if state.waiting_for is None:
-            state.force_role = None if force_role in (None, "auto") else force_role
-
-        # A session's mode is fixed for its whole lifetime (set once, above,
-        # when the session is first created) — see reasoner.initialize_tools.
-        # Always branch on the PERSISTED state.integrated_mode from here on,
-        # never on this request's raw `integrated_mode` form field: a
-        # follow-up call that simply omits/defaults that field (e.g. the
-        # frontend only sends it on the first turn) must not silently make
-        # an integrated session behave as standalone for the rest of the
-        # conversation — that was dropping `context` on every turn after
-        # the first instead of re-resolving it.
-        if state.integrated_mode and len(context) == 0:
+        if (
+            state.integrated_mode
+            and not context
+            and not state.cognitive.current_context
+        ):
             raise HTTPException(
                 status_code=400, detail="Context is required in integrated mode"
             )
 
-        state.add_user_message(message)
+        try:
+            turn_id, created = store.start_turn(session_id, idempotency_key)
+        except TurnInProgress as busy:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "A previous message for this session is still "
+                    "being processed.",
+                    "active_turn_id": busy.turn_id,
+                },
+            )
+        if not created:  # retried POST: same turn, don't run the agent again
+            return {"session_id": session_id, "turn_id": turn_id}
 
-        if state.waiting_for:
-            state.user_input = message
-        else:
-            state.user_input = None
+        # From here on we own a running turn: any failure must release it.
+        try:
+            # A wait/resume request continues the same logical turn, so keep
+            # its forced role; otherwise the form value replaces the old one.
+            if state.waiting_for is None:
+                state.force_role = None if force_role in (None, "auto") else force_role
+            state.add_user_message(message)
+            state.user_input = message if state.waiting_for else None
+            if state.integrated_mode and context:
+                logger.info(f"Running in integrated mode with context: {context}")
+                _apply_context(state, context)
+            # initialize_tools repopulates it from the full known_tools list.
+            state.cognitive.enabled_tools = []
+            await asyncio.to_thread(save_state, state)
+        except BaseException:
+            store.finish(turn_id, "failed", _result(session_id, "System error"))
+            raise
 
-        if state.integrated_mode:
-            logger.info(f"Running in integrated mode with context: {context}")
-
-            def _extract(prefix: str) -> list[str]:
-                return [c.split(":", 1)[1] for c in context if c.startswith(prefix)]
-
-            state.cognitive.current_context = {
-                "problems": _extract("problem:"),
-                "proposals": _extract("proposal:"),
-                "scenarios": _extract("scenario:"),
-            }
-
-        # Both modes leave enabled_tools empty here; initialize_tools
-        # populates it fresh from the full known_tools list once the
-        # registry is ready. Integrated sessions get every tool a
-        # standalone session gets EXCEPT widget tools (show_analysis_widget,
-        # show_territorial_index_map) — that exclusion is declared on the
-        # tools themselves (ToolDefinition.allowed_modes={"standalone"})
-        # and enforced generically by ToolRegistry.get_context_tools via
-        # state.session_mode, not hardcoded here, so the two modes can't
-        # silently drift apart on which non-widget tools are available.
-        state.cognitive.enabled_tools = []
-
-        await asyncio.to_thread(save_state, state)
-        mark_in_flight(session_id)
-        # Drop the previous turn's leftover "__done__"/result so this turn's
-        # stream can neither close early nor return a stale answer.
-        begin_turn(session_id)
-
-    background_tasks.add_task(_run_agent_in_pool, session_id, state, token)
-    return {"session_id": session_id}
+    background_tasks.add_task(_run_agent_in_pool, session_id, turn_id, state, token)
+    return {"session_id": session_id, "turn_id": turn_id}
 
 
-@router.post("/agent/reset")
-async def reset_session(
-    session_id: str = Form(...),
-    authorization: str | None = Header(default=None),
-):
-    """
-    Start a fresh conversation for `session_id`.
-
-    Drops the persisted AgentState (conversation history, ReAct scratchpad,
-    long-term tool-result memory, any pending confirmation) and any
-    leftover SSE events/result for the session, so the next `/agent` call
-    for this session_id begins a brand new turn from scratch.
-    """
-    if not session_id or session_id == "":
-        raise HTTPException(status_code=400, detail="No session_id provided")
-
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        _require_authorized_user(token)
-
-    lock = _get_lock(session_id)
-    async with lock:
-        delete_state(session_id)
-        clear_session(session_id)
-        # delete_state() already clears this, but stated explicitly here
-        # too: a reset must never leave a session permanently 409-ing on
-        # every future /agent call because it happened to fire while a
-        # turn was still in flight.
-        clear_in_flight(session_id)
-
-    logger.info(f"Session {session_id} reset")
-    return {"session_id": session_id, "status": "reset"}
-
-
-@router.get("/agent/result/{session_id}", response_model=AgentResponse)
-async def get_agent_result(
+@router.get("/agent/session/{session_id}")
+async def get_session(
     session_id: str,
     authorization: str | None = Header(default=None),
 ):
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        await asyncio.to_thread(_require_authorized_user, token)
-
-    if load_state(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    result = get_result(session_id)
-    if result is None:
-        raise HTTPException(
-            status_code=404, detail="Result not ready or already consumed"
-        )
-    return AgentResponse(**result)
+    """Lets the frontend resume after a page reload: is a turn running?"""
+    _, _, user_id = await _authenticate(authorization)
+    _assert_owner(session_id, user_id)
+    return {
+        "session_id": session_id,
+        "active_turn_id": store.active_turn(session_id),
+        "latest_turn_id": store.latest_turn(session_id),
+    }
 
 
-@router.get("/agent/stream/{session_id}")
-async def stream_events(
-    session_id: str,
-    # EventSource (the standard way to consume SSE from a browser) cannot
-    # set custom headers, so this endpoint also accepts the token as a query
-    # param. The Authorization header is preferred when present.
+@router.get("/agent/turns/{turn_id}")
+async def get_turn(
+    turn_id: str,
+    authorization: str | None = Header(default=None),
+):
+    """Idempotent status + result. This is the polling fallback."""
+    _, _, user_id = await _authenticate(authorization)
+    snap = store.get(turn_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    _assert_owner(snap["session_id"], user_id)
+    return {
+        "turn_id": snap["turn_id"],
+        "session_id": snap["session_id"],
+        "status": snap["status"],  # running | done | failed | timeout
+        "last_event_id": snap["last_event_id"],
+        "result": snap["result"],  # null while running
+    }
+
+
+@router.get("/agent/turns/{turn_id}/events")
+async def stream_turn_events(
+    turn_id: str,
+    # EventSource (the standard way to consume SSE from a browser) cannot set
+    # custom headers, so this endpoint also accepts the token as a query param.
+    # The Authorization header is preferred when present.
     token: str | None = Query(
         default=None,
-        description="Bearer token — only needed if this stream is opened "
+        description="Bearer token - only needed if this stream is opened "
         "via EventSource, which can't set an Authorization header.",
     ),
+    last_event_id_query: str | None = Query(default=None, alias="last_event_id"),
+    last_event_id_header: str | None = Header(default=None, alias="Last-Event-ID"),
     authorization: str | None = Header(default=None),
 ):
-    if AUTH_ENABLED:
-        # Native browser EventSource cannot set arbitrary request headers, so
-        # accept the token from the query string as a fallback. Prefer the
-        # Authorization header when the client can provide it.
-        auth_header = authorization
-        if not auth_header and token:
-            auth_header = f"Bearer {token}"
-        token = _require_bearer_token(auth_header)
-        await asyncio.to_thread(_require_authorized_user, token)
+    if not authorization and token:
+        authorization = f"Bearer {token}"
+    _, _, user_id = await _authenticate(authorization)
 
-    if load_state(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    snap = store.get(turn_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    _assert_owner(snap["session_id"], user_id)
 
-    event_queue = get_queue(session_id)
-
-    async def event_generator():
-        # Poll the queue without blocking a worker thread. The previous
-        # `await asyncio.to_thread(queue.get, True, 30)` could not be
-        # cancelled: when the client disconnected/reconnected, the orphaned
-        # thread kept waiting and silently swallowed the next event — which
-        # was usually the one and only "__done__" — so the new connection
-        # never saw it. Completion is also derived from the stored result
-        # (stored BEFORE "__done__" is queued, cleared at the start of each
-        # turn), so even a lost queue event can't leave the stream hanging.
-        idle = 0.0
-        while True:
-            try:
-                event = event_queue.get_nowait()
-            except queue.Empty:
-                if has_result(session_id):
-                    yield "event: done\ndata: \n\n"
-                    break
-                if load_state(session_id) is None:
-                    # Session was reset while streaming.
-                    yield "event: done\ndata: \n\n"
-                    break
-                await asyncio.sleep(0.25)
-                idle += 0.25
-                if idle >= 15:
-                    idle = 0.0
-                    yield ": keep-alive\n\n"
-                continue
-            except Exception as exc:
-                logger.exception(f"SSE queue failure for session {session_id}: {exc}")
-                break
-
-            idle = 0.0
-            logger.info(f"Sending SSE event for session {session_id}: {event}")
-
-            if event == "__done__":
-                yield "event: done\ndata: \n\n"
-                break
-
-            yield f"event: status\ndata: {event}\n\n"
+    raw = last_event_id_header or last_event_id_query or "0"
+    try:
+        after = max(int(raw), 0)
+    except ValueError:
+        after = 0
 
     return StreamingResponse(
-        event_generator(),
+        iter_sse(turn_id, after),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -478,6 +414,29 @@ async def stream_events(
     )
 
 
+@router.post("/agent/reset")
+async def reset_session(
+    session_id: str = Form(...),
+    authorization: str | None = Header(default=None),
+):
+    """
+    Destroy the session: persisted AgentState (history, scratchpad, tool-result
+    memory, pending confirmation) and every turn/event of it. A running turn
+    becomes a no-op. Call /agent/init again to get a fresh session.
+    """
+    _, _, user_id = await _authenticate(authorization)
+    async with _get_lock(session_id):
+        _assert_owner(session_id, user_id)
+        delete_state(session_id)
+        clear_session(session_id)
+
+    logger.info(f"Session {session_id} reset")
+    return {"session_id": session_id, "status": "reset"}
+
+
+# ---------------------------------------------------------------------------
+# Other endpoints (unchanged apart from auth / ownership)
+# ---------------------------------------------------------------------------
 @router.post("/agent/feedback")
 async def submit_feedback_get(
     session_id: str,
@@ -486,16 +445,11 @@ async def submit_feedback_get(
     vote: str | None = None,
     comment: str | None = None,
 ):
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        _require_authorized_user(token)
-
-    state = load_state(session_id)
-    if state is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    _, _, user_id = await _authenticate(authorization)
+    state = _assert_owner(session_id, user_id)
 
     messages = state.conversation.messages
-    if message_index is None or message_index >= len(messages):
+    if message_index is None or message_index < 0 or message_index >= len(messages):
         raise HTTPException(status_code=400, detail="Invalid message index")
 
     msg = messages[message_index]
@@ -533,12 +487,7 @@ async def run_selected_tools(
     """
     from app.agent.nodes.tool_executor import execute_selected_tool
 
-    user_role = "viewer"
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        user_role, user_id = _require_authorized_user(token)
-    else:
-        token = None
+    token, user_role, user_id = await _authenticate(authorization)
     if token:
         set_token(token)
 
@@ -626,12 +575,7 @@ async def run_selected_tools(
 async def get_usge_stats(
     authorization: str | None = Header(default=None),
 ):
-    # Verify authorization
-    if AUTH_ENABLED:
-        token = _require_bearer_token(authorization)
-        _require_authorized_user(token)
-    else:
-        token = None
+    await _authenticate(authorization)
 
     from app.utils.token_tacking import get_usage_per_day
 

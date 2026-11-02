@@ -4,14 +4,25 @@ Test harness for the SSE / agent-turn lifecycle.
 What is real and what is fake
 -----------------------------
 REAL   : FastAPI routes, uvicorn (so the asyncio event loop behaves like in
-         production), events.py, memory.py, _run_agent (watchdog, thread
-         hand-off), AgentState.dump_to_file, StreamingResponse.
+         production), events.py (TurnStore / iter_sse), memory.py, _run_agent
+         (watchdog, thread hand-off), AgentState.dump_to_file,
+         StreamingResponse.
 FAKE   : the LangGraph agent (`app.api.routes.agent_app`) is replaced by a
-         `ScriptedAgent` that publishes thoughts/actions exactly like
-         reasoner.py / tool_executor.py do (via events.publish_thought /
-         publish_action) and then "generates" an answer. The backend auth
-         calls (`check_authorization`, `get_allowed_territories`) are faked so
-         the tests need neither network nor an LLM.
+         `ScriptedAgent` that publishes actions exactly like
+         tool_executor.py does (via events.publish_action) and then
+         "generates" an answer. The backend auth calls (`check_authorization`,
+         `get_allowed_territories`) are faked so the tests need neither
+         network nor an LLM.
+
+Contract exercised (turn-based API)
+-----------------------------------
+    POST /agent                        -> 202 {session_id, turn_id}
+    GET  /agent/turns/{turn_id}/events -> SSE: `status` events (id: 1, 2, ...)
+                                          then exactly one `done`
+    GET  /agent/turns/{turn_id}        -> {status, last_event_id, result}
+
+`thought` steps no longer exist: events.publish_thought is a deliberate no-op,
+so the only thing a stream ever carries is `{"type": "action", "tool": ...}`.
 
 A real server (rather than TestClient / ASGITransport) is used on purpose:
 those in-process transports buffer the whole streaming body, so they can
@@ -31,7 +42,8 @@ from typing import Any, Callable
 import httpx
 import uvicorn
 
-from app.agent import events
+from app.agent import events, memory
+from app.agent.state import AgentState
 
 AUTH = {"Authorization": "Bearer test-token"}
 
@@ -41,13 +53,9 @@ AUTH = {"Authorization": "Bearer test-token"}
 # --------------------------------------------------------------------------- #
 @dataclass
 class Step:
-    kind: str  # thought | action | sleep | raise | hang | call
+    kind: str  # action | sleep | raise | hang | call
     value: Any = None
     delay: float = 0.0  # seconds to wait BEFORE executing the step
-
-
-def thought(text: str, delay: float = 0.0) -> Step:
-    return Step("thought", text, delay)
 
 
 def action(tool: str, delay: float = 0.0) -> Step:
@@ -76,7 +84,7 @@ class ScriptedAgent:
 
     def __init__(self, script_for: Callable[[str, str], list[Step]] | None = None):
         # script_for(session_id, user_message) -> steps
-        self.script_for = script_for or (lambda sid, msg: [thought("t"), action("tool")])
+        self.script_for = script_for or (lambda sid, msg: [action("tool")])
         self.invocations: list[dict] = []
         self._lock = threading.Lock()
         self.on_invoke_returned: Callable[[str, float], None] | None = None
@@ -90,9 +98,7 @@ class ScriptedAgent:
         for step in self.script_for(sid, last_user):
             if step.delay:
                 time.sleep(step.delay)
-            if step.kind == "thought":
-                events.publish_thought(sid, step.value)
-            elif step.kind == "action":
+            if step.kind == "action":
                 events.publish_action(sid, step.value)
             elif step.kind in ("sleep", "hang"):
                 time.sleep(step.value)
@@ -147,6 +153,7 @@ class LiveServer:
 class TurnRecord:
     session: str
     message: str
+    turn_id: str | None = None
     post_status: int | None = None
     t_post: float = 0.0
     t_post_returned: float = 0.0
@@ -161,6 +168,18 @@ class TurnRecord:
     @property
     def statuses(self) -> list[dict]:
         return [json.loads(d) for _, n, d in self.sse_events if n == "status"]
+
+    @property
+    def tools(self) -> list[str]:
+        """Tool names of the `action` events, in stream order."""
+        return [s["tool"] for s in self.statuses if s["type"] == "action"]
+
+    @property
+    def done_payload(self) -> dict | None:
+        for _, n, d in self.sse_events:
+            if n == "done":
+                return json.loads(d)
+        return None
 
     @property
     def got_done(self) -> bool:
@@ -195,20 +214,108 @@ def sse_lines(response):
         yield buf
 
 
-def parse_sse_lines(lines):
-    """Yield (event_name, data) from an iterator of text lines (SSE spec subset)."""
-    name, data = "message", []
+def parse_sse_frames(lines):
+    """Yield (event_id, event_name, data) from an iterator of text lines (SSE
+    spec subset). `event_id` is None for frames without an `id:` field."""
+    name, data, event_id = "message", [], None
     for line in lines:
         if line == "":
             if data or name != "message":
-                yield name, "\n".join(data)
-            name, data = "message", []
+                yield event_id, name, "\n".join(data)
+            name, data, event_id = "message", [], None
         elif line.startswith(":"):
             continue  # comment / keep-alive
         elif line.startswith("event:"):
             name = line[6:].strip()
         elif line.startswith("data:"):
             data.append(line[5:].lstrip(" "))
+        elif line.startswith("id:"):
+            event_id = int(line[3:].strip())
+
+
+def parse_sse_lines(lines):
+    """Yield (event_name, data) - same as parse_sse_frames without the id."""
+    for _id, name, data in parse_sse_frames(lines):
+        yield name, data
+
+
+# --------------------------------------------------------------------------- #
+# Small HTTP helpers shared by the tests
+# --------------------------------------------------------------------------- #
+def auth_for(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def seed_session(session: str, user_id: str = "user-1", **state_kwargs) -> AgentState:
+    """Put a session straight into the in-memory store (skips /agent/init)."""
+    state = memory.load_state(session)
+    if state is None:
+        state = AgentState(
+            session_id=session,
+            user_id=user_id,
+            allowed_territories=["test-territory"],
+            territory="test-territory",
+            **state_kwargs,
+        )
+        memory.remember_state(state)
+    return state
+
+
+def post_turn(
+    base: str,
+    session: str,
+    message: str = "hi",
+    *,
+    headers: dict | None = None,
+    seed: bool = True,
+    **form,
+) -> httpx.Response:
+    """POST /agent. Seeds the session first unless seed=False."""
+    if seed:
+        seed_session(session)
+    with httpx.Client(base_url=base, timeout=10) as c:
+        return c.post(
+            "/agent",
+            data={"message": message, "session_id": session, **form},
+            headers=headers if headers is not None else AUTH,
+        )
+
+
+def read_stream(
+    base: str,
+    turn_id: str,
+    *,
+    headers: dict | None = None,
+    params: dict | None = None,
+    timeout: float = 20.0,
+) -> list[tuple[int | None, str, str]]:
+    """Open the turn's event stream, read it to the end, return the frames."""
+    with httpx.Client(base_url=base, timeout=timeout) as c:
+        with c.stream(
+            "GET",
+            f"/agent/turns/{turn_id}/events",
+            headers=AUTH if headers is None else headers,
+            params=params,
+        ) as r:
+            assert r.status_code == 200, r.status_code
+            return list(parse_sse_frames(sse_lines(r)))
+
+
+def get_turn(base: str, turn_id: str, headers: dict | None = None) -> httpx.Response:
+    with httpx.Client(base_url=base, timeout=10) as c:
+        return c.get(
+            f"/agent/turns/{turn_id}", headers=AUTH if headers is None else headers
+        )
+
+
+def wait_for_status(base: str, turn_id: str, *, timeout: float = 10.0) -> dict:
+    """Poll GET /agent/turns/{id} until it is terminal (the polling fallback)."""
+    deadline = time.time() + timeout
+    while True:
+        body = get_turn(base, turn_id).json()
+        if body["status"] != "running" or time.time() > deadline:
+            return body
+        time.sleep(0.02)
 
 
 def run_turn(
@@ -220,8 +327,11 @@ def run_turn(
     fetch_result: bool = True,
     stream_headers: dict | None = None,
     extra_form: dict | None = None,
+    post_headers: dict | None = None,
 ) -> TurnRecord:
-    """POST /agent -> GET /agent/stream -> (on done) GET /agent/result."""
+    """POST /agent -> stream this turn's events -> retrieve its result."""
+    seed_session(session)
+
     rec = TurnRecord(session=session, message=message)
     try:
         with httpx.Client(base_url=base, timeout=httpx.Timeout(read_timeout)) as c:
@@ -229,16 +339,19 @@ def run_turn(
             r = c.post(
                 "/agent",
                 data={"message": message, "session_id": session, **(extra_form or {})},
-                headers=AUTH,
+                headers=post_headers or AUTH,
             )
             rec.t_post_returned = time.monotonic()
             rec.post_status = r.status_code
             if r.status_code != 202:
                 rec.error = f"POST /agent -> {r.status_code} {r.text}"
                 return rec
+            rec.turn_id = r.json()["turn_id"]
 
             with c.stream(
-                "GET", f"/agent/stream/{session}", headers=stream_headers or AUTH
+                "GET",
+                f"/agent/turns/{rec.turn_id}/events",
+                headers=stream_headers or AUTH,
             ) as s:
                 if s.status_code != 200:
                     rec.error = f"stream -> {s.status_code}"
@@ -253,10 +366,10 @@ def run_turn(
                     rec.stream_closed_without_done = True
 
             if fetch_result and rec.got_done:
-                rr = c.get(f"/agent/result/{session}", headers=AUTH)
+                rr = c.get(f"/agent/turns/{rec.turn_id}", headers=AUTH)
                 rec.t_result = time.monotonic()
                 rec.result_status = rr.status_code
-                rec.result = rr.json() if rr.status_code == 200 else None
+                rec.result = rr.json().get("result") if rr.status_code == 200 else None
     except httpx.TimeoutException as e:
         rec.error = f"timeout: {type(e).__name__}"
     except Exception as e:  # noqa: BLE001
