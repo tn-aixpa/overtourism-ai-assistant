@@ -25,6 +25,7 @@ def execute_create_new_temp_scenario(
     state: AgentState,
     values: dict,
     base_scenario_id: str | None = None,
+    replace_pending: bool = False,
     **kwargs,
 ) -> Dict[str, Any]:
     """Create a temporary scenario from the requested parameter changes and
@@ -39,9 +40,19 @@ def execute_create_new_temp_scenario(
     so the reasoner can fix the call or ask the user instead of the turn
     ending in the generic error path).
 
+    Only ONE temporary scenario can exist at a time: while one is pending
+    (created, not yet saved) a new one is refused with ``created: False`` and
+    ``already_pending: True`` — otherwise the user could end up with several
+    previews on screen and no way to tell which one "save it" refers to. The
+    pending one is only replaced when ``replace_pending`` is true, i.e. after
+    the user explicitly chose to discard it.
+
     On success, stashes the result on state.cognitive.pending_temp_scenario
     so a later create_new_scenario call (in this or a following turn) can
-    promote it.
+    promote it. In standalone mode the result also carries the load-plot
+    widget of the new scenario (assistant_action_data), so the preview is
+    displayed deterministically instead of relying on the model to call
+    show_analysis_widget afterwards.
     """
     from app.tools.executor_backend_tools import (
         create_temp_scenario,
@@ -55,6 +66,31 @@ def execute_create_new_temp_scenario(
             "'values' must contain at least one parameter change "
             "(parameter name -> new value)"
         )
+
+    existing = state.cognitive.pending_temp_scenario
+    if existing and not replace_pending:
+        logger.info(
+            f"Temp scenario not created: '{existing.get('scenario_id')}' is "
+            "still pending (only one at a time)"
+        )
+        return {
+            "created": False,
+            "temporary": False,
+            "already_pending": True,
+            "pending_scenario_id": existing.get("scenario_id"),
+            "pending_changes": [
+                c.get("summary", c) if isinstance(c, dict) else c
+                for c in (existing.get("changes") or [])
+            ],
+            "requested_values": values,
+            "message": (
+                "Only one temporary scenario can exist at a time and one is "
+                "already waiting to be saved. Ask the user whether to save it "
+                "first or to discard it and evaluate the new values instead; "
+                "call this tool again with replace_pending=true only if they "
+                "choose to discard it."
+            ),
+        }
 
     indexes = load_indexes(get_widgets.invoke({"territory": state.territory}))
     resolution = resolve_overrides(indexes, values)
@@ -127,7 +163,7 @@ def execute_create_new_temp_scenario(
         "changes": changes,
     }
 
-    return {
+    result: Dict[str, Any] = {
         "created": True,
         "scenario_id": scenario_id,
         "evaluation_id": evaluation_id,
@@ -138,6 +174,21 @@ def execute_create_new_temp_scenario(
         "evaluation": evaluation,
     }
 
+    # Show the preview. Widget tools (show_analysis_widget) only exist in
+    # standalone mode — an integrated host page renders the temporary
+    # scenario itself — so only build the widget there. It is built here from
+    # the evaluation just fetched (no extra backend call) rather than left to
+    # a follow-up show_analysis_widget call by the model, which could be
+    # skipped or fail silently and leave assistant_action_data empty even
+    # though the answer says the scenario was shown.
+    if state.session_mode == "standalone":
+        from app.tools.executors.analysis_widgets import build_load_plot_result
+
+        widget = build_load_plot_result(state, scenario_id, scenario_result)
+        result["assistant_action_data"] = widget["assistant_action_data"]
+
+    return result
+
 
 def execute_create_new_scenario(
     state: AgentState,
@@ -147,8 +198,16 @@ def execute_create_new_scenario(
     **kwargs,
 ) -> Dict[str, Any]:
     """Promote the pending temporary scenario (created and evaluated by
-    create_new_temp_scenario) to a permanent, named scenario."""
+    create_new_temp_scenario) to a permanent, named scenario.
+
+    Before saving, the scenario summary is generated with the same pipeline
+    as POST /agent/tool key="summary" (get_context_details ->
+    summary_generation, see app.tools.pipelines) and saved together with the
+    scenario. If the summary cannot be generated nothing is saved and the
+    pending temporary scenario is kept, so the save can simply be retried.
+    """
     from app.tools.executor_backend_tools import promote_scenario
+    from app.tools.pipelines import generate_temp_scenario_summary
 
     pending = state.cognitive.pending_temp_scenario
     if not pending:
@@ -161,6 +220,10 @@ def execute_create_new_scenario(
         f"Promoting temp scenario '{pending['scenario_id']}' to permanent as '{name}'"
     )
 
+    summary = generate_temp_scenario_summary(
+        state, pending["creation_session"], pending["evaluation_id"]
+    )
+
     result = promote_scenario.invoke(
         {
             "territory": state.territory,
@@ -169,6 +232,7 @@ def execute_create_new_scenario(
             "name": name,
             "description": description,
             "proposal_id": proposal_id,
+            "summary": summary,
         }
     )
 

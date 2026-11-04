@@ -46,6 +46,21 @@ CONFIRMATION_REQUIRED_TOOLS = {
 }
 
 
+# Tools that create a new problem / proposal / scenario (a temporary scenario
+# counts: it is the thing the user will later be asked to save). Only ONE of
+# them may run per request, so the user is never left with several new
+# objects at once and no way to tell which one a follow-up ("save it",
+# "change its name") refers to. See _creation_already_done_this_turn.
+# A second *temporary* scenario across requests is refused separately, in
+# execute_create_new_temp_scenario, while one is still waiting to be saved.
+CREATION_TOOLS = {
+    "create_new_problem",
+    "create_new_proposal",
+    "create_new_scenario",
+    "create_new_temp_scenario",
+}
+
+
 # Maps a tool to the (parameter, current_context key) used to auto-resolve
 # an ID once get_context_ids has run earlier this turn. Covers both
 # "parent" references (e.g. a new proposal's problem_id) and "target"
@@ -113,6 +128,88 @@ def _bump_active_agent(state: AgentState, tool_def: ToolDefinition | None) -> No
             f"(tool '{tool_def.name}')"
         )
         state.active_agent = tool_tier
+
+
+def _creation_already_done_this_turn(state: AgentState) -> str | None:
+    """Name of a creation tool (see CREATION_TOOLS) that already ran
+    successfully in the request in progress, else None.
+
+    Reads this turn's scratchpad, which survives the confirmation pause (it is
+    only reset when a fresh turn starts), so "create A" -> confirm -> "create
+    B" inside one request is caught. A call that created nothing (e.g. a
+    temporary scenario rejected with created=False, or a call refused by this
+    very guard) does not count."""
+    for step in state.cognitive.scratchpad:
+        if step.tool_name not in CREATION_TOOLS:
+            continue
+        observation = step.observation
+        if not isinstance(observation, dict) or not observation.get("success"):
+            continue
+        output = observation.get("output")
+        if isinstance(output, dict) and output.get("created") is False:
+            continue
+        return step.tool_name
+    return None
+
+
+def _reject_extra_creation(
+    state: AgentState,
+    tool_name: str,
+    tool_arguments: Dict[str, Any],
+    thought: str,
+    earlier_tool: str,
+) -> Command:
+    """Refuse a second creation in the same request: record a failed
+    Observation (so the reasoner and the final answer both see why) and hand
+    back to the reasoner, which is told not to retry."""
+    logger.info(
+        f"Refusing '{tool_name}': '{earlier_tool}' already created something "
+        "in this request (one creation at a time)"
+    )
+    result = {
+        "success": False,
+        "output": None,
+        "error": (
+            f"Only one problem, proposal or scenario can be created at a time, "
+            f"and '{earlier_tool}' has already been run in this request. Do NOT "
+            f"call {tool_name} (or any other creation tool) again now: finish, "
+            "tell the user that the first one was handled and that this "
+            "further one was not started, and ask them to request it again "
+            "in a new message once they are done with the first."
+        ),
+        "arguments": tool_arguments,
+    }
+
+    result_key = tool_name
+    collision = 0
+    while result_key in state.cognitive.tool_results:
+        collision += 1
+        result_key = f"{tool_name}__{collision}"
+    state.cognitive.tool_results[result_key] = result
+    _trim_tool_results(state)
+
+    state.cognitive.scratchpad.append(
+        ReActStep(
+            thought=thought,
+            tool_name=tool_name,
+            tool_arguments=tool_arguments,
+            observation=result,
+            observation_key=result_key,
+            status="rejected_one_creation_at_a_time",
+        )
+    )
+    state.add_trace(
+        "tool_execution",
+        tool_name,
+        {"result_key": result_key, "success": False, "rejected": True},
+    )
+
+    state.cognitive.tool_confirmed = False
+    state.cognitive.tool_confirmation_needed = False
+    state.cognitive.selected_tool = None
+    state.cognitive.tool_arguments = {}
+    state.cognitive.pending_thought = ""
+    return Command(update=state, goto="react_reasoner")
 
 
 def execute_selected_tool(
@@ -258,6 +355,17 @@ def tool_executor_node(state: AgentState) -> Command:
     # get_context_ids already resolved earlier this turn.
     tool_arguments = _resolve_referenced_id(state, tool_name, tool_arguments)
     state.cognitive.tool_arguments = tool_arguments
+
+    # ---- One-creation-at-a-time gate ----
+    # Checked first of all the gates (before the territory question, the
+    # missing-parameter question and the confirmation): there is no point
+    # asking the user for anything on a creation that will be refused.
+    if tool_name in CREATION_TOOLS:
+        earlier_creation = _creation_already_done_this_turn(state)
+        if earlier_creation:
+            return _reject_extra_creation(
+                state, tool_name, tool_arguments, thought, earlier_creation
+            )
 
     # ---- Required-parameter check ----
     # Validate BEFORE asking for confirmation: confirming a recap that is

@@ -75,6 +75,20 @@ def _scenario_label(state: AgentState, scenario_id: str) -> str:
     return cache.get(f"scenarios {scenario_id}", {}).get("name", scenario_id)
 
 
+def _pending_temp_scenario_for(state: AgentState, scenario_id: str) -> Dict[str, Any] | None:
+    """The pending temporary scenario (see execute_create_new_temp_scenario)
+    if `scenario_id` is its id, else None.
+
+    Temporary scenarios live only inside their creation session: the
+    permanent endpoints used for saved scenarios (/scenarios/<id>,
+    /evaluations/?scenario_id=<id>) do not know them, so they must be read
+    through the session-scoped evaluation endpoint instead."""
+    pending = state.cognitive.pending_temp_scenario
+    if pending and pending.get("scenario_id") == scenario_id:
+        return pending
+    return None
+
+
 def _get_evaluation_payload(state: AgentState, scenario_ids: list) -> Dict[str, Any]:
     """The widget payload data — the raw evaluation dataset (KPIs + raw
     plot_data) for `scenario_ids`, keyed the same way get_evaluation_data
@@ -100,15 +114,126 @@ def _get_evaluation_payload(state: AgentState, scenario_ids: list) -> Dict[str, 
         call the first time a widget is requested for it; that's an
         accepted, deliberate trade-off for not letting a heavy payload
         accumulate in memory for the rest of the session.
-    """
-    from app.tools.executor_backend_tools import get_evaluation_data
 
-    _ensure_data_cached(state, {"scenarios": scenario_ids})
-    fetched = get_evaluation_data.invoke(
-        {"current_context": {"scenarios": scenario_ids}, "territory": state.territory}
+    Temporary (not yet saved) scenarios are the exception to the above:
+    they are fetched through their creation session and never go through
+    the permanent-scenario helpers, which would not find them.
+    """
+    from app.tools.executor_backend_tools import (
+        get_evaluation_data,
+        get_temp_evaluation_data,
     )
+
+    temp_ids = [sid for sid in scenario_ids if _pending_temp_scenario_for(state, sid)]
+    permanent_ids = [sid for sid in scenario_ids if sid not in temp_ids]
+
+    payload: Dict[str, Any] = {}
+
+    if permanent_ids:
+        _ensure_data_cached(state, {"scenarios": permanent_ids})
+        fetched = get_evaluation_data.invoke(
+            {
+                "current_context": {"scenarios": permanent_ids},
+                "territory": state.territory,
+            }
+        )
+        for sid in permanent_ids:
+            payload[f"scenarios {sid}"] = fetched.get(f"scenarios {sid}", {})
+
+    for sid in temp_ids:
+        pending = _pending_temp_scenario_for(state, sid)
+        try:
+            cleaned = get_temp_evaluation_data.invoke(
+                {
+                    "territory": state.territory,
+                    "creation_session": pending["creation_session"],
+                    "evaluation_id": pending["evaluation_id"],
+                }
+            )
+        except Exception:
+            logger.exception(f"Unable to fetch temp evaluation data for {sid}")
+            cleaned = {}
+        payload[f"scenarios {sid}"] = _drop_session_key(cleaned)
+
+    # Keep the order the caller asked for.
+    return {f"scenarios {sid}": payload.get(f"scenarios {sid}", {}) for sid in scenario_ids}
+
+
+def _drop_session_key(cleaned: Dict[str, Any]) -> Dict[str, Any]:
+    """Temp evaluation data carries the creation_session id, which permanent
+    evaluation data (and therefore the widget contract) does not have."""
+    return {k: v for k, v in (cleaned or {}).items() if k != "creation_session"}
+
+
+def build_widget_payload(
+    state: AgentState,
+    scenario_ids: list,
+    evaluation_data: Dict[str, Any],
+    subsystem: str = "default",
+) -> Dict[str, Any]:
+    """The `data` of a SHOW_WIDGET action for the analysis widgets. Shared by
+    show_analysis_widget and by create_new_temp_scenario (which shows the
+    load plot of the scenario it just evaluated)."""
     return {
-        f"scenarios {sid}": fetched.get(f"scenarios {sid}", {}) for sid in scenario_ids
+        "payload": {
+            "loading": False,
+            "subsystem": subsystem,
+            "scenarioIds": scenario_ids,
+            "labels": {sid: _scenario_label(state, sid) for sid in scenario_ids},
+            "data": evaluation_data,
+        }
+    }
+
+
+def build_load_plot_result(
+    state: AgentState,
+    scenario_id: str,
+    evaluation: Dict[str, Any],
+    subsystem: str = "default",
+) -> Dict[str, Any]:
+    """Ready-made load_plot SHOW_WIDGET result for one scenario whose cleaned
+    evaluation (clean_scenario() shape, incl. plot_data) is already in hand —
+    no extra backend call."""
+    payload = build_widget_payload(
+        state,
+        [scenario_id],
+        {f"scenarios {scenario_id}": _drop_session_key(evaluation)},
+        subsystem,
+    )
+    return _make_widget_result(
+        _RESPONSE_TEXT["load_plot"], _WIDGET_SPECS["load_plot"]["widget_name"], payload
+    )
+
+
+def _already_shown_this_turn(
+    state: AgentState, widget_name: str, scenario_ids: list
+) -> bool:
+    """Whether this turn already queued the same widget for the same
+    scenario(s). create_new_temp_scenario shows the load plot of the scenario
+    it just evaluated, so a redundant show_analysis_widget(load_plot) call for
+    it must not put a second identical widget on screen."""
+    for action in state.assistant_action_data or []:
+        payload = action.get("payload") or {} if isinstance(action, dict) else {}
+        shown_ids = ((payload.get("data") or {}).get("payload") or {}).get(
+            "scenarioIds"
+        )
+        if payload.get("widgetName") == widget_name and shown_ids == scenario_ids:
+            return True
+    return False
+
+
+def _widget_not_shown(reason: str) -> Dict[str, Any]:
+    """Explicit "nothing was displayed" result. Returning None here (as this
+    tool used to) made the final answer fall back to "the chart was shown"
+    even though no assistant_action_data was ever produced."""
+    logger.warning(f"show_analysis_widget: nothing shown ({reason})")
+    return {
+        "success": False,
+        "shown": False,
+        "response": (
+            "The requested chart could NOT be shown: " + reason + " Do not say "
+            "that a chart was displayed."
+        ),
     }
 
 
@@ -136,22 +261,25 @@ def execute_analysis_widget(
         resolved_ids = _resolve_scenario_ids(
             state, scenario_ids, spec["scenario_count"]
         )
-    except ValueError:
-        return None
+    except ValueError as e:
+        return _widget_not_shown(str(e))
+
+    if any(
+        _pending_temp_scenario_for(state, sid) for sid in resolved_ids
+    ) and _already_shown_this_turn(state, spec["widget_name"], resolved_ids):
+        return {
+            "success": True,
+            "response": "This chart is already being shown for that scenario.",
+        }
 
     evaluation_data = _get_evaluation_payload(state, resolved_ids)
     if not any(evaluation_data.values()):
-        return None
+        return _widget_not_shown(
+            "no evaluation data could be retrieved for scenario(s) "
+            f"{[sid for sid in resolved_ids if not evaluation_data.get(f'scenarios {sid}')]}."
+        )
 
-    payload = {
-        "payload": {
-            "loading": False,
-            "subsystem": subsystem,
-            "scenarioIds": resolved_ids,
-            "labels": {sid: _scenario_label(state, sid) for sid in resolved_ids},
-            "data": evaluation_data,
-        }
-    }
+    payload = build_widget_payload(state, resolved_ids, evaluation_data, subsystem)
 
     return _make_widget_result(
         _RESPONSE_TEXT[widget_type], spec["widget_name"], payload

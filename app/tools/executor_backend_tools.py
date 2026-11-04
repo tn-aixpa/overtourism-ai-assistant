@@ -7,6 +7,10 @@ from app.utils.backend_utils import get_data, post_data, put_data, delete_data
 
 logger = logging.getLogger(__name__)
 
+# Name of the field the backend stores a scenario's summary under when a
+# temporary scenario is promoted (see promote_scenario).
+SCENARIO_SUMMARY_FIELD = "summary"
+
 
 def clean_scenario(raw_data):
     """Strip a raw `.../evaluations/{id}/data` backend payload down to what
@@ -283,10 +287,11 @@ def promote_scenario(
     name: str,
     description: str | None = None,
     proposal_id: str = "",
+    summary: str | None = None,
 ) -> dict:
     """
     Promote a temporary scenario (already created and evaluated) into a
-    permanent, named scenario.
+    permanent, named scenario, optionally storing its summary with it.
 
     Returns:
         A dict with a confirmation message
@@ -296,6 +301,8 @@ def promote_scenario(
     url = f"{territory}/sessions/{creation_session}/scenarios/{scenario_id}"
 
     body = {"name": name, "description": description, "proposal_id": proposal_id}
+    if summary:
+        body[SCENARIO_SUMMARY_FIELD] = summary
 
     return post_data(url, json=body)
 

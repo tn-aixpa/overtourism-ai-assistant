@@ -249,7 +249,16 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             # would dump that whole raw payload into the prompt as an
             # "Agent Message", which is unhelpful and just re-invites the
             # exact bug this function exists to avoid. Just confirm the
-            # chart was shown.
+            # chart was shown — but only when the widget really was built:
+            # an empty/failed result must never be narrated as shown.
+            if not output or output.get("success") is False:
+                return [
+                    output.get(
+                        "response",
+                        "The requested chart could NOT be shown (no data was "
+                        "available for it). Do not say that a chart was displayed.",
+                    )
+                ]
             return [output.get("response", "The requested chart was shown.")]
 
         case "get_territorial_index_list":
@@ -317,6 +326,16 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             ]
 
         case "create_new_temp_scenario":
+            if output.get("already_pending"):
+                return [
+                    "The temporary scenario was NOT created: only one temporary "
+                    "scenario can exist at a time and another one is still "
+                    "waiting to be saved (parameter changes: "
+                    f"{truncate_for_prompt(output.get('pending_changes'), max_chars=2000)}). "
+                    "Do not say the new values were evaluated. Tell the user, and "
+                    "ask whether to save the existing one first or to discard it "
+                    "and evaluate the new values instead."
+                ]
             if output.get("created") is False:
                 lines = [
                     "The temporary scenario was NOT created and nothing was "
@@ -355,8 +374,18 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             ]
 
         case "create_new_scenario":
-            # TODO
-            return [output.get("message", "This feature is not yet implemented.")]
+            name = output.get("name") or (tool_result.get("arguments") or {}).get(
+                "name"
+            )
+            return [
+                output.get("message")
+                or (
+                    f"The scenario '{name}' was saved successfully, together with "
+                    "its summary."
+                    if name
+                    else "The scenario was saved successfully, together with its summary."
+                )
+            ]
 
         case "edit_problem":
             return [

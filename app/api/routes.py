@@ -38,6 +38,7 @@ from app.agent.events import (
     store,
     turn_context,
 )
+from app.tools.pipelines import PIPELINE_STEPS, new_system_state
 from app.tools.tool_registry import _ensure_tool_registry
 from app.utils.common import set_token
 from app.utils.authentication import (
@@ -500,45 +501,35 @@ async def run_selected_tools(
             detail=f"Unknown territory {territory!r}; allowed: {allowed_territories}",
         )
 
+    if body.key not in PIPELINE_STEPS:
+        raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
+
+    if body.key == "summary" and not body.current_context:
+        raise HTTPException(
+            status_code=400,
+            detail="scenario_ids is required when key == 'summary'",
+        )
+    if body.key == "pdf-report" and not body.current_context:
+        raise HTTPException(
+            status_code=400,
+            detail="at least one problem, proposal or scenario has to be specified",
+        )
+
     # Stateless, session-less scratch state — intentionally never saved.
-    user_id = user_id + "-system"
-    state = AgentState(
-        allowed_territories=allowed_territories,
+    # This pipeline runs outside the normal chat surface entirely — not
+    # "standalone" or "internal" — so it gets its own SessionMode value
+    # ("system", set by new_system_state). Tools that should ONLY ever be
+    # reachable through this pipeline (summary_generation, report_generation)
+    # declare allowed_modes={"system"} accordingly. The steps themselves are
+    # shared with the in-chat scenario save (see app.tools.pipelines).
+    state = new_system_state(
         territory=territory,
+        allowed_territories=allowed_territories,
         user_id=user_id,
         user_role=user_role,
-        # This pipeline runs outside the normal chat surface entirely —
-        # not "standalone" or "internal" — so it gets its own SessionMode
-        # value. Tools that should ONLY ever be reachable through this
-        # pipeline (summary_generation, report_generation) declare
-        # allowed_modes={"system"} accordingly (see below).
-        session_mode="system",
+        current_context=body.current_context,
     )
-
-    if body.key == "summary":
-        if not body.current_context:
-            raise HTTPException(
-                status_code=400,
-                detail="scenario_ids is required when key == 'summary'",
-            )
-        state.cognitive.current_context = body.current_context
-        steps = [
-            {"tool_name": "get_context_details", "arguments": {}},
-            {"tool_name": "summary_generation", "arguments": {}},
-        ]
-    elif body.key == "pdf-report":
-        if not body.current_context:
-            raise HTTPException(
-                status_code=400,
-                detail="at least one problem, proposal or scenario has to be specified",
-            )
-        state.cognitive.current_context = body.current_context
-        steps = [
-            {"tool_name": "get_context_details", "arguments": {}},
-            {"tool_name": "report_generation", "arguments": {}},
-        ]
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported key: {body.key!r}")
+    steps = PIPELINE_STEPS[body.key]
 
     # summary_generation / report_generation are disabled in the registry
     # (enabled=False) so they never appear in normal chat's tool allowlist,

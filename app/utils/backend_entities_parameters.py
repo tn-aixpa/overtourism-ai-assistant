@@ -186,6 +186,22 @@ SCENARIO_VALUES_PARAM = ToolParameter(
 )
 
 
+SCENARIO_REPLACE_PENDING_PARAM = ToolParameter(
+    name="replace_pending",
+    description=(
+        "Only ONE temporary scenario can exist at a time. If one is already "
+        "waiting to be saved, this tool refuses to create another "
+        "(already_pending=true). Set this to true ONLY after the user has "
+        "explicitly said they want to discard that pending scenario and "
+        "evaluate the new values instead. Never set it on your own initiative "
+        "and omit it otherwise."
+    ),
+    type="boolean",
+    required=False,
+)
+
+
 TEMP_SCENARIO_PARAMETERS = [
     SCENARIO_VALUES_PARAM,
+    SCENARIO_REPLACE_PENDING_PARAM,
 ]

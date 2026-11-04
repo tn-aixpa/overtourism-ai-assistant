@@ -93,8 +93,8 @@ def _kpi_result_text(value: Any, metadata: Dict[str, Any]) -> str:
     cannot echo technical names such as 'level' or 'confidence'. Known
     fields: level (0-100 -> %), confidence (margin in percentage points),
     name (constraint -> UI label), value (plain number; its unit is already
-    part of the KPI label), share (fraction 0-1 -> %). Unknown fields are
-    appended as 'campo: valore' so no information is lost.
+    part of the KPI label), share (fraction 0-1 or percentage). Unknown fields
+    are appended as 'campo: valore' so no information is lost.
     """
     if not isinstance(value, dict):
         return _it(value, 2) if _is_num(value) else str(value)
@@ -108,7 +108,9 @@ def _kpi_result_text(value: Any, metadata: Dict[str, Any]) -> str:
     if _is_num(value.get("value")):
         main.append(_it(value["value"], 1))
     if _is_num(value.get("share")):
-        main.append(f"pari al {_it(value['share'] * 100)}% del totale")
+        share = value["share"]
+        share_percent = share * 100 if 0 <= share <= 1 else share
+        main.append(f"pari al {_it(share_percent)}% del totale")
     if _is_num(value.get("confidence")):
         extra.append(
             f"incertezza di ±{_it(value['confidence'])} punti percentuali"

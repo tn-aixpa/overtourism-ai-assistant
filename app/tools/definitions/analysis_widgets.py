@@ -40,6 +40,8 @@ def create_analysis_widget_tool() -> ToolDefinition:
             "for a single scenario.\n"
             "  - 'capacity_plot': ONLY on an explicit, specific request for "
             "the capacity/sustainability plot.\n"
+            "Not needed for a temporary scenario that create_new_temp_scenario "
+            "just evaluated: its load plot is already displayed automatically.\n"
             "The result is automatically appended to assistant_action_data."
         ),
         category=ToolCategory.INTERACTION,

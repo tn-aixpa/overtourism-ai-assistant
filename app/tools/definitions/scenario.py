@@ -46,14 +46,21 @@ def create_new_temp_scenario_tool() -> ToolDefinition:
             "'problems' (with allowed values), so you can fix the call or ask the user. "
             "This tool does not require user confirmation and does not "
             "persist anything permanently — nothing is saved until create_new_scenario is "
-            "called afterwards on the scenario it produced."
+            "called afterwards on the scenario it produced. Only ONE temporary scenario "
+            "can exist at a time: while one is waiting to be saved this tool refuses to "
+            "create another (already_pending=true) unless replace_pending=true, which "
+            "may only be set after the user explicitly chose to discard the pending one. "
+            "In standalone mode the load plot of the new scenario is displayed "
+            "automatically; there is no need to call show_analysis_widget for it."
         ),
         parameters=TEMP_SCENARIO_PARAMETERS,
         output_description=(
             "created=true with the temporary scenario_id, its evaluation_id, the "
             "applied_changes (parameter: from -> to, with notes such as a value rounded "
             "to the allowed step) and the evaluation results (sustainability index and "
-            "per-constraint breakdown); or created=false with the 'problems' found."
+            "per-constraint breakdown); or created=false with the 'problems' found, or "
+            "with already_pending=true when another temporary scenario is still waiting "
+            "to be saved."
         ),
         tags=["scenario", "simulation", "preview"],
         agent_tier="executor",
@@ -76,7 +83,9 @@ def create_new_scenario_tool() -> ToolDefinition:
             "simulate and call create_new_temp_scenario first, let them review the results, "
             "and only call this tool once they confirm they want to keep it. Optionally, the "
             "scenario can be linked to a proposal via proposal_id — only set this if the user "
-            "mentions or clearly implies an associated proposal; never ask for one otherwise."
+            "mentions or clearly implies an associated proposal; never ask for one otherwise. "
+            "A summary of the scenario's evaluation is generated automatically and saved "
+            "with it; do not ask the user for one."
         ),
         parameters=SCENARIO_PARAMETERS,
         output_description="Acknowledgement of successful save with the final scenario_id.",
