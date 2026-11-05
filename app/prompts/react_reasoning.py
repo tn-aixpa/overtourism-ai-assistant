@@ -15,7 +15,7 @@ from app.utils.common import (
     truncate_for_prompt,
     _max_chars_for_tool,
 )
-from app.utils.territory import display_territory
+from app.utils.territory import display_territory, territory_switch_note
 
 # Stable rendering order for domain guideline blocks when more than one
 # applies at once (only happens while a LOCATION second_level isn't
@@ -143,6 +143,9 @@ def react_step(
         "(call the tool again after the territory is switched).\n"
         f"Available territories: {available_territories}."
     )
+    switch_note = territory_switch_note(state)
+    if switch_note:
+        territory_line += "\n" + switch_note
     # Working memory (this turn's own Thought/Action/Observation history).
     scratchpad_block = _format_scratchpad(state.cognitive.scratchpad)
 

@@ -186,6 +186,10 @@ def _summarize_map_features(features: list) -> Dict[str, Any]:
     return {
         "feature_count": len(features),
         "areas_with_value": len(entries),
+        # Real extremes of the data (NOT the colour-scale bounds, which are
+        # rounded for display and can differ, e.g. scale max 9 vs actual 8.41).
+        "lowest_value": entries_sorted[-1]["index_value"] if entries_sorted else None,
+        "highest_value": entries_sorted[0]["index_value"] if entries_sorted else None,
         "top_areas": entries_sorted[:5],
         "bottom_areas": list(reversed(entries_sorted[-5:])) if entries_sorted else [],
     }
@@ -273,8 +277,6 @@ def execute_show_territorial_index_map(
             "end_date": end_date,
             "spatial_granularity": spatial_granularity,
             **additional_params,
-            "min_value": min_value,
-            "max_value": max_value,
         }
     )
 
@@ -1080,8 +1082,13 @@ def execute_query_territorial_index_values(
         "start_date": start_date,
         "end_date": end_date,
         "areas_with_value": len(entries),
-        "min_value": min_value,
-        "max_value": max_value,
+        # Real extremes of the data, not the map's colour-scale bounds.
+        "lowest_value": (
+            round(min(e["index_value"] for e in entries), 4) if entries else None
+        ),
+        "highest_value": (
+            round(max(e["index_value"] for e in entries), 4) if entries else None
+        ),
         **additional_params,
     }
 

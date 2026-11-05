@@ -136,6 +136,17 @@ The evaluation produces output data associated with the Scenario, including:
 
 ---
 
+# Structure of the Platform Concepts
+
+The platform organises the work as a chain of three entities:
+
+**Problem (in Italian also "ambito di analisi") → Proposal → Scenario**
+
+- "Problema" and "ambito di analisi" are the same entity (two names), not two steps.
+- A Scenario is itself the simulation, run and evaluated with the Digital Twin; "simulation" is not a separate stage after it.
+- Comparing Scenarios is an optional analysis that can be run on Scenarios, not a stage of the chain.
+- The base (As-is) Scenario is associated by default with every Proposal.
+
 # Overall Procedure
 
 The complete workflow can be summarised as:
@@ -143,11 +154,11 @@ The complete workflow can be summarised as:
 1. **Identify the critical situation** and the relevant territorial elements.
 2. **Identify stakeholders and data sources** associated with those elements.
 3. **Build or update the Digital Twin**, modelling elements, relationships, constraints, and the As-is Scenario.
-4. **Create a Problem** representing the critical situation to be analysed.
+4. **Create a Problem** (also called "ambito di analisi") representing the critical situation to be analysed.
 5. **Create one or more Proposals** representing possible strategies.
-6. **Create Scenarios** by defining specific changes or parameter values.
-7. **Run the Scenario evaluation** using the Digital Twin.
-8. **Compare results** using KPIs, metrics, constraints, and other model outputs.
+6. **Create Scenarios** by defining specific changes or parameter values; each Scenario is run and evaluated with the Digital Twin.
+7. **Review the Scenario results** (KPIs, metrics, constraints).
+8. **Optionally compare Scenarios** using KPIs, metrics, constraints, and other model outputs.
 9. **Assess overall impact**, considering both improvements and possible negative consequences or trade-offs.
 
 The key principle is that interventions should not be evaluated only according to whether they solve a single issue. The Digital Twin should support a systemic evaluation of the territory, helping users identify whether a proposed change produces an overall improvement or simply shifts the problem to another element of the system.

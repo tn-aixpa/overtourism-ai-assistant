@@ -47,54 +47,153 @@ def clean_scenario(raw_data):
     }
 
 
+def _safe_get_list(url: str) -> list | None:
+    """GET a list endpoint for relationship look-ups. Returns None (instead
+    of raising) when the call fails, so a failed look-up degrades to "links
+    not available" rather than breaking the whole listing."""
+    try:
+        data = get_data(url)
+        return data if isinstance(data, list) else None
+    except Exception:
+        logger.warning(f"Could not fetch {url} for relationship look-up", exc_info=True)
+        return None
+
+
+def _safe_base_scenario_id(territory: str) -> str | None:
+    """Id of the territory's designated base scenario, or None if unknown."""
+    try:
+        return get_base_scenario.invoke({"territory": territory})
+    except Exception:
+        logger.warning("Could not fetch the base scenario id", exc_info=True)
+        return None
+
+
+def _related_scenario_ids(proposal: dict) -> list:
+    """Scenario ids a proposal declares in its top-level
+    ``related_scenario_ids`` field (entries may be plain ids or objects)."""
+    ids = []
+    for item in proposal.get("related_scenario_ids") or []:
+        scenario_id = item.get("scenario_id") if isinstance(item, dict) else item
+        if scenario_id and scenario_id not in ids:
+            ids.append(scenario_id)
+    return ids
+
+
+def _scenario_links_for_proposal(
+    proposal: dict, scenario_names: dict, base_id: str | None
+) -> list:
+    """Scenarios associated with a proposal, as [{scenario_id, name,
+    is_base_scenario}].
+
+    The base scenario (the as-is reference) is by default associated with
+    EVERY proposal, so it is always included, first, even when the backend
+    does not list it in the proposal's related_scenario_ids."""
+    ids = _related_scenario_ids(proposal)
+    if base_id and base_id not in ids:
+        ids.insert(0, base_id)
+    links = [
+        {
+            "scenario_id": sid,
+            "name": scenario_names.get(sid, sid),
+            "is_base_scenario": sid == base_id,
+        }
+        for sid in ids
+    ]
+    links.sort(key=lambda link: not link["is_base_scenario"])
+    return links
+
+
+def _proposal_links_for_scenario(
+    scenario_id: str, proposals: list, base_id: str | None
+) -> list:
+    """Proposals a scenario is associated with, as [{proposal_id, name}].
+    The base scenario is associated with every proposal by default."""
+    is_base = bool(base_id) and scenario_id == base_id
+    return [
+        {"proposal_id": p.get("proposal_id"), "name": p.get("name")}
+        for p in proposals
+        if is_base or scenario_id in _related_scenario_ids(p)
+    ]
+
+
+def _proposal_links_for_problem(problem_id: str, proposals: list) -> list:
+    return [
+        {"proposal_id": p.get("proposal_id"), "name": p.get("name")}
+        for p in proposals
+        if p.get("problem_id") == problem_id
+    ]
+
+
 @tool
 def get_all_problems(territory: str):
-    """Fetch all problems from the API."""
+    """Fetch all problems from the API, each with the proposals that belong to it."""
     url = f"{territory}/problems"
     extracted_data = get_data(url)
+    proposals = _safe_get_list(f"{territory}/proposals")
 
-    cleaned_data = [
-        {
-            "problem_id": item["problem_id"],
-            "name": item["name"],
-        }
-        for item in extracted_data
-    ]
+    cleaned_data = []
+    for item in extracted_data:
+        entry = {"problem_id": item["problem_id"], "name": item["name"]}
+        if proposals is not None:
+            entry["linked_proposals"] = _proposal_links_for_problem(
+                item["problem_id"], proposals
+            )
+        cleaned_data.append(entry)
 
     return cleaned_data
 
 
 @tool
 def get_all_proposals(territory: str):
-    """Fetch all proposals from the API."""
+    """Fetch all proposals from the API, each with its associated scenarios
+    (the base scenario is associated with every proposal by default)."""
     url = f"{territory}/proposals"
     extracted_data = get_data(url)
+    scenarios = _safe_get_list(f"{territory}/scenarios")
+    scenario_names = (
+        {s["scenario_id"]: s.get("name", s["scenario_id"]) for s in scenarios}
+        if scenarios is not None
+        else None
+    )
+    base_id = _safe_base_scenario_id(territory)
 
-    cleaned_data = [
-        {
+    cleaned_data = []
+    for item in extracted_data:
+        entry = {
             "proposal_id": item["proposal_id"],
             "name": item["name"],
             "problem_id": item["problem_id"],
         }
-        for item in extracted_data
-    ]
+        if scenario_names is not None:
+            entry["linked_scenarios"] = _scenario_links_for_proposal(
+                item, scenario_names, base_id
+            )
+        cleaned_data.append(entry)
 
     return cleaned_data
 
 
 @tool
 def get_all_scenarios(territory: str):
-    """Fetch all scenarios from the API."""
+    """Fetch all scenarios from the API, each with the proposals it is
+    associated with and a flag marking the base scenario."""
     url = f"{territory}/scenarios"
     extracted_data = get_data(url)
+    proposals = _safe_get_list(f"{territory}/proposals")
+    base_id = _safe_base_scenario_id(territory)
 
-    cleaned_data = [
-        {
+    cleaned_data = []
+    for item in extracted_data:
+        entry = {
             "scenario_id": item["scenario_id"],
             "name": item["name"],
+            "is_base_scenario": bool(base_id) and item["scenario_id"] == base_id,
         }
-        for item in extracted_data
-    ]
+        if proposals is not None:
+            entry["linked_proposals"] = _proposal_links_for_scenario(
+                item["scenario_id"], proposals, base_id
+            )
+        cleaned_data.append(entry)
 
     return cleaned_data
 
@@ -123,6 +222,12 @@ def get_single_problem(problem_id: str, territory: str, cleaned: bool = True) ->
         },
     }
 
+    proposals = _safe_get_list(f"{territory}/proposals")
+    if proposals is not None:
+        cleaned_data["linked_proposals"] = _proposal_links_for_problem(
+            extracted_data.get("problem_id", problem_id), proposals
+        )
+
     return cleaned_data
 
 
@@ -142,7 +247,6 @@ def get_single_proposal(proposal_id: str, territory, cleaned: bool = True) -> di
         "problem_id": extracted_data.get("problem_id", ""),
         "name": extracted_data.get("name", ""),
         "description": extracted_data.get("description", ""),
-        "related_scenario_ids": extracted_data.get("extras", {}).get("context", ""),
         "resources": extracted_data.get("resources", ""),
         "context": extracted_data.get("context", ""),
         "impact": extracted_data.get("impact", ""),
@@ -154,6 +258,19 @@ def get_single_proposal(proposal_id: str, territory, cleaned: bool = True) -> di
             "status": extracted_data.get("status", ""),
         },
     }
+
+    # Associated scenarios come from the proposal's top-level
+    # related_scenario_ids (this used to read extras.context by mistake, so
+    # every proposal looked like it had no scenarios). The base scenario is
+    # associated with every proposal by default.
+    scenarios = _safe_get_list(f"{territory}/scenarios")
+    if scenarios is not None:
+        scenario_names = {
+            sc["scenario_id"]: sc.get("name", sc["scenario_id"]) for sc in scenarios
+        }
+        cleaned_data["linked_scenarios"] = _scenario_links_for_proposal(
+            extracted_data, scenario_names, _safe_base_scenario_id(territory)
+        )
 
     return cleaned_data
 
@@ -182,6 +299,16 @@ def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> di
             "updated": extracted_data.get("updated", ""),
         },
     }
+
+    base_id = _safe_base_scenario_id(territory)
+    cleaned_data["is_base_scenario"] = bool(base_id) and (
+        extracted_data["scenario_id"] == base_id
+    )
+    proposals = _safe_get_list(f"{territory}/proposals")
+    if proposals is not None:
+        cleaned_data["linked_proposals"] = _proposal_links_for_scenario(
+            extracted_data["scenario_id"], proposals, base_id
+        )
 
     return cleaned_data
 

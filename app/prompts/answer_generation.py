@@ -3,7 +3,7 @@ import re
 from app.utils.llm import llm_interaction
 from app.utils.knowledge import build_terminology_block
 from app.agent.state import AgentState, AgentTier
-from app.utils.territory import display_territory
+from app.utils.territory import display_territory, territory_switch_note
 
 # ---------------------------------------------------------------------------
 # ANSWER GENERATION
@@ -259,6 +259,10 @@ def generate_answer(state: AgentState) -> str:
     recent_user_messages = _recent_user_messages(state)
 
     terminology_block = build_terminology_block(question, formatted_messages)
+    switch_note = territory_switch_note(state)
+    switch_block = (
+        f"- **Context (territory) switch.** {switch_note}\n" if switch_note else ""
+    )
 
     role_intro = _role_intro(tier)
     reasoning_policy = _reasoning_policy(tier)
@@ -292,6 +296,9 @@ The following messages represent the core findings of the answering process so f
 - **Agent Messages are your primary source.** Use Additional Context only when Agent Messages leave a gap that would make the answer incomplete or misleading AND the Additional Context directly fills that gap. Do not use it to rephrase or expand information already in Agent Messages.
 - **Data marked as `additional_data_available_on_specific_request` is hidden by default.** Any field nested under an `additional_data_available_on_specific_request` key (e.g. version, territory, creation/update timestamps, related_subsystem, internal IDs, etc.) must **not** appear in your answer unless the user's current question **explicitly asks for that specific field or for "all details / additional details / full data"**. A generic request like "show me the details of problem X" does **not** count as an explicit request for this hidden data — only include the standard fields (name, description, objective, links, etc.) in that case. Do not proactively surface, hint at, summarize, or count the hidden fields ("there is also some additional data I can show you") unless asked.
 - Never include system information like IDs (e.g. problem_id, proposal_id, scenario_id, index_id in widgets) unless the user explicitly asked for them — these are always excluded regardless of framing.
+{switch_block}- **Never declare a feature "not implemented" or data "not available" on your own.** Only say data is missing if the Agent Messages say so. If something cannot be done, say plainly what can be done instead and offer to do it.
+- **Never close the conversation on the user's behalf.** Never write "Interrompiamo qui", "Chiudiamo qui", "Fermiamoci qui" or similar, even if an Agent Message contains it. If the user is frustrated or wants to drop the topic, answer with a brief, professional apology and an open offer of help (e.g. "Mi dispiace per l'inconveniente. Resto a disposizione se hai bisogno di altro."), optionally with one concrete next step.
+- **Terminology.** "Ambito di analisi" and "problema" are the same entity: never present them as two different things or as two separate steps.
 - **Territory names.** Always capitalize the first letter of every territory name (for example, "Molveno" and "Fazzon", never "molveno" or "fazzon").
 - **Never expose raw internal identifiers or data-structure syntax.** Agent Messages may contain internal field/parameter names (e.g. `excursionists_parking_percentage`, `tourists_beach_turnover`) or literal Python/JSON snippets (e.g. `{{'excursionists_parking_percentage': 60}}`, `Valori: {{...}}`). Never reproduce these verbatim — always translate them into the natural, human-readable label a person would use, and never show dict/list/JSON syntax (braces, brackets, quotes-around-keys, colons-as-key-value) in your answer.
 - **Try to write entirely in ONE language: {language}.** Do not mix languages anywhere in the answer — no bilingual glosses, parenthetical translations, or original-language labels alongside the translation (e.g. do not write "Parcheggi (parking)" or "Spiaggia (beach)"). If a source term is in a different language than {language}, translate it fully into {language} and use only the translated form.

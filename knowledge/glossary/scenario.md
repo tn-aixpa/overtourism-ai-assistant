@@ -12,7 +12,7 @@ tags: [glossary, platform-concept]
 # Scenario
 
 A simulation run that explores the consequences of a specific set of changes to the As-is Scenario. Scenarios are used to evaluate and compare alternative configurations of the same strategy. Scenarios can belongs to different Proposals.
-A Scenario evaluations is run using the [Digital Twin](digital-twin.md) and contains the computed output data associated with the Scenario: KPIs, metrics, and model outputs that allow comparing Scenarios.
+A Scenario IS the simulation: there is no separate "simulation" step after it. Its evaluation is run using the [Digital Twin](digital-twin.md) and contains the computed output data associated with the Scenario: KPIs, metrics, and model outputs that allow comparing Scenarios. Comparing Scenarios is an optional analysis the user can perform on them, not a stage of the workflow. The base (As-is) Scenario is associated by default with every Proposal.
 
 ## Examples
 

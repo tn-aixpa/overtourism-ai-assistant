@@ -140,3 +140,30 @@ def switch_territory_if_requested(state: AgentState) -> Optional[str]:
     state.territory = target
     reset_territory_scoped_state(state)
     return previous
+
+
+def territory_switch_note(state: AgentState) -> str:
+    """Prompt text describing the latest territory switch, or "" if the
+    session never switched. Distinguishes a switch made at the start of THIS
+    turn (the user's request has just been carried out) from an earlier one,
+    so the model never answers "the context is already X" for a switch it
+    has itself just made."""
+    switch = state.cognitive.territory_switch
+    if not switch or not switch.get("from") or not switch.get("to"):
+        return ""
+    previous = display_territory(switch["from"])
+    current = display_territory(switch["to"])
+    if switch.get("this_turn"):
+        return (
+            f"The territory was switched at the start of THIS turn, at the "
+            f"user's request: it was {previous} and it is now {current}. If "
+            f"the user asked to change context, that change has JUST been made "
+            f"— confirm it and name both (e.g. \"Ho cambiato contesto: ora "
+            f"lavoriamo su {current} (prima eravamo su {previous}).\"). Never "
+            f"say the context \"is already\" {current}."
+        )
+    return (
+        f"Earlier in this conversation the territory was switched from "
+        f"{previous} to {current} at the user's request: everything before "
+        f"that switch concerned {previous}; the current context is {current}."
+    )

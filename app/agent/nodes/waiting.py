@@ -376,6 +376,11 @@ def _handle_tier_consent_wait(state: AgentState):
     return Command(update=state, goto="generate_output_message")
 
 
+# Replies up to this many words that are neither yes nor no are treated as an
+# unclear answer; longer ones are treated as a new request.
+_MAX_AMBIGUOUS_REPLY_WORDS = 3
+
+
 def _handle_creation_confirmation_wait(state: AgentState):
     """
     Wait node for tool confirmation.
@@ -435,6 +440,24 @@ def _handle_creation_confirmation_wait(state: AgentState):
         state.waiting_for = None
         state.user_input = None
         return Command(update=state, goto="tool_executor")
+
+    # A longer reply that is neither a yes nor a no is a NEW REQUEST (e.g. "now
+    # compare the base scenario with this scenario"), not an unclear answer.
+    # Re-asking yes/no would silently drop it, so the user's request was lost
+    # and later answered from missing context. Drop the pending create/edit/
+    # delete (it was never confirmed; any pending temporary scenario stays
+    # available, so the user can ask to save it again) and handle the reply as
+    # a fresh turn. Very short replies ("boh", "forse") still get the re-ask.
+    if len(user_input.split()) > _MAX_AMBIGUOUS_REPLY_WORDS:
+        logger.info("Reply is a new request — abandoning pending action, new turn")
+        state.cognitive.selected_tool = None
+        state.cognitive.tool_arguments = {}
+        state.cognitive.pending_thought = ""
+        state.cognitive.tool_confirmation_needed = False
+        state.cognitive.tool_confirmed = False
+        state.waiting_for = None
+        state.user_input = None
+        return Command(update=state, goto="initialize_tools")
 
     # Ambiguous reply: keep the pending confirmation alive, ask for a clear
     # yes/no answer, and do not discard the tool or its arguments.

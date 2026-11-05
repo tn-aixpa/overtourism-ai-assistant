@@ -26,7 +26,11 @@ def create_list_available_entities_tool() -> ToolDefinition:
             "from the backend in a single call. Pass entity_types to fetch only "
             "what is needed — e.g. ['problems', 'proposals'] when the user asks "
             "about both, or ['problems'] to find the parent of a new proposal. "
-            "Omit it to fetch all three. This is the first step for resolving an "
+            "Omit it to fetch all three. Each item also carries its associations: "
+            "a problem's linked_proposals, a proposal's linked_scenarios and a "
+            "scenario's linked_proposals (the base scenario, flagged "
+            "is_base_scenario, is associated with every proposal by default). "
+            "This is the first step for resolving an "
             "item the user refers to by name: follow it with get_context_ids to "
             "pick the matching id(s)."
         ),
@@ -45,8 +49,8 @@ def create_list_available_entities_tool() -> ToolDefinition:
         ],
         output_description=(
             "Dictionary keyed by entity type ('problems', 'proposals', 'scenarios'), "
-            "each a list of {<type>_id, name, ...} items; only the requested types "
-            "are present."
+            "each a list of {<type>_id, name, linked_*...} items; only the requested "
+            "types are present."
         ),
         tags=["data", "read-only", "navigation"],
         agent_tier="executor",

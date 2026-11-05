@@ -9,11 +9,11 @@ from app.utils.backend_entities_parameters import (
 def create_new_problem_tool() -> ToolDefinition:
     return ToolDefinition(
         name="create_new_problem",
-        description="Create a new problem in the system",
+        description="Create a new problem (also called 'ambito di analisi') in the system",
         category=ToolCategory.PROBLEM_MANAGEMENT,
         long_description=(
             "Registers a new Problem in the platform. "
-            "A Problem represents a critical situation or phenomenon to be analyzed "
+            "A Problem — in Italian also called 'ambito di analisi' — represents a critical situation or phenomenon to be analyzed "
             "(e.g. overtourism, mobility congestion). "
         ),
         parameters=PROBLEM_PARAMETERS,

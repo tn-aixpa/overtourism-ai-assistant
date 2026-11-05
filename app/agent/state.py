@@ -274,6 +274,15 @@ class CognitiveState:
     # selected_tool/tool_arguments and is resumed once a valid territory is
     # set.
     pending_territory_selection: bool = False
+    # Most recent territory (context) switch made at the user's request:
+    # {"from": <previous>, "to": <new>, "this_turn": bool}. The switch is
+    # applied at the start of the turn (see initialize_tools), BEFORE the
+    # reasoner runs, so without this the model only sees the new territory
+    # and tells the user the context "is already" the requested one.
+    # "this_turn" is cleared when the next fresh turn starts; the record
+    # itself is kept so later clarifications ("we were on Molveno") stay
+    # accurate.
+    territory_switch: Optional[Dict[str, Any]] = None
 
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.

@@ -54,6 +54,14 @@ Consider the available fields of each object (name, description, tags, location,
 relationships, etc.) when deciding relevance — note that bulky/nested fields (e.g.
 extended metadata, simulation data) have been stripped out below since they aren't
 needed for matching. Be inclusive — if an object is plausibly related, include it.
+
+Relationships are given explicitly by the "linked_*" fields: a problem's
+"linked_proposals", a proposal's "linked_scenarios" and a scenario's
+"linked_proposals" (the base scenario, "is_base_scenario": true, is associated with
+every proposal by default). When the intent is about the scenarios of a proposal (or
+the proposals of a problem / of a scenario), use these fields to pick the related ids
+instead of guessing from names, and include the proposal itself together with the
+related ids.
 If the data below mentions additional items not shown in full, and none of the shown
 items are a good match, say so in your reasoning rather than guessing.
 

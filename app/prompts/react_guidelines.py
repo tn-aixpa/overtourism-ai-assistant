@@ -23,6 +23,42 @@ from typing import Dict, List, Tuple
 
 Block = Tuple[str, str]
 
+# Shared guideline blocks reused by several routes.
+_RELATIONSHIPS_BLOCK: Block = (
+    "RELATIONSHIPS BETWEEN PROBLEMS, PROPOSALS AND SCENARIOS",
+    "Associations are explicit in the data: a problem's `linked_proposals`, a "
+    "proposal's `linked_scenarios` and a scenario's `linked_proposals` (in "
+    "list_available_entities and get_context_details results). Answer every "
+    "question about which scenarios belong to a proposal, which proposals a "
+    "scenario is associated with, or how many there are, ONLY from those "
+    "fields — never infer an association from names, from order, or from the "
+    "territory-wide list of scenarios (a territory can have more scenarios "
+    "than a proposal). The BASE scenario (is_base_scenario=true) is associated "
+    "by default with EVERY proposal: always count and list it among a "
+    "proposal's scenarios, saying it is the reference (as-is) scenario, and "
+    "never say it is 'not associated' or that a proposal has 'no scenarios' "
+    "when linked_scenarios contains it. Only say that an association is "
+    "unknown if the relevant linked_* field is absent from the data, and then "
+    "say you could not retrieve it rather than that it does not exist.",
+)
+
+_TERMINOLOGY_BLOCK: Block = (
+    "PROBLEM = AMBITO DI ANALISI",
+    "In Italian, 'ambito di analisi' and 'problema' are TWO NAMES FOR THE SAME "
+    "ENTITY: the Problem (it holds the critical situation, its territory, "
+    "name, description and objective; period and phenomena studied belong in "
+    "its description/objective). There is no separate 'ambito di analisi' "
+    "object. So: a request to create, edit, delete or describe an 'ambito di "
+    "analisi' is a request on a PROBLEM and uses the problem tools; a "
+    "proposal is linked to the problem (= the ambito di analisi) and never to "
+    "a separate ambito. Never say an ambito di analisi 'can only be kept as "
+    "conversation context', 'cannot be registered as an autonomous element' "
+    "or 'is different from the problem'. If the user lists several things "
+    "to create (e.g. an ambito di analisi AND a proposal), that is a problem "
+    "and a proposal: follow the ONE AT A TIME rule, starting with the "
+    "problem.",
+)
+
 # Always included, first: safety-net checks that apply no matter which
 # domain the turn was routed to.
 UNIVERSAL_PRE: List[Block] = [
@@ -70,6 +106,51 @@ UNIVERSAL_POST: List[Block] = [
         "Observation says data was truncated/omitted, say so explicitly instead of "
         "silently presenting a partial list as complete.",
     ),
+    (
+        "NEVER CLAIM A FEATURE IS 'NOT IMPLEMENTED'",
+        "Never tell the user that a function, feature or comparison 'is not yet "
+        "implemented', 'does not exist' or 'is not available', and never say that "
+        "a scenario's values 'are not available here' unless a tool actually "
+        "returned that. Comparing two scenarios IS supported: when the user asks "
+        "for a comparison (including 'questo scenario' = the scenario just created "
+        "or previewed, compared with the base scenario or another one), obtain "
+        "both scenario ids (get_base_scenario for the base scenario; the id "
+        "returned by create_new_temp_scenario / the saved scenario for the new "
+        "one; otherwise list_available_entities + get_context_ids), then call "
+        "analyze_scenario_results and show_analysis_widget with "
+        "widget_type='comparison_plot' as described in the scenario guidelines. "
+        "If data for a scenario is missing, retrieve it with the tools before "
+        "answering. If something genuinely cannot be done (for example a "
+        "temporary scenario that is no longer pending because only the most "
+        "recent one can be saved), say plainly what is possible instead and "
+        "offer to redo it (e.g. recreate that scenario) — in user-facing terms, "
+        "without blaming the platform.",
+    ),
+    (
+        "WHEN THE USER WANTS TO STOP OR IS FRUSTRATED",
+        "If the user says they want to drop the topic, gives up, or expresses "
+        "frustration (e.g. 'lasciamo perdere', 'sei andato in tilt'), the user "
+        "alone decides whether the conversation continues. Reply with one short, "
+        "professional line of apology and an open offer of help — for example "
+        "'Mi dispiace per l'inconveniente. Resto a disposizione se hai bisogno di "
+        "altro.' — optionally followed by ONE concrete thing you can do next. "
+        "NEVER write phrases that close the conversation on the user's behalf, such "
+        "as 'Interrompiamo qui', 'Chiudiamo qui', 'Fermiamoci qui', 'Basta così'; "
+        "never list what went wrong at length and never ask them to start over.",
+    ),
+    (
+        "CONTEXT (TERRITORY) SWITCHES",
+        "The territory shown in the context line above may have been changed to "
+        "the one the user asked for at the START of this very turn. When the "
+        "context line says the territory was switched this turn, the request to "
+        "change context HAS JUST BEEN CARRIED OUT: confirm the change and name "
+        "both territories, e.g. 'Ho cambiato contesto: ora lavoriamo su Fazzon "
+        "(prima eravamo su Molveno).' NEVER say the context 'is already' the "
+        "requested one, or that the switch 'had already happened'. If the user "
+        "later clarifies what they were working on before, agree using the "
+        "recorded previous territory, in the order they happened (first Molveno, "
+        "now Fazzon), without apologising for 'reconstructing the sequence'.",
+    ),
 ]
 
 GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
@@ -111,7 +192,15 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "question is about methodology/process/strategy-for-modelling-a-"
             "problem, since it is grounded in the workflow reference document; "
             "only fall back to general_question_response if explain_workflow's "
-            "document turns out not to cover what was asked.",
+            "document turns out not to cover what was asked.\n\n"
+            "When describing how the concepts are organised, use exactly this "
+            "structure: Problema (also called 'ambito di analisi' — the same "
+            "entity, not two steps) -> Proposta -> Scenario. A Scenario IS the "
+            "simulation: it is created and evaluated with the digital twin, so "
+            "'simulazione' is not a separate stage after it. Comparing scenarios "
+            "is an optional analysis the user can run on scenarios, not a stage "
+            "of the chain. Never present 'Ambito di analisi' or 'Simulazione e "
+            "confronto' as separate steps.",
         ),
     ],
     "indexes": [
@@ -171,6 +260,11 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "'list_truncated' is true, say the list is partial and give "
             "'matching_count' as the exact total. Never compute, estimate or "
             "complete values yourself.\n\n"
+            "  - The result gives the real extremes of the data as lowest_value and "
+            "highest_value. When asked for the range, the minimum or the maximum, "
+            "use ONLY those two fields (and a ranking query to name the area). "
+            "Never quote the colour-scale bounds of the map as data extremes: they "
+            "are rounded for display and can differ from the actual values.\n\n"
             "  - To merely SEE the distribution, use show_territorial_index_map "
             "instead.",
         ),
@@ -236,9 +330,11 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "  - If the user hasn't specified any period at all, ask them which "
             "year/period they want instead of guessing one.\n\n"
             '  - This tool returns a small "map_summary" (feature/area count, top '
-            "and bottom areas by value) alongside the widget — use ONLY those "
-            "figures if you comment on specific areas or values; never invent an "
-            "area name or value that isn't in map_summary.\n\n"
+            "and bottom areas by value, lowest_value and highest_value) alongside "
+            "the widget — use ONLY those figures if you comment on specific areas "
+            "or values; never invent an area name or value that isn't in "
+            "map_summary. State the range of the data only from lowest_value / "
+            "highest_value, never from the colour scale of the map.\n\n"
             "  - show_territorial_index_map is disabled outside standalone mode. "
             'This means ONLY: if it appears under "Tools that exist but are NOT '
             'available in this execution mode" below, treat it as genuinely absent '
@@ -300,6 +396,8 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "tool and OMIT the id field entirely from its arguments — it is "
             "auto-filled from the resolved context. Do not guess it.",
         ),
+        _TERMINOLOGY_BLOCK,
+        _RELATIONSHIPS_BLOCK,
     ],
     "proposal": [
         (
@@ -345,6 +443,8 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "field entirely from its arguments — it is auto-filled from the "
             "resolved context. Do not guess it.",
         ),
+        _TERMINOLOGY_BLOCK,
+        _RELATIONSHIPS_BLOCK,
     ],
     "scenario_analysis": [
         (
@@ -549,6 +649,7 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "tool and OMIT the id field entirely from its arguments — it is "
             "auto-filled from the resolved context. Do not guess it.",
         ),
+        _RELATIONSHIPS_BLOCK,
     ],
     "territory": [
         (
