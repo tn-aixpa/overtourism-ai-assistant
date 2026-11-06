@@ -10,7 +10,8 @@ What the report covers depends on the ``current_context`` (most specific
 wins, see :func:`report_scope`):
 
 * ``scenarios`` present  -> "scenarios": detailed report (changes vs. base,
-  narrative with evaluation results, plots) — filled in by the executor.
+  narrative with evaluation results, plots, and a textual comparison summary
+  for two selected scenarios) — filled in by the executor.
 * else ``proposals``      -> "proposal": each proposal and its scenarios.
 * else ``problems``       -> "problem": each problem, its proposals and their
   scenarios.

@@ -287,10 +287,9 @@ def _scenario_plots(state: AgentState, scenario_ids: list) -> Dict[str, Any]:
     to the frontend ({"widgetName", "data"} = the payload of a SHOW_WIDGET
     action), so the frontend renders them with the widgets it already has.
 
-    Per scenario: loadPlot + capacityPlot. With exactly two scenarios also the
-    two comparison widgets (indexComparison, histogramComparison), which are
-    defined for a pair. One failing plot never fails the report: it is
-    reported in "plots_unavailable" instead.
+    Per scenario: loadPlot + capacityPlot. With exactly two scenarios also
+    the histogramComparison plot. One failing plot never fails the report: it
+    is reported in "plots_unavailable" instead.
     """
     from app.tools.executors.analysis_widgets import execute_analysis_widget
 
@@ -317,12 +316,12 @@ def _scenario_plots(state: AgentState, scenario_ids: list) -> Dict[str, Any]:
 
     comparisons = []
     if len(scenario_ids) == 2:
-        for widget_type in ("kpi_comparison", "comparison_plot"):
-            payload = widget(widget_type, list(scenario_ids))
-            if payload:
-                comparisons.append(payload)
-            else:
-                unavailable.append({"scenario_ids": scenario_ids, "plot": widget_type})
+        widget_type = "comparison_plot"
+        payload = widget(widget_type, list(scenario_ids))
+        if payload:
+            comparisons.append(payload)
+        else:
+            unavailable.append({"scenario_ids": scenario_ids, "plot": widget_type})
 
     return {
         "per_scenario": per_scenario,
@@ -420,6 +419,16 @@ def _add_report_content(state: AgentState, document: Dict[str, Any]) -> None:
         for node in document["sections"]:
             node["plots"] = plots["per_scenario"].get(node["id"], [])
         document["comparisons"] = plots["comparisons"]
+        if len(scenario_ids) == 2:
+            summary = execute_summary_generation(state, scenario_ids=scenario_ids)
+            comparison_summary = summary.get("message")
+            if (
+                not summary.get("success")
+                or not isinstance(comparison_summary, str)
+                or not comparison_summary.strip()
+            ):
+                raise RuntimeError("The assistant failed to generate a scenario comparison")
+            document["comparison_summary"] = comparison_summary
         if plots["unavailable"]:
             document["plots_unavailable"] = plots["unavailable"]
             document["warnings"].append("Some plots could not be retrieved")

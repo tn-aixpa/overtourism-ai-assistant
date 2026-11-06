@@ -90,7 +90,15 @@ def test_report_executor_returns_assistant_text_and_preserves_plot_payload(
                 "description": "Untranslated description",
                 "changes": ["Raw change"],
                 "is_base_scenario": False,
-            }
+            },
+            {
+                "type": "scenario",
+                "id": "s2",
+                "title": "Second raw scenario",
+                "description": "Second untranslated description",
+                "changes": ["Second raw change"],
+                "is_base_scenario": False,
+            },
         ],
         "base_scenario": None,
         "unassigned_scenarios": [],
@@ -110,7 +118,13 @@ def test_report_executor_returns_assistant_text_and_preserves_plot_payload(
             "title": "Localized report",
             "territory_label": "Localized territory",
             "introduction": "Introduction.",
-            "nodes": {"s1": {"title": "Localized scenario", "narrative": "Narrative."}},
+            "nodes": {
+                "s1": {"title": "Localized scenario", "narrative": "Narrative."},
+                "s2": {
+                    "title": "Localized second scenario",
+                    "narrative": "Second narrative.",
+                },
+            },
             "conclusion": "Conclusion.",
         },
     )
@@ -123,11 +137,23 @@ def test_report_executor_returns_assistant_text_and_preserves_plot_payload(
             "unavailable": [],
         },
     )
+    comparison_summary = "<h6>Scenario comparison</h6><p>Summary text.</p>"
+
+    def fake_summary(_state, scenario_ids):
+        assert scenario_ids == ["s1", "s2"]
+        return {"success": True, "message": comparison_summary}
+
+    monkeypatch.setattr(
+        analysis,
+        "execute_summary_generation",
+        fake_summary,
+    )
 
     analysis._add_report_content(AgentState(), document)
 
     assert document["title"] == "Localized report"
     assert document["territory_label"] == "Localized territory"
+    assert document["comparison_summary"] == comparison_summary
     assert document["sections"][0] == {
         "type": "scenario",
         "id": "s1",
@@ -136,3 +162,38 @@ def test_report_executor_returns_assistant_text_and_preserves_plot_payload(
         "narrative": "Narrative.",
         "plots": [plot_payload],
     }
+
+
+def test_scenario_comparison_report_keeps_plot_without_kpi_widget(monkeypatch):
+    from app.tools.executors import analysis_widgets
+
+    calls = []
+
+    def fake_execute_widget(_state, widget_type, scenario_ids):
+        calls.append((widget_type, scenario_ids))
+        widget_names = {
+            "load_plot": "loadPlot",
+            "capacity_plot": "capacityPlot",
+            "comparison_plot": "histogramComparison",
+            "kpi_comparison": "indexComparison",
+        }
+        return {
+            "assistant_action_data": [
+                {"payload": {"widgetName": widget_names[widget_type], "data": {}}}
+            ]
+        }
+
+    monkeypatch.setattr(analysis_widgets, "execute_analysis_widget", fake_execute_widget)
+
+    result = analysis._scenario_plots(AgentState(), ["s1", "s2"])
+
+    assert [widget_type for widget_type, _ in calls] == [
+        "load_plot",
+        "capacity_plot",
+        "load_plot",
+        "capacity_plot",
+        "comparison_plot",
+    ]
+    assert [widget["widgetName"] for widget in result["comparisons"]] == [
+        "histogramComparison"
+    ]
