@@ -104,9 +104,20 @@ def _is_confirmation(user_input: str) -> bool:
         return False
     if _contains_any_phrase(normalized, _CANCELLATION_PHRASES):
         return False
-    return normalized in _CONFIRMATORY_PHRASES or _contains_any_phrase(
-        normalized, _CONFIRMATORY_PHRASES
-    )
+    if normalized in _CONFIRMATORY_PHRASES:
+        return True
+    if not _contains_any_phrase(normalized, _CONFIRMATORY_PHRASES):
+        return False
+    # A confirmatory word inside a longer reply is a confirmation ONLY when
+    # nothing else of substance is said: "sì, grazie", "ok procedi pure" are
+    # confirmations, but "sì, ma cambia il nome" is a change request and must
+    # NOT trigger the save/delete (and "si" is also an ordinary Italian word,
+    # as in "come si fa?"). Remove the confirmatory phrases; anything left
+    # beyond filler/courtesy words means the reply carries something else.
+    remainder = normalized
+    for phrase in sorted(_CONFIRMATORY_PHRASES, key=len, reverse=True):
+        remainder = re.sub(rf"\b{re.escape(phrase)}\b", " ", remainder)
+    return all(word in _CONFIRMATION_FILLER_WORDS for word in remainder.split())
 
 
 def _is_cancellation(user_input: str) -> bool:
@@ -114,9 +125,19 @@ def _is_cancellation(user_input: str) -> bool:
     normalized = _normalize(user_input)
     if not normalized:
         return False
-    return normalized in _CANCELLATION_PHRASES or _contains_any_phrase(
-        normalized, _CANCELLATION_PHRASES
-    )
+    if normalized in _CANCELLATION_PHRASES:
+        return True
+    if not _contains_any_phrase(normalized, _CANCELLATION_PHRASES):
+        return False
+    # Mirror of _is_confirmation: a cancellation word inside a longer reply is
+    # a cancellation ONLY when nothing else of substance is said ("no,
+    # grazie", "annulla tutto", "no, lascia stare"). "No, prima confrontalo
+    # con la base" carries a new request, so it must not silently cancel the
+    # pending action and lose that request (it is then handled as a new turn).
+    remainder = normalized
+    for phrase in sorted(_CANCELLATION_PHRASES, key=len, reverse=True):
+        remainder = re.sub(rf"\b{re.escape(phrase)}\b", " ", remainder)
+    return all(word in _CANCELLATION_FILLER_WORDS for word in remainder.split())
 
 
 _CONFIRMATORY_PHRASES = {
@@ -145,6 +166,24 @@ _CONFIRMATORY_PHRASES = {
     "oui",
     "d'accord",
     "да",
+}
+
+# Words that may accompany a confirmation without changing its meaning.
+_CONFIRMATION_FILLER_WORDS = {
+    "grazie", "per", "favore", "pure", "allora", "certo", "certamente",
+    "assolutamente", "perfetto", "ottimo", "bene", "ora", "adesso", "vai",
+    "avanti", "salva", "salvalo", "salvala", "crea", "crealo", "creala",
+    "invia", "inviala", "inviamo", "salviamo", "creiamo", "pure",
+    "please", "thanks", "thank", "you", "then", "now", "it", "do", "go",
+    "ahead", "great", "perfect", "definitely", "absolutely",
+}
+
+# Words that may accompany a cancellation without changing its meaning.
+_CANCELLATION_FILLER_WORDS = {
+    "grazie", "per", "favore", "pure", "allora", "tutto", "lascia", "stare",
+    "lascialo", "lasciamo", "perdere", "importa", "niente", "davvero",
+    "assolutamente", "certo", "ora", "adesso", "thanks", "thank", "you",
+    "please", "it", "all", "then", "really", "just",
 }
 
 _CANCELLATION_PHRASES = {

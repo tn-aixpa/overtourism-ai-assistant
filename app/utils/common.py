@@ -52,7 +52,10 @@ _LARGE_BUDGET_TOOLS = {
     # ~1.5 items, which is exactly what produced hallucinated/invented
     # extra indexes in practice. Same reasoning as
     # get_configuration_parameters above.
-    "get_territorial_index_list": 8000,
+    # The default result is now a compact-but-complete list (all indexes of all
+    # categories, one-sentence summaries, ~24 entries); the full text of one
+    # index is a separate, small call.
+    "get_territorial_index_list": 16000,
     # Up to _MAX_LISTED_MUNICIPALITIES (120) {area_name, index_value} entries
     # (~50 chars each) plus a small header: cutting this at the 1200-char
     # default would drop most of a "which municipalities are above X" list.

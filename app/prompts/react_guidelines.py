@@ -223,7 +223,22 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "exist?', 'is there an index for X?') — call "
             "get_territorial_index_list. This is backend data, not static glossary "
             "vocabulary, so lookup_glossary will NOT have it — do not use "
-            "lookup_glossary for this.",
+            "lookup_glossary for this.\n\n"
+            "  - The result is COMPLETE (total_indexes, categories, and every index "
+            "with its summary). When the user asks which indexes exist, present ALL "
+            "categories and, under each, ALL its indexes by name (a short phrase "
+            "each, e.g. from `summary`), grouped by category. Never present it as "
+            "a partial summary and never write that other items are 'not shown "
+            "for space reasons': nothing is missing. Then offer the details of "
+            "any one index.\n\n"
+            "  - For the full description, sources or method of ONE index, call "
+            "get_territorial_index_list again with its index_id instead of "
+            "answering from the one-sentence summary.\n\n"
+            "  - Territorial indexes cover all the municipalities, independently of "
+            "the active territory (Molveno, Fazzon...). Naming a municipality in an "
+            "index question (e.g. 'l'indice di ricettività di Molveno') is NOT a "
+            "request to change context: answer it without announcing or "
+            "performing any context change.",
         ),
         (
             "NUMERIC QUESTIONS ABOUT A TERRITORIAL INDEX",

@@ -123,6 +123,34 @@ def reset_territory_scoped_state(state: AgentState) -> None:
     cog.tool_result = None
 
 
+# Territorial-index questions ("l'indice di ricettività di Molveno") name a
+# MUNICIPALITY: the indexes cover every municipality regardless of the active
+# territory (the digital-twin context), so such a mention must not switch it.
+_INDEX_QUESTION_RE = re.compile(
+    r"\b(indic[ei]|indicator[ei]|index|indexes|indices|"
+    r"ricettivit\w*|turisticit\w*|stagionalit\w*|"
+    r"densit\w* (?:turistic\w*|antropic\w*)|carico antropico|"
+    r"turismo non intercettato|mobilit\w* in (?:ingresso|uscita)|"
+    r"intra ambito|centralit\w*|mercati? di provenienza|"
+    r"distanza media turisti|consumi (?:elettric\w*|di gas|gas))\b"
+)
+# Wording that explicitly asks to change the working context.
+_SWITCH_INTENT_RE = re.compile(
+    r"\b(contesto|territorio|cambia\w*|passa\w*|passiamo|lavor\w+|"
+    r"spostiamo|spostarci|torna\w*|torniamo|switch|change|work on|go back)\b"
+)
+
+
+def is_territorial_index_question(text: str) -> bool:
+    """True when the message is about territorial indexes and does not
+    explicitly ask to change context (e.g. 'passa a Fazzon')."""
+    normalized = _norm(text)
+    return bool(
+        _INDEX_QUESTION_RE.search(normalized)
+        and not _SWITCH_INTENT_RE.search(normalized)
+    )
+
+
 def switch_territory_if_requested(state: AgentState) -> Optional[str]:
     """At the start of a fresh user turn: if the user names a different
     allowed territory than the session's current one, switch to it and drop
@@ -135,6 +163,9 @@ def switch_territory_if_requested(state: AgentState) -> Optional[str]:
         return None
     target = mentioned_territory(state)
     if not target or target == state.territory:
+        return None
+    last = state.get_last_user_message()
+    if last is not None and is_territorial_index_question(last.content):
         return None
     previous = state.territory
     state.territory = target

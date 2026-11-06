@@ -24,11 +24,24 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
             "any tool that needs a specific index value/id, whenever the user asks "
             "'what indices are there' or names an index you haven't seen the id for yet."
         ),
-        parameters=[],
+        parameters=[
+            ToolParameter(
+                name="index_id",
+                description=(
+                    "Optional. The index_id of ONE index (taken from a previous call "
+                    "of this tool) to get its FULL description, sources and method. "
+                    "Omit it to get the complete list of all indexes."
+                ),
+                type="string",
+                required=False,
+            ),
+        ],
         output_description=(
-            "A dictionary with 'indexes' (each with id, label, description, unit, "
-            "variation support and year range) and 'additional_labels' (additional "
-            "index operations and descriptions that can be combined with an index)."
+            "Without index_id: a dictionary with 'total_indexes', 'categories' "
+            "(with their index counts), 'indexes' (ALL indexes, each with id, "
+            "category, name, unit, years, variation support and a one-sentence "
+            "summary) and 'additional_labels'. With index_id: {'index': {...}} with "
+            "the full description of that index."
         ),
         tags=["data", "read-only", "territorial-index", "navigation"],
         agent_tier="executor",

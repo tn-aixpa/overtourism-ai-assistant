@@ -9,6 +9,37 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 
+_SUMMARY_MAX_CHARS = 170
+
+
+def _split_label(label: str) -> tuple:
+    """("Pressione turistica - Indice di ricettività") -> (category, name).
+
+    Backend labels are "<Category> - <Name>"; some repeat the category
+    ("Flussi - Flussi - Quota ..."), so the name is always the LAST part."""
+    parts = [part.strip() for part in (label or "").split(" - ") if part.strip()]
+    if len(parts) >= 2:
+        return parts[0], parts[-1]
+    return "Altri indici", (parts[0] if parts else "")
+
+
+def _short_summary(description: str, max_chars: int = _SUMMARY_MAX_CHARS) -> str:
+    """First sentence of a (markdown) description, cut at a word boundary."""
+    text = " ".join((description or "").replace("**", "").split())
+    first = text.split(". ")[0].strip()
+    if len(first) > max_chars:
+        first = first[:max_chars].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return first
+
+
+def _years_text(years_range: dict) -> str:
+    low = (years_range or {}).get("min_year")
+    high = (years_range or {}).get("max_year")
+    if low is None and high is None:
+        return ""
+    return str(low) if low == high else f"{low}-{high}"
+
+
 def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str, Any]:
     """Execute get_territorial_index_list tool.
 
@@ -18,6 +49,13 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
     authoritative source for "what indices exist"; the glossary
     (lookup_glossary) only covers the static Territorial Index framework
     vocabulary, not the concrete, ever-changing list of indexes themselves.
+
+    The backend descriptions are several hundred words each (24 indexes do
+    not fit in a prompt), and cutting the list mid-way made the assistant
+    answer with a "partial summary". So the DEFAULT result is compact but
+    COMPLETE — every index of every category with a one-sentence summary —
+    and the full description of ONE index is returned on request
+    (index_id).
     """
     from app.tools.executor_backend_tools import get_territorial_index_list
 
@@ -30,7 +68,63 @@ def execute_get_territorial_index_list(state: AgentState, **kwargs) -> Dict[str,
         indicators = result
         additional_labels = []
 
-    return {"indexes": indicators, "additional_labels": additional_labels}
+    requested_id = kwargs.get("index_id")
+    if requested_id:
+        for item in list(indicators) + list(additional_labels):
+            if item.get("index_id") == requested_id:
+                category, name = _split_label(item.get("label", ""))
+                return {
+                    "index": {
+                        **item,
+                        "category": category,
+                        "name": name,
+                    }
+                }
+        return {
+            "success": False,
+            "error": f"No territorial index with index_id '{requested_id}'.",
+            "available_index_ids": [i.get("index_id") for i in indicators]
+            + [i.get("index_id") for i in additional_labels],
+        }
+
+    compact = []
+    category_counts: Dict[str, int] = {}
+    for item in indicators:
+        category, name = _split_label(item.get("label", ""))
+        category_counts[category] = category_counts.get(category, 0) + 1
+        compact.append(
+            {
+                "index_id": item.get("index_id"),
+                "category": category,
+                "name": name,
+                "unit": item.get("value_unit_description", ""),
+                "years": _years_text(item.get("years_range", {})),
+                "available_for_variation": item.get("available_for_variation", False),
+                "summary": _short_summary(item.get("description", "")),
+            }
+        )
+
+    return {
+        "total_indexes": len(compact),
+        "categories": [
+            {"category": cat, "index_count": count}
+            for cat, count in category_counts.items()
+        ],
+        "indexes": compact,
+        "additional_labels": [
+            {
+                "index_id": item.get("index_id"),
+                "label": item.get("label"),
+                "summary": _short_summary(item.get("description", "")),
+            }
+            for item in additional_labels
+        ],
+        "note": (
+            "This list is COMPLETE: it contains every available index of every "
+            "category. Descriptions are shortened; call again with index_id "
+            "for the full description, sources and method of one index."
+        ),
+    }
 
 
 def _extract_map_entries(features: list, *, round_values: bool = True) -> list:
