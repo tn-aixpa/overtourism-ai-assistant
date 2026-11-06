@@ -107,6 +107,18 @@ UNIVERSAL_POST: List[Block] = [
         "silently presenting a partial list as complete.",
     ),
     (
+        "BARE NUMBERS AND ANSWERS TO YOUR OWN QUESTIONS",
+        "A reply that is only a number (\"2\") answers ONLY a numbered list that "
+        "YOUR previous message displayed (e.g. the territory options). Never map "
+        "it to the position of an entity in a tool result (the 2nd scenario, the "
+        "2nd problem...). If the context line says the user's latest message only "
+        "answered the territory question, carry on with the request they had "
+        "already made and do not ask what the answer means. Do not ask "
+        "clarifying questions about details the user already gave (for example "
+        "'only show it, or also analyse it?' after an explicit 'mostrami il "
+        "grafico'): do what was asked.",
+    ),
+    (
         "NEVER CLAIM A FEATURE IS 'NOT IMPLEMENTED'",
         "Never tell the user that a function, feature or comparison 'is not yet "
         "implemented', 'does not exist' or 'is not available', and never say that "
@@ -518,7 +530,10 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "    * Call show_analysis_widget with widget_type='capacity_plot' "
             "ONLY if the user explicitly and specifically asks for the "
             'capacity/sustainability chart (e.g. "mostrami il grafico di '
-            'sostenibilità"). It may be called alone or alongside '
+            'sostenibilità", "mostrami il grafico della capacità di carico"; '
+            "'capacità di carico' as a chart IS this plot of a scenario, not a "
+            "territorial index; with no scenario named, use the one in context "
+            "or ask which scenario). It may be called alone or alongside "
             "analyze_scenario_results, but never for comparisons and never as a "
             "substitute for widget_type='load_plot'.\n\n"
             "    * Call show_analysis_widget with widget_type='kpi_comparison' "

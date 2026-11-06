@@ -3,7 +3,12 @@ import re
 from app.utils.llm import llm_interaction
 from app.utils.knowledge import build_terminology_block
 from app.agent.state import AgentState, AgentTier
-from app.utils.territory import display_territory, territory_switch_note
+from app.utils.territory import (
+    display_territory,
+    effective_user_request,
+    territory_resume_note,
+    territory_switch_note,
+)
 
 # ---------------------------------------------------------------------------
 # ANSWER GENERATION
@@ -229,7 +234,9 @@ def generate_answer(state: AgentState) -> str:
     state.active_agent — see _reasoning_policy.
     """
 
-    question = state.get_last_user_message().content
+    # After the territory question the last message is only the answer ("2");
+    # the question to answer is the request that was pending.
+    question = effective_user_request(state)
     language = state.user_lang
     messages_to_include = state.cognitive.messages_to_include
     additional_instructions = (
@@ -259,9 +266,12 @@ def generate_answer(state: AgentState) -> str:
     recent_user_messages = _recent_user_messages(state)
 
     terminology_block = build_terminology_block(question, formatted_messages)
-    switch_note = territory_switch_note(state)
+    resume_note = territory_resume_note(state)
+    switch_note = " ".join(
+        note for note in (territory_switch_note(state), resume_note) if note
+    )
     switch_block = (
-        f"- **Context (territory) switch.** {switch_note}\n" if switch_note else ""
+        f"- **Territory context.** {switch_note}\n" if switch_note else ""
     )
 
     role_intro = _role_intro(tier)
@@ -296,7 +306,8 @@ The following messages represent the core findings of the answering process so f
 - **Agent Messages are your primary source.** Use Additional Context only when Agent Messages leave a gap that would make the answer incomplete or misleading AND the Additional Context directly fills that gap. Do not use it to rephrase or expand information already in Agent Messages.
 - **Data marked as `additional_data_available_on_specific_request` is hidden by default.** Any field nested under an `additional_data_available_on_specific_request` key (e.g. version, territory, creation/update timestamps, related_subsystem, internal IDs, etc.) must **not** appear in your answer unless the user's current question **explicitly asks for that specific field or for "all details / additional details / full data"**. A generic request like "show me the details of problem X" does **not** count as an explicit request for this hidden data — only include the standard fields (name, description, objective, links, etc.) in that case. Do not proactively surface, hint at, summarize, or count the hidden fields ("there is also some additional data I can show you") unless asked.
 - Never include system information like IDs (e.g. problem_id, proposal_id, scenario_id, index_id in widgets) unless the user explicitly asked for them — these are always excluded regardless of framing.
-{switch_block}- **Never declare a feature "not implemented" or data "not available" on your own.** Only say data is missing if the Agent Messages say so. If something cannot be done, say plainly what can be done instead and offer to do it. Never describe a complete list as a "partial summary" or say items are omitted "for space reasons": if the Agent Messages hold the full list, present all of it (grouped by category when there are categories).
+{switch_block}- **Bare numbers.** A reply that is only a number answers ONLY a numbered list that the assistant's previous message showed. Never read it as the position of an item in some list found in the data (e.g. "2" is not "the second scenario"), and never describe an entity as "point N".
+- **Never declare a feature "not implemented" or data "not available" on your own.** Only say data is missing if the Agent Messages say so. If something cannot be done, say plainly what can be done instead and offer to do it. Never describe a complete list as a "partial summary" or say items are omitted "for space reasons": if the Agent Messages hold the full list, present all of it (grouped by category when there are categories).
 - **Never close the conversation on the user's behalf.** Never write "Interrompiamo qui", "Chiudiamo qui", "Fermiamoci qui" or similar, even if an Agent Message contains it. If the user is frustrated or wants to drop the topic, answer with a brief, professional apology and an open offer of help (e.g. "Mi dispiace per l'inconveniente. Resto a disposizione se hai bisogno di altro."), optionally with one concrete next step.
 - **Terminology.** "Ambito di analisi" and "problema" are the same entity: never present them as two different things or as two separate steps.
 - **Territory names.** Always capitalize the first letter of every territory name (for example, "Molveno" and "Fazzon", never "molveno" or "fazzon").

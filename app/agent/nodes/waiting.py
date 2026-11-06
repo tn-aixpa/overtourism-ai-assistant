@@ -307,6 +307,11 @@ def _handle_territory_wait(state: AgentState):
     if len(matches) == 1:
         state.territory = matches[0]
         logger.info(f"Territory set to '{state.territory}'")
+        state.cognitive.territory_resume = {
+            "request": state.cognitive.territory_pending_request,
+            "answer": user_input,
+            "territory": state.territory,
+        }
         state.cognitive.pending_territory_selection = False
         state.waiting_for = None
         state.user_input = None

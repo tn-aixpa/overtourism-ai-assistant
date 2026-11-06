@@ -394,6 +394,11 @@ def tool_executor_node(state: AgentState) -> Command:
                 return Command(update=state, goto="generate_output_message")
             logger.info(f"Pausing '{tool_name}' to ask which territory to use")
             state.cognitive.pending_territory_selection = True
+            last_message = state.get_last_user_message()
+            if last_message is not None:
+                # Remember what was asked: the next user message will only
+                # be the answer to the territory question.
+                state.cognitive.territory_pending_request = last_message.content
             return Command(update=state, goto="WAIT_USER_INPUT")
 
     if tool_def:

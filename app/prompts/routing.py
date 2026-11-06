@@ -126,6 +126,26 @@ of an index for one or more named municipalities, or which/how many
 municipalities are above or below a given value — belong to index_query,
 even when they refer to what a map shows. For index_methodology, use top_level "indexes".
 
+CHARTS OF A SCENARIO vs. INDEX CHARTS. The capacity chart ("grafico della
+capacità di carico", "grafico di capacità", "capacità di carico" asked as a
+chart, "grafico di sostenibilità", "soglie/vincoli di capacità", "curve di
+carico", "grafico del carico") is a chart of a SCENARIO's simulation result:
+top_level "location", second_level "scenario". There is no territorial index
+called "capacità di carico", so it is NEVER "indexes". Do not route to
+"indexes" merely because the message asks for a "grafico".
+
+AMBIGUOUS WORDS: when a word could belong either to the modelling domain
+(location: scenario results, capacità di carico, carico, sostenibilità,
+vincoli, soglie, grafico, risultati) or to territorial indexes (indexes),
+decide by the NEAREST CONTEXT:
+1. If there is a current route or the recent conversation is about one of the
+   two, stay in it (set "topic_changed" to false).
+2. Otherwise choose modelling ("location") unless the message itself names an
+   index/indicator ("indice", "indicatore", one of the index names),
+   municipalities/macro-areas/the province, or a territorial map/ranking.
+The same holds the other way round: while the conversation is about
+territorial indexes, an ambiguous word or a bare "grafico" stays in "indexes".
+
 In the LOCATION domain, "località", "destinazione", and "territorio"
 refer to the same territorial concept; understand them as synonyms, including
 when the user refers to one specific place. A request asking which localities,

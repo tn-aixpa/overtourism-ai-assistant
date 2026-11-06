@@ -15,7 +15,12 @@ from app.utils.common import (
     truncate_for_prompt,
     _max_chars_for_tool,
 )
-from app.utils.territory import display_territory, territory_switch_note
+from app.utils.territory import (
+    display_territory,
+    effective_user_request,
+    territory_resume_note,
+    territory_switch_note,
+)
 
 # Stable rendering order for domain guideline blocks when more than one
 # applies at once (only happens while a LOCATION second_level isn't
@@ -114,10 +119,13 @@ def react_step(
     aren't mentioned to the model; only routing decides what's in-scope.
     """
 
-    message = (state.get_last_user_message() or "").content
+    last_user_content = (state.get_last_user_message() or "").content
+    # Right after the territory question the last message is only the answer
+    # ("2"); the request to work on is the one that was pending.
+    message = effective_user_request(state)
 
     history = state.get_reasoning_context()
-    if history and history[-1].get("content") == message:
+    if history and history[-1].get("content") == last_user_content:
         history = history[:-1]
     history_block = format_messages(history) if history else "None"
 
@@ -146,6 +154,9 @@ def react_step(
     switch_note = territory_switch_note(state)
     if switch_note:
         territory_line += "\n" + switch_note
+    resume_note = territory_resume_note(state)
+    if resume_note:
+        territory_line += "\n" + resume_note
     # Working memory (this turn's own Thought/Action/Observation history).
     scratchpad_block = _format_scratchpad(state.cognitive.scratchpad)
 

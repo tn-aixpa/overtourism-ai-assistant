@@ -6,6 +6,7 @@ centralise the matching/validation so the tool executor gate, the wait node
 and the API layer all agree on what "admissible" means.
 """
 
+import difflib
 import re
 from typing import List, Optional
 
@@ -25,6 +26,46 @@ def is_valid_territory(state: AgentState, territory: Optional[str]) -> bool:
     return bool(territory) and territory in state.allowed_territories
 
 
+# A typo of a territory name ("Moleno" for Molveno) must resolve like the real
+# name; otherwise the territory stays unset and the user gets asked again
+# right after having confirmed it.
+_FUZZY_MIN_LENGTH = 5
+_FUZZY_MIN_RATIO = 0.84
+
+
+def _name_words(text: str) -> List[str]:
+    return [w for w in re.split(r"\W+", text) if w]
+
+
+def territories_named(text: str, allowed: List[str]) -> List[str]:
+    """Allowed territories named in `text`: whole-word/phrase matches first;
+    only when there are none, close misspellings of a name (single words of
+    5+ letters, similarity >= 0.84, so "Moleno" -> Molveno but "molto" is
+    not). Every distinct match is returned so callers can treat 2+ as
+    ambiguous."""
+    normalized = _norm(text)
+    if not normalized:
+        return []
+    exact = [
+        t for t in allowed if re.search(rf"\b{re.escape(_norm(t))}\b", normalized)
+    ]
+    if exact:
+        return exact
+
+    words = [w for w in _name_words(normalized) if len(w) >= _FUZZY_MIN_LENGTH]
+    fuzzy = []
+    for territory in allowed:
+        candidates = [w for w in _name_words(_norm(territory)) if len(w) >= _FUZZY_MIN_LENGTH]
+        if any(
+            abs(len(word) - len(cand)) <= 2
+            and difflib.SequenceMatcher(None, word, cand).ratio() >= _FUZZY_MIN_RATIO
+            for word in words
+            for cand in candidates
+        ):
+            fuzzy.append(territory)
+    return fuzzy
+
+
 def match_territories(text: str, allowed: List[str]) -> List[str]:
     """Allowed territories mentioned in `text`: a bare 1-based option number
     (matching the order shown in the question), or the territory name as a
@@ -41,11 +82,7 @@ def match_territories(text: str, allowed: List[str]) -> List[str]:
         if 1 <= idx <= len(allowed):
             return [allowed[idx - 1]]
 
-    return [
-        t
-        for t in allowed
-        if re.search(rf"\b{re.escape(_norm(t))}\b", normalized)
-    ]
+    return territories_named(text, allowed)
 
 
 def resolve_territory_if_trivial(state: AgentState) -> bool:
@@ -67,10 +104,7 @@ def resolve_territory_if_trivial(state: AgentState) -> bool:
     if last is not None:
         # By-name match only: a bare number in a fresh message ("3
         # problems") must never be read as a menu choice.
-        text = _norm(last.content)
-        mentioned = [
-            t for t in allowed if re.search(rf"\b{re.escape(_norm(t))}\b", text)
-        ]
+        mentioned = territories_named(last.content, allowed)
         if len(mentioned) == 1:
             state.territory = mentioned[0]
             return True
@@ -95,11 +129,7 @@ def mentioned_territory(state: AgentState) -> Optional[str]:
     last = state.get_last_user_message()
     if last is None:
         return None
-    text = _norm(last.content)
-    mentioned = [
-        t for t in state.allowed_territories
-        if re.search(rf"\b{re.escape(_norm(t))}\b", text)
-    ]
+    mentioned = territories_named(last.content, state.allowed_territories)
     return mentioned[0] if len(mentioned) == 1 else None
 
 
@@ -197,4 +227,32 @@ def territory_switch_note(state: AgentState) -> str:
         f"Earlier in this conversation the territory was switched from "
         f"{previous} to {current} at the user's request: everything before "
         f"that switch concerned {previous}; the current context is {current}."
+    )
+
+
+def effective_user_request(state: AgentState) -> str:
+    """The request the agent is working on. Normally the user's last message;
+    but right after the user answered the territory question ("2") that
+    message only carries the answer, and the request to carry on with is the
+    one that was pending when the question was asked. Without this the model
+    treats "2" as a new request (or as a pick from some list in the data)."""
+    resume = state.cognitive.territory_resume
+    if resume and resume.get("request"):
+        return resume["request"]
+    last = state.get_last_user_message()
+    return last.content if last is not None else ""
+
+
+def territory_resume_note(state: AgentState) -> str:
+    """Prompt text for the turn that resumes after the territory question."""
+    resume = state.cognitive.territory_resume
+    if not resume or not resume.get("request"):
+        return ""
+    return (
+        f"The user's latest message (\"{resume.get('answer', '')}\") ONLY answered "
+        f"the territory question: the territory is now "
+        f"{display_territory(resume.get('territory', state.territory))}. It is not "
+        f"a new request and not a choice from any other list. Carry on with the "
+        f"request they made before: \"{resume['request']}\". Do not ask what the "
+        f"answer means and do not ask for details they already gave in that request."
     )

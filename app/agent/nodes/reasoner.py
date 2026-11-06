@@ -99,6 +99,9 @@ def initialize_tools(state: AgentState) -> Command:
     # but the user may now be asking about another one ("e a Fazzon?"):
     # switch, and drop the old territory's results/caches so the reasoner
     # queries the new territory instead of reusing the previous lists.
+    # A new turn starts: the territory answer of the previous one is consumed.
+    state.cognitive.territory_resume = None
+    state.cognitive.territory_pending_request = ""
     if state.cognitive.territory_switch:
         state.cognitive.territory_switch["this_turn"] = False
     previous_territory = switch_territory_if_requested(state)

@@ -283,6 +283,12 @@ class CognitiveState:
     # itself is kept so later clarifications ("we were on Molveno") stay
     # accurate.
     territory_switch: Optional[Dict[str, Any]] = None
+    # Territory question flow: the request that was pending when the question
+    # was asked, and — for the turn that resumes after the answer — what was
+    # answered ({"request", "answer", "territory"}). See
+    # app.utils.territory.effective_user_request.
+    territory_pending_request: str = ""
+    territory_resume: Optional[Dict[str, str]] = None
 
     def prune_context_cache(self) -> None:
         """Drop cached objects that are no longer part of current_context.
