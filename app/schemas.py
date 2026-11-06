@@ -34,8 +34,14 @@ class RunSelectedToolsRequest(BaseModel):
       session (see create_temp_scenario); when present,
       get_context_details fetches that temporary evaluation data directly
       and folds its resolved scenario id into current_context["scenarios"].
-    - "pdf-report": runs get_context_details -> report_generation, seeded
-      the same way via `current_context` (without "temp" support).
+    - "pdf-report": runs report_generation and returns {"report": {...}}, a
+      localized structured document the frontend renders and prints to PDF
+      (shape in app.utils.report_document). `current_context` decides the
+      content, most specific entity first: scenarios -> detailed scenario
+      report with plots; else proposals -> the proposals and their scenarios;
+      else problems -> the problems with their proposals and scenarios; empty
+      or omitted -> every problem of the territory. `user_lang` selects the
+      report language. No "temp" support.
 
     `steps` is currently unused by the route (each key hardcodes its own
     step sequence) and is reserved for a future explicit/arbitrary
@@ -44,6 +50,7 @@ class RunSelectedToolsRequest(BaseModel):
 
     key: Literal["summary", "pdf-report"]
     steps: list[ToolStep] = Field(default_factory=list)
+    user_lang: Literal["Italian", "English"] = "Italian"
     # Values are normally id lists (e.g. "scenarios": ["id1", "id2"]), but
     # "temp" (only meaningful for key == "summary") holds a nested
     # {"creation_session": ..., "evaluation_id": ...} dict — see

@@ -233,8 +233,7 @@ def create_summary_generation_tool() -> ToolDefinition:
 
 
 def create_report_generation_tool() -> ToolDefinition:
-    """Internal-only tool that renders a full PDF report (chapters for the
-    given problems/proposals/scenarios, plus a conclusion when appropriate).
+    """Internal-only tool that builds the structured document of a report.
 
     `enabled=False` for the same reason as create_summary_generation_tool:
     it's only meant to be invoked explicitly via the /agent/tool
@@ -244,21 +243,24 @@ def create_report_generation_tool() -> ToolDefinition:
     return ToolDefinition(
         name="report_generation",
         description=(
-            "Generate a full PDF report covering one or more problems, "
-            "proposals and/or scenarios."
+            "Build a localized, assistant-written report (problems, proposals "
+            "and scenarios) that the frontend renders and prints to PDF."
         ),
         category=ToolCategory.INTERACTION,
         long_description=(
-            "Uses the data already retrieved for the given problem(s), "
-            "proposal(s) and/or scenario(s) (fetching it if not already "
-            "cached) to write a structured report — an introduction, one "
-            "chapter per problem, one per proposal, a chapter with each "
-            "scenario's description and evaluation results, and (unless "
-            "the report is just a single standalone scenario) a "
-            "Conclusion chapter summarizing the document — and renders it "
-            "to a PDF file on disk. Internal tool, not exposed to the "
-            "general ReAct tool selection — invoke it directly via the "
-            "/agent/tool 'pdf-report' pipeline."
+            "Builds a localized report document for the given context, most specific "
+            "entity first: scenarios -> detailed report of those scenarios "
+            "(changes vs. the base scenario, evaluation narrative, plots); "
+            "proposals -> each proposal with its scenarios; problems -> each "
+            "problem with its proposals and their scenarios; empty context -> "
+            "every problem of the territory with its proposals and scenarios. "
+            "Scenarios outside the detailed report appear with their "
+            "description only (no evaluations). The base scenario is "
+            "associated with every proposal, so it is never repeated under "
+            "each one; only the whole-territory report describes it, once, "
+            "at the start. "
+            "Internal tool, not exposed to the general ReAct tool selection "
+            "- invoke it directly via the /agent/tool 'pdf-report' pipeline."
         ),
         parameters=[
             ToolParameter(
@@ -266,15 +268,16 @@ def create_report_generation_tool() -> ToolDefinition:
                 description=(
                     "problems/proposals/scenarios ids to include in the report. "
                     "If omitted, falls back to the ids already resolved in "
-                    "current_context."
+                    "current_context; if that is empty too, the report covers "
+                    "the whole territory."
                 ),
                 type="object",
                 required=False,
             ),
         ],
         output_description=(
-            "Confirmation that the report was generated, plus the path to "
-            "the rendered PDF file."
+            "{'success': True, 'message': ..., 'report': <report document>} - "
+            "see app.utils.report_document for the document shape."
         ),
         enabled=False,
         tags=["interaction", "read-only", "internal"],

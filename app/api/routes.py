@@ -509,11 +509,6 @@ async def run_selected_tools(
             status_code=400,
             detail="scenario_ids is required when key == 'summary'",
         )
-    if body.key == "pdf-report" and not body.current_context:
-        raise HTTPException(
-            status_code=400,
-            detail="at least one problem, proposal or scenario has to be specified",
-        )
 
     # Stateless, session-less scratch state — intentionally never saved.
     # This pipeline runs outside the normal chat surface entirely — not
@@ -527,8 +522,10 @@ async def run_selected_tools(
         allowed_territories=allowed_territories,
         user_id=user_id,
         user_role=user_role,
-        current_context=body.current_context,
+        # pdf-report accepts an empty context (= whole-territory report).
+        current_context=body.current_context or {},
     )
+    state.user_lang = body.user_lang
     steps = PIPELINE_STEPS[body.key]
 
     # summary_generation / report_generation are disabled in the registry
@@ -558,6 +555,11 @@ async def run_selected_tools(
 
     if not last["success"]:
         raise HTTPException(status_code=500, detail=last["error"])
+
+    if body.key == "pdf-report":
+        # Structured report document; the frontend renders it and prints it
+        # to PDF (see app.utils.report_document for the shape).
+        return {"report": last["output"]["report"]}
 
     return {"message": last["output"]["message"]}
 

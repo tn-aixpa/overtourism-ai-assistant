@@ -1002,12 +1002,37 @@ class TestRunSelectedTools:
         assert [c["tool"] for c in pipeline.calls] == ["get_context_details", "summary_generation"]
         assert all(c["arguments"] == {} for c in pipeline.calls)
 
-    def test_pdf_report_runs_context_then_report(self, client, pipeline):
+    def test_pdf_report_runs_report_and_returns_the_document(self, client, pipeline):
+        pipeline.outcomes["report_generation"] = {
+            "success": True,
+            "output": {"report": {"title": "Localized report"}},
+            "error": None,
+        }
+
         r = self.run(client, {"key": "pdf-report", "current_context": {"problems": ["p1"]}})
 
         assert r.status_code == 200
-        assert r.json() == {"message": "report_generation-output"}
-        assert [c["tool"] for c in pipeline.calls] == ["get_context_details", "report_generation"]
+        assert r.json() == {"report": {"title": "Localized report"}}
+        assert [c["tool"] for c in pipeline.calls] == ["report_generation"]
+
+    def test_report_language_is_forwarded_to_the_system_state(self, client, pipeline):
+        pipeline.outcomes["report_generation"] = {
+            "success": True,
+            "output": {"report": {"title": "Localized report"}},
+            "error": None,
+        }
+
+        r = self.run(
+            client,
+            {
+                "key": "pdf-report",
+                "current_context": {"problems": ["p1"]},
+                "user_lang": "English",
+            },
+        )
+
+        assert r.status_code == 200
+        assert pipeline.calls[0]["state"].user_lang == "English"
 
     def test_steps_share_one_system_mode_state(self, client, pipeline, api_env):
         self.run(client, {"key": "summary", "current_context": {"scenarios": ["s1"]}})
@@ -1071,7 +1096,7 @@ class TestRunSelectedTools:
         assert r.json()["detail"] == "LLM down"
         assert len(pipeline.calls) == 2
 
-    @pytest.mark.parametrize("key", ["summary", "pdf-report"])
+    @pytest.mark.parametrize("key", ["summary"])
     @pytest.mark.parametrize("context", [None, {}])
     def test_empty_context_is_400(self, client, pipeline, key, context):
         body = {"key": key}
@@ -1082,6 +1107,21 @@ class TestRunSelectedTools:
 
         assert r.status_code == 400
         assert pipeline.calls == []
+
+    def test_pdf_report_allows_empty_context_for_the_whole_territory(
+        self, client, pipeline
+    ):
+        pipeline.outcomes["report_generation"] = {
+            "success": True,
+            "output": {"report": {"title": "Territory report"}},
+            "error": None,
+        }
+
+        r = self.run(client, {"key": "pdf-report"})
+
+        assert r.status_code == 200
+        assert r.json() == {"report": {"title": "Territory report"}}
+        assert [call["tool"] for call in pipeline.calls] == ["report_generation"]
 
     def test_unknown_key_is_422(self, client, pipeline):
         r = self.run(client, {"key": "delete-everything", "current_context": {"a": ["b"]}})

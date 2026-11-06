@@ -282,208 +282,196 @@ def execute_summary_generation(
     }
 
 
-def _entity_label(state: AgentState, kind: str, obj_id: str) -> str:
-    """Look up an object's display name in context_cache (falls back to its
-    raw id), generalizing _scenario_label above to problems/proposals too."""
-    cached = state.cognitive.context_cache.get(f"{kind} {obj_id}", {})
-    return cached.get("name") or obj_id
+def _scenario_plots(state: AgentState, scenario_ids: list) -> Dict[str, Any]:
+    """Plot widgets for the report, in the SAME shape the chat already sends
+    to the frontend ({"widgetName", "data"} = the payload of a SHOW_WIDGET
+    action), so the frontend renders them with the widgets it already has.
 
+    Per scenario: loadPlot + capacityPlot. With exactly two scenarios also the
+    two comparison widgets (indexComparison, histogramComparison), which are
+    defined for a pair. One failing plot never fails the report: it is
+    reported in "plots_unavailable" instead.
+    """
+    from app.tools.executors.analysis_widgets import execute_analysis_widget
 
-def _index_report_entries(entries: list) -> Dict[str, Any]:
-    """Index a list of {"id": ..., ...} chapter dicts from generate_report's
-    output by id, tolerating a missing/duplicate/non-dict entry from the LLM
-    response (the caller falls back to an empty chapter for any id that
-    doesn't show up here)."""
+    def widget(widget_type: str, ids: list) -> Dict[str, Any] | None:
+        try:
+            result = execute_analysis_widget(state, widget_type, scenario_ids=ids)
+        except Exception:
+            logger.exception(f"Report: {widget_type} failed for {ids}")
+            return None
+        actions = result.get("assistant_action_data") or []
+        return actions[0].get("payload") if actions else None
+
+    per_scenario: Dict[str, list] = {}
+    unavailable: list = []
+    for sid in scenario_ids:
+        plots = []
+        for widget_type in ("load_plot", "capacity_plot"):
+            payload = widget(widget_type, [sid])
+            if payload:
+                plots.append(payload)
+            else:
+                unavailable.append({"scenario_id": sid, "plot": widget_type})
+        per_scenario[sid] = plots
+
+    comparisons = []
+    if len(scenario_ids) == 2:
+        for widget_type in ("kpi_comparison", "comparison_plot"):
+            payload = widget(widget_type, list(scenario_ids))
+            if payload:
+                comparisons.append(payload)
+            else:
+                unavailable.append({"scenario_ids": scenario_ids, "plot": widget_type})
+
     return {
-        entry["id"]: entry
-        for entry in entries
-        if isinstance(entry, dict) and entry.get("id")
+        "per_scenario": per_scenario,
+        "comparisons": comparisons,
+        "unavailable": unavailable,
     }
 
 
-def _escape_for_pdf(text: str) -> str:
-    """Escape the handful of characters reportlab's Paragraph mini-markup
-    treats specially, so stray '<', '>', '&' in LLM-generated text can't be
-    misread as (or break) markup."""
-    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _report_nodes(document: Dict[str, Any]) -> list:
+    nodes = []
+
+    def visit(node: Dict[str, Any]) -> None:
+        nodes.append(node)
+        for child in node.get("children") or []:
+            visit(child)
+
+    if document.get("base_scenario"):
+        visit(document["base_scenario"])
+    for node in document.get("sections") or []:
+        visit(node)
+    for node in document.get("unassigned_scenarios") or []:
+        visit(node)
+    return nodes
 
 
-def _build_report_pdf(
-    state: AgentState, current_context: dict, content: Dict[str, Any]
-) -> str:
-    """Render the structured content produced by generate_report into an
-    actual PDF document on disk and return its path.
+def _add_report_content(state: AgentState, document: Dict[str, Any]) -> None:
+    """Localize and write all report prose with the assistant, then add charts."""
+    scenario_ids = [
+        node["id"] for node in _report_nodes(document) if node.get("type") == "scenario"
+    ]
+    if document["report_type"] == "scenarios" and scenario_ids:
+        _ensure_data_cached(state, {"scenarios": scenario_ids})
 
-    The document's structure (chapter order, headings, whether a chapter
-    exists at all) comes entirely from `current_context` and the object
-    names already in context_cache — never from the LLM's output — so an
-    incomplete or oddly-shaped model response can only leave a chapter's
-    body thin, never break the document's layout.
-    """
-    import os
-    import tempfile
-    import uuid
-
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import cm
-    from reportlab.platypus import (
-        ListFlowable,
-        ListItem,
-        Paragraph,
-        SimpleDocTemplate,
-        Spacer,
+    glossary_result = execute_lookup_glossary(
+        state,
+        query="sustainability, uncertainty, capacity, tourism, problem, proposal, scenario",
     )
-
-    problem_ids = current_context.get("problems", []) or []
-    proposal_ids = current_context.get("proposals", []) or []
-    scenario_ids = current_context.get("scenarios", []) or []
-
-    styles = getSampleStyleSheet()
-    body_style = styles["BodyText"]
-    chapter_style = ParagraphStyle(
-        "ReportChapter", parent=styles["Heading1"], spaceBefore=18, spaceAfter=10
+    glossary_matches = (
+        glossary_result.get("matches", []) if glossary_result.get("success") else []
     )
-    section_style = ParagraphStyle(
-        "ReportSection", parent=styles["Heading2"], spaceBefore=12, spaceAfter=6
-    )
+    content = generate_report(state, document, glossary_matches)
+    entries = content.get("nodes") or {}
+    missing_ids = [
+        node["id"]
+        for node in _report_nodes(document)
+        if not entries.get(node["id"], {}).get("title")
+        or not entries.get(node["id"], {}).get("narrative")
+    ]
+    if missing_ids:
+        raise RuntimeError(
+            "The assistant did not generate complete report content for: "
+            + ", ".join(missing_ids)
+        )
+    if not content.get("title") or not content.get("territory_label"):
+        raise RuntimeError("The assistant returned an incomplete report title")
+    if _report_nodes(document) and (
+        not content.get("introduction") or not content.get("conclusion")
+    ):
+        raise RuntimeError("The assistant returned incomplete report prose")
 
-    def _paragraphs(text: str) -> list:
-        blocks = [b.strip() for b in (text or "").split("\n\n") if b.strip()]
-        if not blocks:
-            return [Paragraph("No content available.", body_style)]
-        return [Paragraph(_escape_for_pdf(b), body_style) for b in blocks]
+    document["title"] = content["title"]
+    document["territory_label"] = content["territory_label"]
+    document["introduction"] = content.get("introduction") or ""
+    document["conclusion"] = content.get("conclusion") or ""
 
-    story: list = []
+    def localize(node: Dict[str, Any]) -> None:
+        entry = entries[node["id"]]
+        node["title"] = entry["title"]
+        node["narrative"] = entry["narrative"]
+        for key in (
+            "description",
+            "objective",
+            "status",
+            "context",
+            "impact",
+            "problem",
+            "changes",
+            "proposals",
+            "constraints",
+        ):
+            node.pop(key, None)
+        for child in node.get("children") or []:
+            localize(child)
 
-    entities = problem_ids + proposal_ids + scenario_ids
-    if len(entities) == 1 and scenario_ids:
-        title_text = _entity_label(state, "scenarios", scenario_ids[0])
-    elif len(entities) == 1 and problem_ids:
-        title_text = _entity_label(state, "problems", problem_ids[0])
-    elif len(entities) == 1 and proposal_ids:
-        title_text = _entity_label(state, "proposals", proposal_ids[0])
-    else:
-        title_text = "Report"
+    roots = []
+    if document.get("base_scenario"):
+        roots.append(document["base_scenario"])
+    roots.extend(document.get("sections") or [])
+    roots.extend(document.get("unassigned_scenarios") or [])
+    for node in roots:
+        localize(node)
 
-    story.append(Paragraph(_escape_for_pdf(title_text), styles["Title"]))
-    story.append(Spacer(1, 0.6 * cm))
-
-    if content.get("introduction"):
-        story.extend(_paragraphs(content["introduction"]))
-        story.append(Spacer(1, 0.4 * cm))
-
-    if problem_ids:
-        by_id = _index_report_entries(content.get("problems", []))
-        for problem_id in problem_ids:
-            entry = by_id.get(problem_id, {})
-            story.append(
-                Paragraph(
-                    _escape_for_pdf(_entity_label(state, "problems", problem_id)),
-                    chapter_style,
-                )
-            )
-            story.extend(_paragraphs(entry.get("text", "")))
-
-    if proposal_ids:
-        by_id = _index_report_entries(content.get("proposals", []))
-        for proposal_id in proposal_ids:
-            entry = by_id.get(proposal_id, {})
-            story.append(
-                Paragraph(
-                    _escape_for_pdf(_entity_label(state, "proposals", proposal_id)),
-                    chapter_style,
-                )
-            )
-            story.extend(_paragraphs(entry.get("text", "")))
-
-    if scenario_ids:
-        by_id = _index_report_entries(content.get("scenarios", []))
-        story.append(Paragraph("Scenarios", chapter_style))
-        for scenario_id in scenario_ids:
-            entry = by_id.get(scenario_id, {})
-            story.append(
-                Paragraph(
-                    _escape_for_pdf(_entity_label(state, "scenarios", scenario_id)),
-                    section_style,
-                )
-            )
-            story.extend(_paragraphs(entry.get("narrative", "")))
-
-            constraints = entry.get("constraints") or []
-            items = []
-            for constraint in constraints:
-                if not isinstance(constraint, dict):
-                    continue
-                name = _escape_for_pdf(str(constraint.get("name", "")).strip())
-                detail = _escape_for_pdf(str(constraint.get("detail", "")).strip())
-                label = f"<b>{name}</b>: {detail}" if name else detail
-                if label:
-                    items.append(ListItem(Paragraph(label, body_style)))
-            if items:
-                story.append(ListFlowable(items, bulletType="bullet", leftIndent=18))
-                story.append(Spacer(1, 0.3 * cm))
-
-    if content.get("conclusion"):
-        story.append(Paragraph("Conclusion", chapter_style))
-        story.extend(_paragraphs(content["conclusion"]))
-
-    reports_dir = os.path.join(tempfile.gettempdir(), "digital_twin_reports")
-    os.makedirs(reports_dir, exist_ok=True)
-    filename = f"report_{state.session_id or 'session'}_{uuid.uuid4().hex[:8]}.pdf"
-    pdf_path = os.path.join(reports_dir, filename)
-
-    doc = SimpleDocTemplate(
-        pdf_path,
-        pagesize=A4,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
-        topMargin=2 * cm,
-        bottomMargin=2 * cm,
-        title=title_text,
-    )
-    doc.build(story)
-
-    return pdf_path
+    if document["report_type"] == "scenarios":
+        plots = _scenario_plots(state, scenario_ids)
+        for node in document["sections"]:
+            node["plots"] = plots["per_scenario"].get(node["id"], [])
+        document["comparisons"] = plots["comparisons"]
+        if plots["unavailable"]:
+            document["plots_unavailable"] = plots["unavailable"]
+            document["warnings"].append("Some plots could not be retrieved")
 
 
 def execute_report_generation(
     state: AgentState, current_context: dict | None = None, **kwargs
 ) -> Dict[str, Any]:
-    current_context = current_context or state.cognitive.current_context
+    """Build the structured report document (see app.utils.report_document).
 
-    problem_ids = (current_context or {}).get("problems", []) or []
-    proposal_ids = (current_context or {}).get("proposals", []) or []
-    scenario_ids = (current_context or {}).get("scenarios", []) or []
-    if not (problem_ids or proposal_ids or scenario_ids):
-        raise ValueError(
-            "No problem, proposal or scenario ids available for report_generation"
-        )
+    Works for an EMPTY context too (whole-territory report). The frontend
+    renders the document and prints it to PDF; nothing is rendered or stored
+    on the server.
+    """
+    from app.tools.executor_backend_tools import _safe_base_scenario_id
+    from app.utils.backend_utils import get_data
+    from app.utils.report_document import build_report_document
+    from app.utils.territory import display_territory
 
-    _ensure_data_cached(state, current_context)
+    if current_context is None:
+        current_context = state.cognitive.current_context
+    current_context = current_context or {}
+    territory = state.territory
 
-    # Pull glossary definitions for the concepts the report needs to explain.
-    glossary_result = execute_lookup_glossary(
-        state,
-        query="constraint capacity, sustainability, uncertainty",
+    # Human labels/units of the parameters a scenario changes. Failing soft:
+    # without them the changes fall back to the raw parameter names.
+    config_indexes: list = []
+    try:
+        from app.tools.executor_backend_tools import get_widgets
+        from app.utils.configuration_parameters import load_indexes
+
+        config_indexes = load_indexes(get_widgets.invoke({"territory": territory}))
+    except Exception:
+        logger.exception("Report: could not load the parameter labels")
+
+    document = build_report_document(
+        territory=territory,
+        territory_label=display_territory(territory),
+        current_context=current_context,
+        problems=get_data(f"{territory}/problems"),
+        proposals=get_data(f"{territory}/proposals"),
+        scenarios=get_data(f"{territory}/scenarios"),
+        base_scenario_id=_safe_base_scenario_id(territory),
+        config_indexes=config_indexes,
     )
-    glossary_matches = (
-        glossary_result.get("matches", []) if glossary_result.get("success") else []
+    _add_report_content(state, document)
+
+    logger.info(
+        f"Report built: type={document['report_type']}, "
+        f"sections={len(document['sections'])}"
     )
-
-    content = generate_report(state, current_context, glossary_matches)
-    pdf_path = _build_report_pdf(state, current_context, content)
-    logger.info(f"Report PDF generated at: {pdf_path}")
-
-    return {
-        "success": True,
-        "message": "Report generated",
-        # Not yet exposed to the frontend — the file just lives on disk for
-        # now (see _build_report_pdf); wire this into the response/route
-        # once it's decided how the PDF should reach the client (download
-        # link, base64, upload to storage, ...).
-        "report_path": pdf_path,
-    }
+    return {"success": True, "message": "Report generated", "report": document}
 
 
 EXECUTORS = {

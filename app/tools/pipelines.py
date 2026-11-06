@@ -23,8 +23,11 @@ SUMMARY_STEPS: Sequence[Dict[str, Any]] = (
     {"tool_name": "get_context_details", "arguments": {}},
     {"tool_name": "summary_generation", "arguments": {}},
 )
+# report_generation fetches exactly what its kind of report needs (an empty
+# context means "the whole territory"), so there is no get_context_details step
+# before it: that would fetch evaluations for every entity, which only the
+# detailed scenario report uses.
 PDF_REPORT_STEPS: Sequence[Dict[str, Any]] = (
-    {"tool_name": "get_context_details", "arguments": {}},
     {"tool_name": "report_generation", "arguments": {}},
 )
 PIPELINE_STEPS: Mapping[str, Sequence[Dict[str, Any]]] = {
