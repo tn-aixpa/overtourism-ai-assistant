@@ -49,6 +49,7 @@ PROTECTED = [
     ("get", "/agent/session/s", {}),
     ("get", "/agent/turns/t", {}),
     ("get", "/agent/turns/t/events", {}),
+    ("post", "/agent/context", {"data": {"session_id": "s", "page_context": "{}"}}),
     ("post", "/agent/reset", {"data": {"session_id": "s"}}),
     ("post", "/agent/feedback", {"params": {"session_id": "s", "message_index": 0}}),
     ("post", "/agent/tool", {"params": {"territory": "t"}, "json": {"key": "summary"}}),

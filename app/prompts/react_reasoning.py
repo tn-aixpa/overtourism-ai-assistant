@@ -9,6 +9,7 @@ from app.prompts.react_guidelines import (
     GUIDELINE_BLOCKS,
 )
 from app.utils.llm import llm_interaction, format_messages
+from app.utils.page_context import render_page_context_block
 from app.utils.common import (
     build_prior_results_block,
     condense_for_matching,
@@ -161,6 +162,8 @@ def react_step(
     scratchpad_block = _format_scratchpad(state.cognitive.scratchpad)
 
     guidelines_block = _assemble_guidelines(state)
+    # "" outside integrated mode / without a snapshot: prompt unchanged.
+    page_context_block = render_page_context_block(state, "reasoner")
 
     failed = state.cognitive.last_failed_action
     if failed:
@@ -236,7 +239,7 @@ without acting:
 
 Last FAILED action (retry target):
 {failed_block}
-
+{page_context_block}
 Conversation so far:
 {history_block}
 

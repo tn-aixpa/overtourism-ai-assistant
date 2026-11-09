@@ -29,6 +29,7 @@ from app.agent.memory import (
     remember_state,
     persist_state,
     delete_state,
+    set_page_context,
     _get_lock,
 )
 from app.agent.events import (
@@ -46,6 +47,11 @@ from app.utils.authentication import (
     check_authorization,
 )
 from app.utils.backend_utils import get_allowed_territories
+from app.utils.page_context import (
+    PageContextError,
+    page_context_summary,
+    parse_page_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +140,14 @@ def _apply_context(state: AgentState, context: list[str]) -> None:
         "proposals": _extract("proposal:"),
         "scenarios": _extract("scenario:"),
     }
+
+
+def _parse_page_context_or_http(raw: str) -> dict:
+    """Validate a frontend page snapshot; 413 if too large, 422 if invalid."""
+    try:
+        return parse_page_context(raw)
+    except PageContextError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -240,12 +254,25 @@ async def init_session(
     user_lang: str = Form(default="Italian"),
     integrated_mode: bool = Form(default=False),
     context: list[str] = Form(default=[]),
+    # Integrated mode only: JSON snapshot of the page the user is looking at
+    # (see app.schemas.PageContext). Optional. Like `context`, it is ignored
+    # in standalone mode. Independent of `context` (the business context).
+    page_context: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
 ):
     """Create a session. Everything fixed for the session's lifetime is
     resolved here, once: owner, role, allowed territories, mode, language."""
     token, role, user_id = await _authenticate(authorization)
-    if integrated_mode and not context:
+    # Validate before anything is created: an invalid snapshot fails the call.
+    parsed_page_context = (
+        _parse_page_context_or_http(page_context)
+        if integrated_mode and page_context and page_context.strip()
+        else None
+    )
+    # An integrated session needs something to be integrated with: a business
+    # entity (`context`) or, on pages that have none (e.g. the problems list),
+    # at least the page the user is looking at.
+    if integrated_mode and not context and parsed_page_context is None:
         raise HTTPException(
             status_code=400, detail="Context is required in integrated mode"
         )
@@ -263,12 +290,60 @@ async def init_session(
     )
     if integrated_mode:
         _apply_context(state, context)
+        if parsed_page_context is not None:
+            state.page_context = parsed_page_context
+            state.page_context_version = 1
     await asyncio.to_thread(save_state, state)
 
     return {
         "session_id": session_id,
         "session_mode": state.session_mode,
         "allowed_territories": state.allowed_territories,
+    }
+
+
+@router.post("/agent/context")
+async def update_page_context(
+    session_id: str = Form(...),
+    page_context: str = Form(...),  # JSON, see app.schemas.PageContext
+    authorization: str | None = Header(default=None),
+):
+    """Replace the visual page context of an integrated session (called by the
+    frontend on route navigation). Touches nothing but state.page_context: no
+    turn, no LLM call, no change to history, business context, language, role,
+    mode or force_role. Allowed while a turn runs; that turn keeps the snapshot
+    it started with and the new one applies from the next turn."""
+    _, _, user_id = await _authenticate(authorization)
+
+    async with _get_lock(session_id):
+        state = _assert_owner(session_id, user_id)
+        if not state.integrated_mode:
+            raise HTTPException(
+                status_code=400,
+                detail="Page context is only supported in integrated mode",
+            )
+        parsed = _parse_page_context_or_http(page_context)
+        update = set_page_context(session_id, parsed)
+        if update is None:  # reset while we were validating
+            raise HTTPException(status_code=404, detail="Session not found")
+        if update.applied:
+            # Debug dump of the stored object only (never save_state(state):
+            # `state` may already have been replaced by a finishing turn).
+            await asyncio.to_thread(persist_state, update.state)
+            logger.info(
+                f"Page context updated for session {session_id}: "
+                f"{page_context_summary(parsed)} (version {update.version})"
+            )
+        else:
+            logger.info(f"Stale page context ignored for session {session_id}")
+
+    return {
+        "session_id": session_id,
+        "status": "updated" if update.applied else "stale",
+        "applied": update.applied,
+        "revision": update.revision,
+        "version": update.version,
+        "active_turn_id": store.active_turn(session_id),
     }
 
 
@@ -298,6 +373,7 @@ async def run_agent_endpoint(
             state.integrated_mode
             and not context
             and not state.cognitive.current_context
+            and not state.page_context
         ):
             raise HTTPException(
                 status_code=400, detail="Context is required in integrated mode"

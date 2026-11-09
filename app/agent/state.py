@@ -343,6 +343,15 @@ class AgentState:
     territory: str = ""
     integrated_mode: bool = False
     integrated_context: Dict[str, Any] = field(default_factory=dict)
+    # Visual snapshot of the host (Angular) page, integrated mode only. It is
+    # separate from, and never merged into, cognitive.current_context (the
+    # business context: problem/proposal/scenario ids). Validated, normalised
+    # dict (see app.schemas.PageContext), or None. Replaced wholesale by
+    # /agent/init and /agent/context, never mutated field by field.
+    page_context: Optional[Dict[str, Any]] = None
+    # Server-side count of accepted snapshots. Lets a finishing turn tell
+    # whether a newer snapshot arrived while it ran (see memory.remember_state).
+    page_context_version: int = 0
     # Coarse-grained role this session is authenticated as — "admin",
     # "multieditor", "editor", or "viewer" (see app.tools.tool_schema.UserRole). Kept
     # as a plain string rather than importing UserRole here, for the same
@@ -535,6 +544,13 @@ class AgentState:
             if isinstance(value, list):
                 return [omit_retrieved_data(item) for item in value]
             return value
+
+        # Page text may contain what the user typed into forms: never write it
+        # to the debug dump, keep only a content-free summary.
+        if serialized.get("page_context") is not None:
+            from app.utils.page_context import page_context_summary
+
+            serialized["page_context"] = page_context_summary(self.page_context)
 
         # Raw plot payloads are a pure runtime cache; keep only their keys.
         cog = serialized.get("cognitive", {})

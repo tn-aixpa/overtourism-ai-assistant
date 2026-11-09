@@ -2,6 +2,7 @@ import re
 
 from app.utils.llm import llm_interaction
 from app.utils.knowledge import build_terminology_block
+from app.utils.page_context import render_page_context_block
 from app.agent.state import AgentState, AgentTier
 from app.utils.territory import (
     display_territory,
@@ -274,6 +275,8 @@ def generate_answer(state: AgentState) -> str:
         f"- **Territory context.** {switch_note}\n" if switch_note else ""
     )
 
+    page_context_block = render_page_context_block(state, "answer")
+
     role_intro = _role_intro(tier)
     reasoning_policy = _reasoning_policy(tier)
     agent_messages_directive = _agent_messages_directive(tier)
@@ -285,7 +288,7 @@ def generate_answer(state: AgentState) -> str:
 
 ## User's earlier messages (use only to judge their level of expertise)
 {recent_user_messages}
-
+{page_context_block}
 ## Agent Messages
 The following messages represent the core findings of the answering process so far, if any:
 {formatted_messages}
