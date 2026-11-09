@@ -103,6 +103,73 @@ class TestAdditionalTerritorialIndexParams:
             "seasonality": "weekend",
         }
         assert result["map_summary"]["seasonality"] == "weekend"
+        assert result["map_summary"]["flows_present"] is False
+
+    def test_map_executor_forwards_custom_legend_and_flows(self):
+        legend = {
+            "type": "cluster-value",
+            "cluster_property": "cluster stagionale",
+            "clusters": [{"id": 0, "label": "annuale", "color": "#984ea3"}],
+        }
+        flows = {
+            "data": {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": [[11.0, 46.0], [11.1, 46.1]],
+                        },
+                        "properties": {"value": 10, "from_label": "A", "to_label": "B"},
+                    }
+                ],
+            },
+            "max_value": 10,
+            "unit": "visitors",
+            "n_days": 1,
+        }
+        response = {
+            "geo_data": {
+                "data": {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "properties": {
+                                "AREA_NAME": "Molveno",
+                                "INDICE": 1,
+                                "cluster stagionale": 0,
+                            },
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [],
+                            },
+                        }
+                    ],
+                },
+                "min_value": 1,
+                "max_value": 1,
+                "legend": legend,
+            },
+            "flows": flows,
+        }
+
+        with patch.object(backend_tools, "get_data", return_value=response):
+            result = index_executors.execute_show_territorial_index_map(
+                state=None,
+                index_id="stagionalita",
+                start_date="2023-01-01",
+                end_date="2023-12-31",
+            )
+
+        map_summary = result["map_summary"]
+        widget_data = result["assistant_action_data"][0]["payload"]["data"]
+        assert map_summary["custom_legend"] == legend
+        assert map_summary["flows_present"] is True
+        assert "flows" not in map_summary
+        assert widget_data["legend"] == legend
+        assert widget_data["flows"] == flows
 
     def test_value_query_passes_tasso_comparison_to_backend(self):
         response = {

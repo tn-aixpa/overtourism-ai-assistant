@@ -361,7 +361,12 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "the widget — use ONLY those figures if you comment on specific areas "
             "or values; never invent an area name or value that isn't in "
             "map_summary. State the range of the data only from lowest_value / "
-            "highest_value, never from the colour scale of the map.\n\n"
+            "highest_value, never from the colour scale of the map. If "
+            "map_summary includes custom_legend, use its labels and category "
+            "values when explaining the map's custom classification. "
+            "flows_present only confirms whether flow arrows are shown; the "
+            "summary does not contain route-level flow details, so do not infer "
+            "those details from the map.\n\n"
             "  - show_territorial_index_map is disabled outside standalone mode. "
             'This means ONLY: if it appears under "Tools that exist but are NOT '
             'available in this execution mode" below, treat it as genuinely absent '

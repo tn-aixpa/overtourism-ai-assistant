@@ -362,8 +362,19 @@ def execute_show_territorial_index_map(
     features = parsed.get("features", []) if isinstance(parsed, dict) else []
     min_value = geo_data.get("min_value")
     max_value = geo_data.get("max_value")
+    legend = geo_data.get("legend")
+    flows = raw.get("flows") if isinstance(raw, dict) else None
 
-    map_summary = _summarize_map_features(features)
+    flow_features = (
+        (flows.get("data") or {}).get("features", [])
+        if isinstance(flows, dict) and isinstance(flows.get("data"), dict)
+        else []
+    )
+    map_summary = {
+        **({"custom_legend": legend} if legend is not None else {}),
+        "flows_present": bool(flow_features),
+        **_summarize_map_features(features),
+    }
     map_summary.update(
         {
             "index_id": index_id,
@@ -382,6 +393,8 @@ def execute_show_territorial_index_map(
                 "geojsonStr": json.dumps(parsed, ensure_ascii=False),
                 "minValue": min_value,
                 "maxValue": max_value,
+                **({"legend": legend} if legend is not None else {}),
+                **({"flows": flows} if flows is not None else {}),
             },
         },
     }
