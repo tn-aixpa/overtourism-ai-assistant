@@ -17,11 +17,22 @@ from app.agent.nodes import reasoner as reasoner_module
 from app.agent.nodes import router as router_module
 from app.agent.nodes import route_groups
 from app.agent.state import AgentState, ReActStep
-from app.prompts.react_guidelines import GUIDELINE_BLOCKS
+from app.prompts import react_reasoning as react_reasoning_module
+from app.prompts.react_guidelines import GUIDELINE_BLOCKS, UNIVERSAL_POST
+from app.tools.definitions.analysis import (
+    create_get_configuration_parameters_tool,
+    create_get_context_tool,
+)
 from app.tools.definitions.analysis_widgets import create_analysis_widget_tool
-from app.tools.definitions.indexes import create_show_territorial_index_map_tool
+from app.tools.definitions.indexes import (
+    create_get_territorial_index_list_tool,
+    create_query_territorial_index_values_tool,
+    create_show_territorial_index_map_tool,
+    create_show_territorial_index_plot_tool,
+)
 from app.tools.tool_registry import get_tool_registry
 from app.tools.tool_schema import ToolCategory, ToolDefinition, ToolParameter
+from app.utils.page_context import render_page_context_block
 
 
 def register_tool(name, params=None):
@@ -99,6 +110,54 @@ def test_territory_catalog_has_a_direct_no_tool_route():
     )
     for phrase in ("località", "destinations", "territori"):
         assert phrase in territory_guidelines
+
+
+def test_territorial_index_guidelines_do_not_import_modelling_territories():
+    index_guidelines = "\n".join(
+        body
+        for _, body in GUIDELINE_BLOCKS["indexes"]
+    )
+
+    assert "Keep index geography separate from the active modelling/scenario territory" in index_guidelines
+    assert "Do not introduce place names from modelling context" in index_guidelines
+    assert "Molveno" not in index_guidelines
+    assert "Fazzon" not in index_guidelines
+
+
+def test_internal_route_exposes_page_enrichment_tools_but_not_map_widgets():
+    scenario_tools = route_groups.resolve_allowed_tools(
+        route_groups.TOP_LOCATION, route_groups.SUB_SCENARIO
+    )
+    index_tools = route_groups.resolve_allowed_tools(
+        route_groups.TOP_INDEXES, route_groups.SUB_INDEX_QUERY
+    )
+
+    assert {
+        "get_configuration_parameters",
+        "get_context_details",
+    }.issubset(scenario_tools)
+    assert {
+        "get_territorial_index_list",
+        "query_territorial_index_values",
+    }.issubset(index_tools)
+    assert create_get_configuration_parameters_tool().is_allowed_for("viewer", "internal")
+    assert create_get_context_tool().is_allowed_for("viewer", "internal")
+    assert create_get_territorial_index_list_tool().is_allowed_for("viewer", "internal")
+    assert create_query_territorial_index_values_tool().is_allowed_for("viewer", "internal")
+    assert not create_show_territorial_index_map_tool().is_allowed_for("viewer", "internal")
+    assert not create_show_territorial_index_plot_tool().is_allowed_for("viewer", "internal")
+
+
+def test_page_enrichment_fallback_still_asks_when_snapshot_has_no_entities():
+    state = AgentState(integrated_mode=True)
+    state.page_context = {"route": "/scenario", "elements": []}
+
+    rendered = render_page_context_block(state)
+    universal_post = "\n".join(body for _, body in UNIVERSAL_POST)
+
+    assert "(none captured)" in rendered
+    assert "Ask the user only if identifiers are missing" in rendered
+    assert "finish with one short clarifying question" in universal_post
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +558,112 @@ class TestTopicRouter:
 
 
 class TestReactReasonerToolSelection:
+    def test_page_parameter_first_action_uses_snapshot_param_name(self, fresh_state):
+        tool = create_get_configuration_parameters_tool()
+        get_tool_registry().register_tool(tool)
+        fresh_state.integrated_mode = True
+        fresh_state.session_mode = "internal"
+        fresh_state.cognitive.enabled_tools = [tool.name]
+        fresh_state.cognitive.top_level_route = route_groups.TOP_LOCATION
+        fresh_state.cognitive.second_level_route = route_groups.SUB_SCENARIO
+        fresh_state.page_context = {
+            "route": "/problems/p1/proposals/pr1/scenari/s1",
+            "entities": {"scenario_id": "s1", "active_tab": "Parcheggi"},
+            "elements": [{
+                "id": "number-1", "type": "number", "param_name": "parking_users",
+                "value": 2.5,
+            }],
+        }
+        fresh_state.add_user_message("What is this parameter?")
+        response = react_step_response(
+            action="tool",
+            tool_name="get_configuration_parameters",
+            arguments={"names": ["parking_users"]},
+        )
+
+        with patch.object(
+            react_reasoning_module, "llm_interaction", return_value=response
+        ) as llm:
+            result = reasoner_module.react_reasoner_node(fresh_state)
+
+        assert result.goto == "tool_executor"
+        assert fresh_state.cognitive.selected_tool == "get_configuration_parameters"
+        assert fresh_state.cognitive.tool_arguments == {"names": ["parking_users"]}
+        prompt = llm.call_args.args[1]
+        assert "param_name=" in prompt
+        assert "active_tab=" in prompt
+        assert "ENRICH PAGE CONTEXT BEFORE ASKING" in prompt
+
+    def test_page_index_max_first_action_uses_single_highest_ranking_query(
+        self, fresh_state
+    ):
+        tool = create_query_territorial_index_values_tool()
+        get_tool_registry().register_tool(tool)
+        fresh_state.integrated_mode = True
+        fresh_state.session_mode = "internal"
+        fresh_state.cognitive.enabled_tools = [tool.name]
+        fresh_state.cognitive.top_level_route = route_groups.TOP_INDEXES
+        fresh_state.cognitive.second_level_route = route_groups.SUB_INDEX_QUERY
+        fresh_state.page_context = {
+            "route": "/indici",
+            "entities": {
+                "index_id": "tourism-index",
+                "start_date": "2023-01-01",
+                "end_date": "2023-12-31",
+            },
+            "elements": [],
+        }
+        fresh_state.add_user_message("What is the max?")
+        response = react_step_response(
+            action="tool",
+            tool_name="query_territorial_index_values",
+            arguments={
+                "index_id": "tourism-index",
+                "start_date": "2023-01-01",
+                "end_date": "2023-12-31",
+                "query_type": "ranking",
+                "ranking_order": "highest",
+                "top_n": 1,
+            },
+        )
+
+        with patch.object(
+            react_reasoning_module, "llm_interaction", return_value=response
+        ) as llm:
+            result = reasoner_module.react_reasoner_node(fresh_state)
+
+        assert result.goto == "tool_executor"
+        assert fresh_state.cognitive.selected_tool == "query_territorial_index_values"
+        assert fresh_state.cognitive.tool_arguments["query_type"] == "ranking"
+        assert fresh_state.cognitive.tool_arguments["ranking_order"] == "highest"
+        assert fresh_state.cognitive.tool_arguments["top_n"] == 1
+        assert "index_id=" in llm.call_args.args[1]
+
+    def test_page_snapshot_without_entities_keeps_clarification_behavior(
+        self, fresh_state
+    ):
+        register_tool("get_configuration_parameters")
+        fresh_state.integrated_mode = True
+        fresh_state.session_mode = "internal"
+        fresh_state.cognitive.enabled_tools = ["get_configuration_parameters"]
+        fresh_state.page_context = {
+            "route": "/scenario",
+            "elements": [{"id": "number-1", "type": "number", "value": 2.5}],
+        }
+        fresh_state.add_user_message("What is this parameter?")
+        response = react_step_response(
+            action="finish", message="Which parameter do you mean?"
+        )
+
+        with patch.object(
+            react_reasoning_module, "llm_interaction", return_value=response
+        ) as llm:
+            result = reasoner_module.react_reasoner_node(fresh_state)
+
+        assert result.goto == "generate_output_message"
+        assert fresh_state.cognitive.messages_to_include == ["Which parameter do you mean?"]
+        assert "(none captured)" in llm.call_args.args[1]
+
     def test_reports_role_and_mode_restrictions_separately(
         self, fresh_state: AgentState
     ):

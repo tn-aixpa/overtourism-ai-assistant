@@ -91,8 +91,20 @@ UNIVERSAL_PRE: List[Block] = [
 # guideline above has decided what to do.
 UNIVERSAL_POST: List[Block] = [
     (
+        "ENRICH PAGE CONTEXT BEFORE ASKING",
+        "If the integrated page snapshot contains identifiers relevant to the "
+        "user's question, do not immediately finish with a clarifying question. "
+        "First use the corresponding available data tool: "
+        "get_configuration_parameters for a shown parameter and "
+        "query_territorial_index_values for a shown index and period. For a "
+        "maximum/minimum use query_type='ranking', ranking_order='highest'/'lowest', "
+        "and top_n=1. Ask only if the necessary identifier or period is genuinely "
+        "missing, or the available tool result cannot resolve the question.",
+    ),
+    (
         "NOTHING ABOVE APPLIED",
-        "Finish with a clarifying question.",
+        "If no available tool or existing context can answer the request, finish "
+        "with one short clarifying question.",
     ),
     (
         "GROUNDING",
@@ -246,17 +258,18 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "  - For the full description, sources or method of ONE index, call "
             "get_territorial_index_list again with its index_id instead of "
             "answering from the one-sentence summary.\n\n"
-            "  - Territorial indexes cover all the municipalities, independently of "
-            "the active territory (Molveno, Fazzon...). Naming a municipality in an "
-            "index question (e.g. 'l'indice di ricettività di Molveno') is NOT a "
-            "request to change context: answer it without announcing or "
-            "performing any context change.",
+            "  - Keep index geography separate from the active modelling/scenario "
+            "territory. When explaining a map, state only the scope shown by the "
+            "page or returned index data; do not ask whether the user means a "
+            "whole region or a specific locality unless their request requires a "
+            "specific area and it is genuinely missing. Do not introduce place "
+            "names from modelling context.",
         ),
         (
             "NUMERIC QUESTIONS ABOUT A TERRITORIAL INDEX",
             "If the user asks for the VALUE of a territorial index for one or more "
-            'named municipalities (e.g. "qual è la ricettività a Molveno e Trento '
-            'nel 2023?"), or which municipalities — or how many — have an index '
+            'named municipalities (e.g. "qual è la ricettività in un comune '
+            'specifico nel 2023?"), or which municipalities — or how many — have an index '
             'above/below a given value (e.g. "quali comuni hanno turisticità '
             'superiore a 0.5?", "quanti comuni sono sotto 0.2?"), including '
             "questions about what the map shows — call query_territorial_index_values "
@@ -292,6 +305,10 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "use ONLY those two fields (and a ranking query to name the area). "
             "Never quote the colour-scale bounds of the map as data extremes: they "
             "are rounded for display and can differ from the actual values.\n\n"
+            "  - If the integrated page snapshot supplies entities.index_id and "
+            "start_date/end_date for the index being viewed, use those identifiers "
+            "directly and do not ask the user to name the index or period. For a "
+            "maximum or minimum, make one ranking call with top_n=1.\n\n"
             "  - To merely SEE the distribution, use show_territorial_index_map "
             "instead.",
         ),
@@ -299,8 +316,8 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "PLOT A TERRITORIAL INDEX (LINE / BAR CHART)",
             "If the user wants to see how a territorial index varies over time, or "
             'to compare selected areas, as a chart (e.g. "puoi mostrarmi la '
-            'variazione nel tempo?", "mostrami la ricettività a Molveno e '
-            'Trento") — call show_territorial_index_plot. For a geographic '
+            'variazione nel tempo?", "mostrami la ricettività nei comuni '
+            'selezionati") — call show_territorial_index_plot. For a geographic '
             "distribution on the map use show_territorial_index_map instead.\n\n"
             "  - Resolve index_id first via get_territorial_index_list, never guess "
             "it, and convert the period to start_date/end_date exactly as described "
@@ -585,7 +602,12 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "answer 'what can I change?'. Skip the call if those parameters' "
             "records (name, kind, current, allowed) are already in this turn's "
             "observations or prior results. Users usually use the Italian "
-            "label, never the technical name.\n"
+            "label, never the technical name. For a question about parameters "
+            "already shown on the integrated page, use `param_name` as `names`; "
+            "if absent, derive a `search` or `category` from `entities.active_tab`. "
+            "Report the returned label, unit, current value and allowed range, and "
+            "mention any difference between the snapshot value and stored current "
+            "value. Never guess a label.\n"
             "       - Parameters are NOT all numbers. Each record has a `kind` that "
             "decides the value to pass in `values` (keyed by the record's `name`):\n"
             "           * scalar -> a number within allowed min/max.\n"

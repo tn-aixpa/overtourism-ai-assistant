@@ -17,6 +17,7 @@ from app.utils.territory import (
 
 INSTRUCTIONS_FOR_INTEGRATED_MODE = """
 - Keep the answer as short as possible, NEVER include tables and reduce markdown as much as possible.
+- If the page snapshot identifies a parameter or territorial index relevant to the question, rely on the reasoning step to retrieve its stored data before asking the user. Use tool results for labels, units, current values, allowed ranges, and index values; never guess a label or repeat a question that those results settle. Ask one short question only when a necessary identifier/period is absent or the available data cannot answer.
 """
 
 
@@ -313,7 +314,7 @@ The following messages represent the core findings of the answering process so f
 - **Never declare a feature "not implemented" or data "not available" on your own.** Only say data is missing if the Agent Messages say so. If something cannot be done, say plainly what can be done instead and offer to do it. Never describe a complete list as a "partial summary" or say items are omitted "for space reasons": if the Agent Messages hold the full list, present all of it (grouped by category when there are categories).
 - **Never close the conversation on the user's behalf.** Never write "Interrompiamo qui", "Chiudiamo qui", "Fermiamoci qui" or similar, even if an Agent Message contains it. If the user is frustrated or wants to drop the topic, answer with a brief, professional apology and an open offer of help (e.g. "Mi dispiace per l'inconveniente. Resto a disposizione se hai bisogno di altro."), optionally with one concrete next step.
 - **Terminology.** "Ambito di analisi" and "problema" are the same entity: never present them as two different things or as two separate steps.
-- **Territory names.** Always capitalize the first letter of every territory name (for example, "Molveno" and "Fazzon", never "molveno" or "fazzon").
+- **Territory names.** Capitalize territory names supplied by the user or returned by tools; do not introduce place names that are not relevant to the question or sources.
 - **Never expose raw internal identifiers or data-structure syntax.** Agent Messages may contain internal field/parameter names (e.g. `excursionists_parking_percentage`, `tourists_beach_turnover`) or literal Python/JSON snippets (e.g. `{{'excursionists_parking_percentage': 60}}`, `Valori: {{...}}`). Never reproduce these verbatim — always translate them into the natural, human-readable label a person would use, and never show dict/list/JSON syntax (braces, brackets, quotes-around-keys, colons-as-key-value) in your answer.
 - **Try to write entirely in ONE language: {language}.** Do not mix languages anywhere in the answer — no bilingual glosses, parenthetical translations, or original-language labels alongside the translation (e.g. do not write "Parcheggi (parking)" or "Spiaggia (beach)"). If a source term is in a different language than {language}, translate it fully into {language} and use only the translated form.
 - Never say things like "I haven't found messages from agents to answer your question" even if there are no agent messages.
@@ -322,6 +323,7 @@ The following messages represent the core findings of the answering process so f
 {terminology_block}
 - Be concise and directly address the user's question.
 - Never list or enumerate the available territorial indexes (or other catalogue items) unless the user's question explicitly asks for that list; after showing a chart or map, just confirm it and summarise it.
+- **Territorial-index map scope.** Explain the geographic scope shown by the page or index data. Do not borrow the active modelling/scenario territory, ask whether the user means a whole region or a specific locality, or suggest place names unless the user asks for that scope or the page/tool data requires clarification.
 - **Start your response immediately with the answer content.** Do not begin with any heading, label, or prefix such as "Answer:", "## Final Answer", "Chatbot:", or similar.
 {additional_instructions}
 

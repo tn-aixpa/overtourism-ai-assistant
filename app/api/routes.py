@@ -142,6 +142,14 @@ def _apply_context(state: AgentState, context: list[str]) -> None:
     }
 
 
+def _seed_scenario_from_page_context(state: AgentState) -> None:
+    """Use a page's scenario id only when business context has no scenario yet."""
+    scenario_id = (state.page_context or {}).get("entities", {}).get("scenario_id")
+    scenarios = state.cognitive.current_context.setdefault("scenarios", [])
+    if scenario_id and not scenarios:
+        scenarios.append(scenario_id)
+
+
 def _parse_page_context_or_http(raw: str) -> dict:
     """Validate a frontend page snapshot; 413 if too large, 422 if invalid."""
     try:
@@ -293,6 +301,7 @@ async def init_session(
         if parsed_page_context is not None:
             state.page_context = parsed_page_context
             state.page_context_version = 1
+            _seed_scenario_from_page_context(state)
     await asyncio.to_thread(save_state, state)
 
     return {
@@ -327,6 +336,7 @@ async def update_page_context(
         if update is None:  # reset while we were validating
             raise HTTPException(status_code=404, detail="Session not found")
         if update.applied:
+            _seed_scenario_from_page_context(update.state)
             # Debug dump of the stored object only (never save_state(state):
             # `state` may already have been replaced by a finishing turn).
             await asyncio.to_thread(persist_state, update.state)

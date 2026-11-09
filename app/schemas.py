@@ -65,8 +65,9 @@ class RunSelectedToolsRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # A snapshot of the Angular page the user is looking at, sent by the frontend
 # on /agent/init and on every route navigation (/agent/context). It is
-# UNTRUSTED input and is deliberately separate from the business context
-# (AgentState.cognitive.current_context). See docs/integrated-page-context.md.
+# UNTRUSTED input and remains separate from business context
+# (AgentState.cognitive.current_context), except scenario_id may seed an empty
+# scenario context. See docs/integrated-page-context.md.
 #
 # Limits: structural limits (payload bytes, element/option/row/column counts)
 # REJECT the snapshot; per-string length limits TRUNCATE the string, because a
@@ -74,7 +75,7 @@ class RunSelectedToolsRequest(BaseModel):
 # (and with it the assistant's awareness of the page) fail.
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Union
 
 from pydantic import BeforeValidator, field_validator
@@ -159,6 +160,7 @@ class PageElement(BaseModel):
     id: ShortText
     type: PageElementType
     label: Optional[ShortText] = None
+    param_name: Optional[ShortText] = None
     value: Scalar = None  # text typed in, checkbox/switch state, number, ...
     selected: Optional[
         Union[ShortText, Annotated[List[ShortText], Field(max_length=50)]]
@@ -181,6 +183,13 @@ class PageElement(BaseModel):
         ]
     ] = None
     row_count: Optional[int] = Field(default=None, ge=0)  # total, if rows is a sample
+    # type == "chart": what is plotted, without the plotted data.
+    chart_type: Optional[ShortText] = None
+    chart_subsystem: Optional[ShortText] = None
+    index_id: Optional[ShortText] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    granularity: Optional[ShortText] = None
 
     @field_validator("rows")
     @classmethod
@@ -190,6 +199,24 @@ class PageElement(BaseModel):
                 f"table rows may have at most {PAGE_CONTEXT_MAX_TABLE_COLUMNS} cells"
             )
         return rows
+
+
+class PageContextEntities(BaseModel):
+    """Bounded identifiers and selections supplied by the rendered page."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    scenario_id: Optional[ShortText] = None
+    proposal_id: Optional[ShortText] = None
+    problem_id: Optional[ShortText] = None
+    active_tab: Optional[ShortText] = None
+    index_id: Optional[ShortText] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    granularity: Optional[ShortText] = None
+    selected_territories: Optional[
+        Annotated[List[ShortText], Field(max_length=20)]
+    ] = None
 
 
 class PageContext(BaseModel):
@@ -206,6 +233,7 @@ class PageContext(BaseModel):
     revision: Optional[int] = Field(
         default=None, ge=0, le=PAGE_CONTEXT_MAX_REVISION
     )
+    entities: Optional[PageContextEntities] = None
     elements: List[PageElement] = Field(
         default_factory=list, max_length=PAGE_CONTEXT_MAX_ELEMENTS
     )

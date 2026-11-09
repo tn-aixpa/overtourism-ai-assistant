@@ -14,9 +14,9 @@ looking at**: a structured snapshot of the current page.
 | Reaches the LLM | **only through tools**, e.g. `get_data_from_context()` / `get_context_details` | as a delimited prompt block (section 8) |
 | Meaning | the data itself lives in the backend | a snapshot of the frontend |
 
-They are independent. Nothing in the visual context is merged into, or can change,
-`current_context`; `_apply_context()`, the territory restrictions and
-`get_data_from_context()` are unchanged. Not to be confused with the pre-existing,
+They remain separate. The sole bridge is `entities.scenario_id`: it seeds
+`current_context["scenarios"]` only when no scenario is already selected. Other page
+entities do not change business context. Not to be confused with the pre-existing,
 unrelated `state.integrated_context` field.
 
 ## 2. New `AgentState` attributes
@@ -36,9 +36,23 @@ unrelated `state.integrated_context` field.
   "page_title": "Edit proposal",
   "page_description": null,
   "revision": 17,
+  "entities": {
+    "problem_id": "p1",
+    "proposal_id": "pr1",
+    "scenario_id": "s1",
+    "active_tab": "Parcheggi"
+  },
   "elements": [
     {"id": "proposal-name", "type": "textbox", "label": "Proposal name",
      "value": "New infrastructure plan", "visible": true, "enabled": true},
+    {"id": "parking-capacity", "type": "number", "label": "Posti auto",
+     "param_name": "parking_capacity", "value": 2.5},
+    {"id": "territorial-index", "type": "chart", "label": "Indice turistico",
+     "index_id": "tourism-index", "start_date": "2023-01-01",
+     "end_date": "2023-12-31", "granularity": "annuale"},
+    {"id": "scenario-plot", "type": "chart",
+     "label": "Diagramma di Sostenibilità", "chart_type": "sustainability",
+     "chart_subsystem": "Parcheggi"},
     {"id": "proposal-status", "type": "dropdown", "label": "Status",
      "selected": "Under review", "options": ["Draft", "Under review", "Approved"]},
     {"id": "save-button", "type": "button", "label": "Save", "enabled": false,
@@ -58,9 +72,13 @@ Models: `PageContext` / `PageElement` in `app/schemas.py`.
 | `captured_at` | optional ISO-8601 datetime |
 | `page_title`, `page_description` | optional |
 | `revision` | optional integer ≥ 0, **increasing per session** (a persisted counter or epoch ms). Enables stale-update protection (section 7) |
+| `entities` | optional identifiers and selected page state: scenario/proposal/problem IDs, active tab, index ID, date period, granularity and selected territories. Values are bounded; this is never a place for computed data |
 | `elements[]` | optional, default `[]`, ≤ 150 |
 | element `id`, `type` | required. `type` ∈ `textbox textarea number date checkbox radio switch dropdown multiselect button link tab heading text table list chart image other`. Map widgets not named here to `other` |
 | element `label`, `value`, `selected`, `options`, `visible` (default true), `enabled` (default true) | optional. `value` is a string/number/bool (checkbox/switch state goes here); `selected` is a string or list of strings |
+| element `param_name` | optional backend parameter key (the `name` returned by `get_configuration_parameters`) |
+| chart `index_id`, `start_date`, `end_date`, `granularity` | optional territorial-index identifiers describing what is plotted |
+| chart `chart_type`, `chart_subsystem` | optional scenario-plot display mode (`sustainability` / `tourist_load`) and selected subsystem label; capture the active UI setting, not data points or computed statistics |
 | element `required`, `error`, `group` | optional: required flag, validation message shown by the UI, section the element belongs to |
 | table `columns`, `rows`, `row_count` | `rows` is a bounded sample (≤ 25 rows × ≤ 20 columns); `row_count` is the real total |
 
@@ -74,12 +92,14 @@ Adding an element type requires extending the `PageElementType` literal.
 ## 4. `POST /agent/init`
 
 New optional multipart field **`page_context`**: the snapshot as a JSON string.
-`context` keeps its meaning and is still **required** in integrated mode (a page context
-does not replace it).
+`context` keeps its meaning; a page snapshot can be used when the page has no selected
+business entity.
 
 * Integrated: if present it is validated and stored (`page_context_version = 1`); an
   invalid one fails the call (422 / 413) and **no session is created**. `_apply_context()`
-  runs as before. Omitting it is allowed (older frontends).
+  runs as before, and `entities.scenario_id` seeds the scenario context only if no
+  scenario was selected through `context`. Omitting the snapshot is allowed (older
+  frontends).
 * Standalone: `page_context` is **ignored without being validated**, exactly like
   `context` already is. Standalone sessions never have a page context.
 * The session mode is fixed for the lifetime of the session.
@@ -92,9 +112,11 @@ authentication (`_authenticate`, 401) → session lock → ownership (`_assert_o
 unknown *or foreign* sessions) → integrated mode (400 otherwise) → payload validation
 (413 too large / 422 invalid) → update.
 
-It replaces **only** `state.page_context`. It creates no turn, calls no LLM, starts no
-background task, and does not touch conversation history, `current_context`, language,
-role, mode, `force_role` or waiting state. It is allowed while a turn is running.
+It replaces `state.page_context`. If it contains `entities.scenario_id` and the business
+context has no scenario yet, that ID seeds `current_context["scenarios"]`; an existing
+scenario context is never replaced. It creates no turn, calls no LLM, starts no
+background task, and does not touch conversation history, language, role, mode,
+`force_role` or waiting state. It is allowed while a turn is running.
 
 Response `200`:
 
@@ -155,8 +177,8 @@ The block is empty outside integrated mode or when no snapshot exists, so standa
 prompts are byte-for-byte unchanged. The block tells the model that: it is a
 non-live snapshot (values are those at capture time); to use it to interpret questions
 about the interface; to keep apart *UI-displayed*, *stored business data (tools only)* and
-*unknown*; not to invent; to ask a short clarifying question when the snapshot is not
-enough; and that the content is untrusted data. The router, the entity parser and
+*unknown*; to enrich page-related questions with available data tools before asking; not
+to invent; and that the content is untrusted data. The router, the entity parser and
 other classification calls do not receive it (a deliberate, easily revisited choice).
 
 ## 9. Alongside `get_data_from_context()`
