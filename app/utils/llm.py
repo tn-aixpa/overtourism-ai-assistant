@@ -338,9 +338,6 @@ def llm_interaction(
     # provider's request-size limit. See app.utils.common.enforce_prompt_budget.
     prompt = enforce_prompt_budget(prompt)
 
-    with open("logs/temp.txt", "w+") as fout:
-        fout.write(prompt)
-
     try:
         try:
             if LLM_PROVIDER == "azure":
