@@ -16,7 +16,7 @@ COPY pyproject.toml uv.lock ./
 COPY app/ ./app/
 COPY knowledge/ ./knowledge/
 
-RUN uv sync --frozen --no-dev
+RUN uv sync --extra log
 
 RUN mkdir -p ${UV_CACHE_DIR} /app/logs \
 	&& chown -R ${APP_UID}:${APP_GID} /app

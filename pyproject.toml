@@ -25,3 +25,13 @@ dependencies = [
     "typing-extensions>=4.15.0",
     "uvicorn>=0.40.0",
 ]
+[project.optional-dependencies]
+log = [
+    "ecs-logging==2.3.0",
+    "concurrent-log-handler==0.9.31",
+    "opentelemetry-sdk==1.45.2",
+    "opentelemetry-instrumentation-fastapi==0.66b2",
+    "opentelemetry-instrumentation-httpx==0.66b2",
+    "opentelemetry-instrumentation-requests==0.66b2",
+    "opentelemetry-instrumentation-logging==0.66b2",
+]
