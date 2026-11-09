@@ -17,6 +17,7 @@ from app.agent.nodes import reasoner as reasoner_module
 from app.agent.nodes import router as router_module
 from app.agent.nodes import route_groups
 from app.agent.state import AgentState, ReActStep
+from app.prompts import answer_generation as answer_generation_module
 from app.prompts import react_reasoning as react_reasoning_module
 from app.prompts.react_guidelines import GUIDELINE_BLOCKS, UNIVERSAL_POST
 from app.tools.definitions.analysis import (
@@ -122,6 +123,26 @@ def test_broad_scenario_list_uses_page_territory_without_relationship_target():
     assert "entities.territory" in relationships
     assert "list_available_entities(entity_types=['scenarios'])" in page_policy
     assert "authorized selected territory" in page_policy
+
+
+def test_navigation_requests_return_verified_frontend_links():
+    navigation_policy = next(
+        body for title, body in UNIVERSAL_POST
+        if title == "LINK TO A PAGE WHEN THE USER WANTS TO NAVIGATE"
+    )
+    assert "`/indici`" in navigation_policy
+    assert (
+        "`/problems/{problem_id}/proposals/{proposal_id}/scenari/{scenario_id}`"
+        in navigation_policy
+    )
+    assert (
+        "list_available_entities(entity_types=['problems','proposals','scenarios'])"
+        in navigation_policy
+    )
+    assert "get_context_ids" in navigation_policy
+    assert "ask one short question" in navigation_policy
+    assert "do not navigate" in navigation_policy
+    assert "Keep route IDs only inside the link URL" in answer_generation_module.INSTRUCTIONS_FOR_INTEGRATED_MODE
 
 
 def test_territorial_index_guidelines_do_not_import_modelling_territories():

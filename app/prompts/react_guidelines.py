@@ -95,6 +95,37 @@ UNIVERSAL_PRE: List[Block] = [
 # guideline above has decided what to do.
 UNIVERSAL_POST: List[Block] = [
     (
+        "LINK TO A PAGE WHEN THE USER WANTS TO NAVIGATE",
+        "When the user explicitly wants to go to, open, move to, or see a "
+        "platform PAGE (rather than asking for information about the entity), "
+        "answer with one concise same-app Markdown link; do not navigate "
+        "automatically, call a display/widget tool, or answer as if the page "
+        "were already open. Use these frontend routes exactly:\n"
+        "  - territorial indexes: `/indici`\n"
+        "  - problems list: `/problems`\n"
+        "  - problem detail: `/problems/{problem_id}`\n"
+        "  - proposals list: `/problems/{problem_id}/proposals`\n"
+        "  - proposal detail: `/problems/{problem_id}/proposals/{proposal_id}`\n"
+        "  - scenarios list: `/problems/{problem_id}/proposals/{proposal_id}/scenari`\n"
+        "  - scenario detail: `/problems/{problem_id}/proposals/{proposal_id}/scenari/{scenario_id}`\n"
+        "Use only IDs already in current context or returned by tools; never "
+        "invent an ID. For a named problem, proposal, or scenario not already "
+        "unambiguously resolved, call "
+        "list_available_entities(entity_types=['problems','proposals','scenarios']), "
+        "then get_context_ids(user_intent='<the request>', "
+        "entity_types=['problems','proposals','scenarios']). A proposal route "
+        "needs its linked problem_id; a scenario route needs a linked proposal "
+        "and that proposal's problem_id. Follow those exact associations from "
+        "the list results. Prefer a unique path or one matching the current "
+        "context; if multiple paths remain, ask one short question about which "
+        "parent analysis/proposal. Use URL-encoded path segments. "
+        "Use concise wording in the user's language; in Italian, say "
+        "`Per accedere a questa pagina, [clicca qui](<path>).` Do not use "
+        "target=_blank; the frontend opens "
+        "same-app links in the current page. This navigation rule does not "
+        "apply when the user asks to explain, summarize, or analyze an entity.",
+    ),
+    (
         "ENRICH PAGE CONTEXT BEFORE ASKING",
         "If the integrated page snapshot contains identifiers relevant to the "
         "user's question, do not immediately finish with a clarifying question. "
