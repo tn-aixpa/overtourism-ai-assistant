@@ -99,6 +99,7 @@ class TestSchema:
         out = parse_page_context(j({
             "route": "/x",
             "entities": {
+                "territory": "molveno",
                 "scenario_id": "scenario-1",
                 "active_tab": "Parcheggi",
                 "index_id": "tourism-index",
@@ -115,6 +116,7 @@ class TestSchema:
         }))
 
         assert out["entities"] == {
+            "territory": "molveno",
             "scenario_id": "scenario-1",
             "active_tab": "Parcheggi",
             "index_id": "tourism-index",
@@ -244,6 +246,18 @@ class TestSchema:
         assert "chart_subsystem=\"Parcheggi\"" in rendered
         assert "never infer" in rendered
 
+    def test_prompt_uses_selected_territory_for_broad_scenario_lists(self):
+        state = AgentState(integrated_mode=True)
+        state.page_context = parse_page_context(j(page(
+            route="/problems",
+            entities={"territory": "molveno"},
+            elements=[],
+        )))
+
+        rendered = pc.render_page_context_block(state)
+
+        assert 'territory="molveno"' in rendered
+
 
 # --------------------------------------------------------------------------- #
 # POST /agent/init
@@ -265,13 +279,35 @@ class TestInit:
 
     def test_page_context_alone_is_enough_when_no_entity_is_selected(self, client):
         """E.g. the problems list: no problem/proposal/scenario, but a page."""
+        page_context = page(
+            route="/problems",
+            entities={"territory": "test-territory"},
+        )
         r = client.post("/agent/init", headers=AUTH,
-                        data={"integrated_mode": "true", "page_context": j(page(route="/problems"))})
+                        data={"integrated_mode": "true", "page_context": j(page_context)})
         state = memory.load_state(r.json()["session_id"])
 
         assert r.status_code == 201
         assert state.cognitive.current_context == {"problems": [], "proposals": [], "scenarios": []}
         assert state.page_context["route"] == "/problems"
+        assert state.territory == "test-territory"
+
+    def test_unallowed_page_territory_is_not_used(self, client):
+        state = memory.load_state(init_integrated(
+            client,
+            page(entities={"territory": "not-allowed"}),
+        ))
+
+        assert state.territory == ""
+
+    def test_page_territory_matches_allowed_territory_case_insensitively(self, client, api_env):
+        api_env.territories = ["Fazzon", "Molveno"]
+        state = memory.load_state(init_integrated(
+            client,
+            page(entities={"territory": "fazzon"}),
+        ))
+
+        assert state.territory == "Fazzon"
 
     def test_page_scenario_seeds_business_context_when_no_scenario_is_selected(self, client):
         page_context = page(entities={"scenario_id": "scenario-from-page"})
@@ -373,6 +409,59 @@ class TestContextEndpoint:
 
         assert post_ctx(client, sid, page()).status_code == 200
         assert memory.load_state(sid).page_context["route"] == "/proposals/edit/123"
+
+    def test_selected_allowed_territory_seeds_and_resets_scoped_data(self, client, api_env):
+        api_env.territories = ["test-territory", "other-territory"]
+        sid = init_integrated(
+            client,
+            page(revision=1, entities={"territory": "test-territory"}),
+        )
+        state = memory.load_state(sid)
+        state.cognitive.tool_results["list_available_entities"] = {"old": True}
+        state.cognitive.current_context["problems"] = ["old-problem"]
+        memory.save_state(state)
+
+        response = post_ctx(
+            client,
+            sid,
+            page(revision=2, route="/problems", entities={"territory": "other-territory"}),
+        )
+
+        updated = memory.load_state(sid)
+        assert response.status_code == 200
+        assert updated.territory == "other-territory"
+        assert updated.cognitive.tool_results == {}
+        assert updated.cognitive.current_context == {
+            "problems": [], "proposals": [], "scenarios": []
+        }
+
+    def test_unallowed_page_territory_does_not_change_session_territory(self, client):
+        sid = init_integrated(
+            client,
+            page(revision=1, entities={"territory": "test-territory"}),
+        )
+
+        response = post_ctx(
+            client,
+            sid,
+            page(revision=2, entities={"territory": "not-allowed"}),
+        )
+
+        assert response.status_code == 200
+        assert memory.load_state(sid).territory == "test-territory"
+
+    def test_page_territory_update_matches_allowed_value_case_insensitively(self, client, api_env):
+        api_env.territories = ["Fazzon", "Molveno"]
+        sid = init_integrated(client)
+
+        response = post_ctx(
+            client,
+            sid,
+            page(revision=1, entities={"territory": "fazzon"}),
+        )
+
+        assert response.status_code == 200
+        assert memory.load_state(sid).territory == "Fazzon"
 
     def test_page_scenario_seeds_business_context_on_context_update_if_missing(self, client):
         sid = init_integrated(client)

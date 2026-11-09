@@ -52,6 +52,7 @@ from app.utils.page_context import (
     page_context_summary,
     parse_page_context,
 )
+from app.utils.territory import reset_territory_scoped_state
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,28 @@ def _seed_scenario_from_page_context(state: AgentState) -> None:
     scenarios = state.cognitive.current_context.setdefault("scenarios", [])
     if scenario_id and not scenarios:
         scenarios.append(scenario_id)
+
+
+def _seed_territory_from_page_context(state: AgentState) -> None:
+    """Use the host application's selected territory only if the user may access it."""
+    requested = (state.page_context or {}).get("entities", {}).get("territory")
+    if not isinstance(requested, str):
+        return
+    requested_key = requested.strip().casefold()
+    territory = next(
+        (
+            allowed
+            for allowed in state.allowed_territories
+            if allowed.strip().casefold() == requested_key
+        ),
+        None,
+    )
+    if territory is None:
+        return
+    if state.territory != territory:
+        if state.territory:
+            reset_territory_scoped_state(state)
+        state.territory = territory
 
 
 def _parse_page_context_or_http(raw: str) -> dict:
@@ -301,6 +324,7 @@ async def init_session(
         if parsed_page_context is not None:
             state.page_context = parsed_page_context
             state.page_context_version = 1
+            _seed_territory_from_page_context(state)
             _seed_scenario_from_page_context(state)
     await asyncio.to_thread(save_state, state)
 
@@ -318,9 +342,10 @@ async def update_page_context(
     authorization: str | None = Header(default=None),
 ):
     """Replace the visual page context of an integrated session (called by the
-    frontend on route navigation). Touches nothing but state.page_context: no
-    turn, no LLM call, no change to history, business context, language, role,
-    mode or force_role. Allowed while a turn runs; that turn keeps the snapshot
+    frontend on route navigation). Updates the page snapshot and seeds its
+    selected territory only when that territory is in the user's allowed list.
+    A territory change clears territory-scoped tool/cache data. No turn or LLM
+    call is started. Allowed while a turn runs; that turn keeps the snapshot
     it started with and the new one applies from the next turn."""
     _, _, user_id = await _authenticate(authorization)
 
@@ -336,6 +361,7 @@ async def update_page_context(
         if update is None:  # reset while we were validating
             raise HTTPException(status_code=404, detail="Session not found")
         if update.applied:
+            _seed_territory_from_page_context(update.state)
             _seed_scenario_from_page_context(update.state)
             # Debug dump of the stored object only (never save_state(state):
             # `state` may already have been replaced by a finishing turn).

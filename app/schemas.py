@@ -206,6 +206,7 @@ class PageContextEntities(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    territory: Optional[ShortText] = None
     scenario_id: Optional[ShortText] = None
     proposal_id: Optional[ShortText] = None
     problem_id: Optional[ShortText] = None

@@ -112,6 +112,18 @@ def test_territory_catalog_has_a_direct_no_tool_route():
         assert phrase in territory_guidelines
 
 
+def test_broad_scenario_list_uses_page_territory_without_relationship_target():
+    relationships = next(
+        body for title, body in GUIDELINE_BLOCKS["scenario_analysis"]
+        if title == "RELATIONSHIPS BETWEEN PROBLEMS, PROPOSALS AND SCENARIOS"
+    )
+    page_policy = "\n".join(body for _, body in UNIVERSAL_POST)
+
+    assert "entities.territory" in relationships
+    assert "list_available_entities(entity_types=['scenarios'])" in page_policy
+    assert "authorized selected territory" in page_policy
+
+
 def test_territorial_index_guidelines_do_not_import_modelling_territories():
     index_guidelines = "\n".join(
         body

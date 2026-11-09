@@ -14,10 +14,12 @@ looking at**: a structured snapshot of the current page.
 | Reaches the LLM | **only through tools**, e.g. `get_data_from_context()` / `get_context_details` | as a delimited prompt block (section 8) |
 | Meaning | the data itself lives in the backend | a snapshot of the frontend |
 
-They remain separate. The sole bridge is `entities.scenario_id`: it seeds
-`current_context["scenarios"]` only when no scenario is already selected. Other page
-entities do not change business context. Not to be confused with the pre-existing,
-unrelated `state.integrated_context` field.
+They remain separate. `entities.scenario_id` seeds
+`current_context["scenarios"]` only when no scenario is already selected.
+`entities.territory` seeds the session's territory only when it is in the
+authenticated user's allowed-territory list; a territory change clears cached
+territory-scoped data. Other page entities do not change business context. Not
+to be confused with the pre-existing, unrelated `state.integrated_context` field.
 
 ## 2. New `AgentState` attributes
 
@@ -37,6 +39,7 @@ unrelated `state.integrated_context` field.
   "page_description": null,
   "revision": 17,
   "entities": {
+    "territory": "molveno",
     "problem_id": "p1",
     "proposal_id": "pr1",
     "scenario_id": "s1",
@@ -72,7 +75,7 @@ Models: `PageContext` / `PageElement` in `app/schemas.py`.
 | `captured_at` | optional ISO-8601 datetime |
 | `page_title`, `page_description` | optional |
 | `revision` | optional integer ≥ 0, **increasing per session** (a persisted counter or epoch ms). Enables stale-update protection (section 7) |
-| `entities` | optional identifiers and selected page state: scenario/proposal/problem IDs, active tab, index ID, date period, granularity and selected territories. Values are bounded; this is never a place for computed data |
+| `entities` | optional identifiers and selected page state: selected territory, scenario/proposal/problem IDs, active tab, index ID, date period, granularity and selected territories. Values are bounded; selected territory is accepted only if authorized for the user; this is never a place for computed data |
 | `elements[]` | optional, default `[]`, ≤ 150 |
 | element `id`, `type` | required. `type` ∈ `textbox textarea number date checkbox radio switch dropdown multiselect button link tab heading text table list chart image other`. Map widgets not named here to `other` |
 | element `label`, `value`, `selected`, `options`, `visible` (default true), `enabled` (default true) | optional. `value` is a string/number/bool (checkbox/switch state goes here); `selected` is a string or list of strings |

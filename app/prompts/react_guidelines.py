@@ -39,7 +39,11 @@ _RELATIONSHIPS_BLOCK: Block = (
     "never say it is 'not associated' or that a proposal has 'no scenarios' "
     "when linked_scenarios contains it. Only say that an association is "
     "unknown if the relevant linked_* field is absent from the data, and then "
-    "say you could not retrieve it rather than that it does not exist.",
+    "say you could not retrieve it rather than that it does not exist. When "
+    "there is no selected problem or proposal and the user asks broadly which "
+    "scenarios are available on a page with `entities.territory`, list the "
+    "scenarios for that selected territory instead of asking the user to repeat "
+    "the territory or name a relationship target.",
 )
 
 _TERMINOLOGY_BLOCK: Block = (
@@ -99,7 +103,11 @@ UNIVERSAL_POST: List[Block] = [
         "query_territorial_index_values for a shown index and period. For a "
         "maximum/minimum use query_type='ranking', ranking_order='highest'/'lowest', "
         "and top_n=1. Ask only if the necessary identifier or period is genuinely "
-        "missing, or the available tool result cannot resolve the question.",
+        "missing, or the available tool result cannot resolve the question. "
+        "For a broad request to list scenarios on a page with `entities.territory` "
+        "but no selected problem/proposal, call "
+        "list_available_entities(entity_types=['scenarios']); the backend applies "
+        "the authorized selected territory.",
     ),
     (
         "NOTHING ABOVE APPLIED",
