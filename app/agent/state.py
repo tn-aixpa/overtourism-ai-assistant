@@ -399,6 +399,14 @@ class AgentState:
     # Interface layer
     conversation: ConversationBuffer = field(default_factory=ConversationBuffer)
     assistant_action_data: Optional[List[Dict[str, Any]]] = None
+    # Internal (integrated) chatbot only: set when the final answer contains a
+    # same-app page link. Holds the territory the frontend must switch to
+    # before opening that page, or "none" when the link is territory-agnostic
+    # (territorial indicators, /indici). None when the answer has no such link,
+    # or when its links span several territories (the answer then asks the user
+    # to select the territory manually on /problems first).
+    # Recomputed on every turn by generate_output_message_node.
+    signal_territory: Optional[str] = None
 
     class WaitingFor(StrEnum):
         PROBLEM_INPUT = "PROBLEM_INPUT"

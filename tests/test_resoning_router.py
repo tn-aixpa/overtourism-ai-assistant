@@ -142,7 +142,20 @@ def test_navigation_requests_return_verified_frontend_links():
     assert "get_context_ids" in navigation_policy
     assert "ask one short question" in navigation_policy
     assert "do not navigate" in navigation_policy
+    assert (
+        "do not ask them to change the page's territory selector"
+        in navigation_policy
+    )
     assert "Keep route IDs only inside the link URL" in answer_generation_module.INSTRUCTIONS_FOR_INTEGRATED_MODE
+
+
+def test_base_scenario_page_request_does_not_require_details_or_evaluation():
+    scenario_guidelines = "\n".join(
+        body for _, body in GUIDELINE_BLOCKS["scenario_analysis"]
+    )
+
+    assert "follow the page-navigation rule instead" in scenario_guidelines
+    assert "do not retrieve its details/evaluation" in scenario_guidelines
 
 
 def test_territorial_index_guidelines_do_not_import_modelling_territories():

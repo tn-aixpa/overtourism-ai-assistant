@@ -95,10 +95,11 @@ def initialize_tools(state: AgentState) -> Command:
 
     logger.info(f"Available tools: {state.cognitive.enabled_tools}")
 
-    # Fresh user turn. The session's territory was fixed by an earlier turn,
-    # but the user may now be asking about another one ("e a Fazzon?"):
-    # switch, and drop the old territory's results/caches so the reasoner
-    # queries the new territory instead of reusing the previous lists.
+    # Fresh user turn. The user may be asking about another territory ("e a
+    # Fazzon?"): switch, and drop the old territory's results/caches so the
+    # reasoner queries the new territory instead of reusing the previous lists.
+    # This also applies in integrated mode when the explicitly named territory
+    # is authorized; the page snapshot remains only visual context.
     # A new turn starts: the territory answer of the previous one is consumed.
     state.cognitive.territory_resume = None
     state.cognitive.territory_pending_request = ""
@@ -124,6 +125,7 @@ def initialize_tools(state: AgentState) -> Command:
     # (tool_results) is intentionally left untouched (apart from the
     # territory switch above, which clears it because it is territory data).
     state.assistant_action_data = None
+    state.signal_territory = None
     state.cognitive.scratchpad = []
     state.cognitive.selected_tool = None
     state.cognitive.tool_arguments = {}

@@ -9,6 +9,10 @@ class AgentResponse(BaseModel):
     # List of UIAction-shaped dicts: {"type": "SHOW_WIDGET" | "NAVIGATE" | "SHOW_TOAST", "payload": {...}}.
     # Matches the frontend's UIAction[] (see chat.model.ts / ChatbotActionTranslatorService).
     assistant_action_data: Optional[List[Dict[str, Any]]] = None
+    # Internal chatbot only: territory to use for a page link in `response`
+    # (e.g. "molveno", "fazzon"), "none" for territorial-indicator links,
+    # null when the response has no page link.
+    territory: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -120,9 +124,7 @@ def _clipped(limit: int):
 
 ShortText = Annotated[str, _clipped(PAGE_CONTEXT_MAX_SHORT_TEXT)]
 LongText = Annotated[str, _clipped(PAGE_CONTEXT_MAX_TEXT)]
-Scalar = Annotated[
-    Union[str, int, float, bool, None], _clipped(PAGE_CONTEXT_MAX_TEXT)
-]
+Scalar = Annotated[Union[str, int, float, bool, None], _clipped(PAGE_CONTEXT_MAX_TEXT)]
 CellScalar = Annotated[
     Union[str, int, float, bool, None], _clipped(PAGE_CONTEXT_MAX_SHORT_TEXT)
 ]
@@ -178,9 +180,7 @@ class PageElement(BaseModel):
         Annotated[List[ShortText], Field(max_length=PAGE_CONTEXT_MAX_TABLE_COLUMNS)]
     ] = None
     rows: Optional[
-        Annotated[
-            List[List[CellScalar]], Field(max_length=PAGE_CONTEXT_MAX_TABLE_ROWS)
-        ]
+        Annotated[List[List[CellScalar]], Field(max_length=PAGE_CONTEXT_MAX_TABLE_ROWS)]
     ] = None
     row_count: Optional[int] = Field(default=None, ge=0)  # total, if rows is a sample
     # type == "chart": what is plotted, without the plotted data.
@@ -215,9 +215,9 @@ class PageContextEntities(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     granularity: Optional[ShortText] = None
-    selected_territories: Optional[
-        Annotated[List[ShortText], Field(max_length=20)]
-    ] = None
+    selected_territories: Optional[Annotated[List[ShortText], Field(max_length=20)]] = (
+        None
+    )
 
 
 class PageContext(BaseModel):
@@ -231,9 +231,7 @@ class PageContext(BaseModel):
     # Client-side, monotonically increasing per session (a persisted counter or
     # epoch milliseconds). Lets the server drop an older snapshot that arrives
     # after a newer one. Optional: without it, last write wins.
-    revision: Optional[int] = Field(
-        default=None, ge=0, le=PAGE_CONTEXT_MAX_REVISION
-    )
+    revision: Optional[int] = Field(default=None, ge=0, le=PAGE_CONTEXT_MAX_REVISION)
     entities: Optional[PageContextEntities] = None
     elements: List[PageElement] = Field(
         default_factory=list, max_length=PAGE_CONTEXT_MAX_ELEMENTS

@@ -187,15 +187,14 @@ def switch_territory_if_requested(state: AgentState) -> Optional[str]:
     the old territory's data. Returns the previous territory when a switch
     happened, else None.
 
-    Not applied in integrated mode (the host application fixes the territory
-    there). A territory not in allowed_territories is never accepted."""
-    if state.integrated_mode:
+    In integrated mode, an explicit territory in the user's request may
+    override the territory captured from the host page for this request.
+    A territory not in allowed_territories is never accepted."""
+    last = state.get_last_user_message()
+    if last is not None and is_territorial_index_question(last.content):
         return None
     target = mentioned_territory(state)
     if not target or target == state.territory:
-        return None
-    last = state.get_last_user_message()
-    if last is not None and is_territorial_index_question(last.content):
         return None
     previous = state.territory
     state.territory = target
@@ -227,6 +226,77 @@ def territory_switch_note(state: AgentState) -> str:
         f"Earlier in this conversation the territory was switched from "
         f"{previous} to {current} at the user's request: everything before "
         f"that switch concerned {previous}; the current context is {current}."
+    )
+
+
+# Territory-agnostic frontend route: territorial indicators (see the
+# navigation guideline in prompts/react_guidelines.py).
+_INDEX_ROUTE = "/indici"
+# Same-app Markdown links in an answer: "[text](/path...)". Absolute URLs
+# (web-search sources, https://...) never start with "/" so they don't match.
+_SAME_APP_LINK_RE = re.compile(r"\]\((/[^)\s]*)\)")
+SIGNAL_TERRITORY_NONE = "none"
+# Page where the user selects the territory by hand (same-app route).
+TERRITORY_SELECTION_ROUTE = "/problems"
+
+
+def _is_index_route(path: str) -> bool:
+    return path == _INDEX_ROUTE or path.startswith(
+        (_INDEX_ROUTE + "/", _INDEX_ROUTE + "?", _INDEX_ROUTE + "#")
+    )
+
+
+def analyze_page_links(state: AgentState, answer: str) -> tuple[Optional[str], bool]:
+    """Returns (signal_territory, territory_conflict) for a final answer.
+
+    Only the internal (integrated) chatbot emits same-app page links, so any
+    other session gets (None, False). Links are classified as:
+      - territorial indicators (/indici): territory-agnostic;
+      - problems / proposals / scenarios pages: territory-scoped.
+
+    The path of a link does not carry its territory, so the territory a link
+    belongs to is the one the request is about: the single territory the user
+    named in the request, else the session's current territory. Outcome:
+      - no same-app link                          -> (None, False)
+      - only /indici links                        -> ("none", False)
+      - territory-scoped links, ONE territory     -> (that territory, False);
+        an /indici link next to them does not change this
+      - territory-scoped links, request names 2+
+        territories (or none is set)              -> (None, True): the links
+        cannot be tied to one territory, so the caller must ask the user to
+        select the territory manually first (see territory_conflict_note).
+    """
+    if not state.integrated_mode or not answer:
+        return None, False
+    paths = _SAME_APP_LINK_RE.findall(answer)
+    if not paths:
+        return None, False
+    scoped = [p for p in paths if not _is_index_route(p)]
+    if not scoped:
+        return SIGNAL_TERRITORY_NONE, False
+
+    named = territories_named(effective_user_request(state), state.allowed_territories)
+    involved = set(named) if named else {state.territory}
+    if len(involved) == 1:
+        (territory,) = involved
+        if is_valid_territory(state, territory):
+            return territory, False
+    return None, True
+
+
+def territory_conflict_note(state: AgentState) -> str:
+    """Text appended to an answer whose page links span several territories:
+    the user must first select the territory by hand, then use the links."""
+    if str(state.user_lang).lower().startswith("it"):
+        return (
+            "Le pagine richieste riguardano territori diversi. Per aprirle, "
+            f"imposta prima manualmente il territorio nella pagina "
+            f"[Problemi]({TERRITORY_SELECTION_ROUTE}), poi usa i link qui sopra."
+        )
+    return (
+        "The requested pages belong to different territories. To open them, "
+        f"first set the territory manually on the [Problems]({TERRITORY_SELECTION_ROUTE}) "
+        "page, then use the links above."
     )
 
 

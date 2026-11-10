@@ -5,6 +5,7 @@ from app.agent.state import AgentState, ReActStep
 from app.agent.nodes import route_groups as rg
 from app.prompts.react_guidelines import (
     UNIVERSAL_PRE,
+    NAVIGATION_POST,
     UNIVERSAL_POST,
     GUIDELINE_BLOCKS,
 )
@@ -56,6 +57,9 @@ def _assemble_guidelines(state: AgentState) -> str:
     for key in _BLOCK_ORDER:
         if key in active_keys:
             blocks.extend(GUIDELINE_BLOCKS[key])
+    # Same-app page links exist only for the internal (integrated) chatbot.
+    if state.integrated_mode:
+        blocks.extend(NAVIGATION_POST)
     blocks.extend(UNIVERSAL_POST)
 
     lines = []

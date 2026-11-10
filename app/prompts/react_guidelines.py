@@ -91,9 +91,11 @@ UNIVERSAL_PRE: List[Block] = [
     ),
 ]
 
-# Always included, last: apply regardless of domain once a domain-specific
-# guideline above has decided what to do.
-UNIVERSAL_POST: List[Block] = [
+# Page-navigation links only make sense when the chat is embedded in the
+# platform's own frontend (integrated / "internal" mode): a standalone chat has
+# no host page to navigate. react_reasoning._assemble_guidelines therefore adds
+# this block only when state.integrated_mode is True.
+NAVIGATION_POST: List[Block] = [
     (
         "LINK TO A PAGE WHEN THE USER WANTS TO NAVIGATE",
         "When the user explicitly wants to go to, open, move to, or see a "
@@ -119,12 +121,26 @@ UNIVERSAL_POST: List[Block] = [
         "the list results. Prefer a unique path or one matching the current "
         "context; if multiple paths remain, ask one short question about which "
         "parent analysis/proposal. Use URL-encoded path segments. "
+        "When the user explicitly names a different territory from the page "
+        "snapshot, use that territory only if it is in Available territories; "
+        "do not ask them to change the page's territory selector. Do not reuse "
+        "problem/proposal/scenario IDs from the snapshot when they belong to a "
+        "different territory: resolve the requested entity and its parent "
+        "associations from that territory's tool results. For a requested base "
+        "scenario, which is associated with every proposal in that territory, "
+        "if several valid paths remain choose one of those verified paths "
+        "instead of asking which proposal. "
         "Use concise wording in the user's language; in Italian, say "
         "`Per accedere a questa pagina, [clicca qui](<path>).` Do not use "
         "target=_blank; the frontend opens "
         "same-app links in the current page. This navigation rule does not "
         "apply when the user asks to explain, summarize, or analyze an entity.",
     ),
+]
+
+# Always included, last: apply regardless of domain once a domain-specific
+# guideline above has decided what to do.
+UNIVERSAL_POST: List[Block] = [
     (
         "ENRICH PAGE CONTEXT BEFORE ASKING",
         "If the integrated page snapshot contains identifiers relevant to the "
@@ -541,10 +557,17 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "'situazione attuale', 'scenario as-is' and 'situazione as-is' all refer "
             "to the same designated base scenario. For any of these requests, call "
             "get_base_scenario first, then use its returned ID to resolve that exact "
-            "scenario in the scenario list and retrieve its details. Do not treat "
+            "scenario in the scenario list. Retrieve its details for information "
+            "requests; for page navigation, follow the link-only exception below. "
+            "Do not treat "
             "these phrases as separate scenarios or select a different scenario "
             "because its name sounds more relevant. If the user asks about the "
-            "scenario's evaluation, follow the existing-scenario evaluation rules.",
+            "scenario's evaluation, follow the existing-scenario evaluation rules. "
+            "If the user explicitly asks to see/open/go to the scenario page, "
+            "follow the page-navigation rule instead: resolve the base scenario "
+            "and any required parent IDs for the link, but do not retrieve its "
+            "details/evaluation or show a chart unless they also ask for that "
+            "information.",
         ),
         (
             "DETAILS ABOUT AN EXISTING SCENARIO",

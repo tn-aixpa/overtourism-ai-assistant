@@ -121,11 +121,15 @@ def _result(
     response: str,
     agent_type: str | None = None,
     assistant_action_data=None,
+    signal_territory: str | None = None,
 ) -> dict:
     out = {
         "response": response,
         "session_id": session_id,
         "assistant_action_data": assistant_action_data,
+        # Internal chatbot: territory to select before following a page link in
+        # `response` ("none" for territorial-indicator links); null otherwise.
+        "territory": signal_territory,
     }
     if agent_type is not None:
         out["agent_type"] = agent_type
@@ -243,6 +247,7 @@ def _run_agent(session_id: str, turn_id: str, state: AgentState, token: str | No
                 last_msg.content,
                 final_state.active_agent.value,
                 getattr(final_state, "assistant_action_data", None),
+                getattr(final_state, "signal_territory", None),
             )
     except BaseException as e:  # noqa: BLE001 - a terminal status MUST be set
         logger.exception(f"Unhandled error in turn {turn_id}: {e}")

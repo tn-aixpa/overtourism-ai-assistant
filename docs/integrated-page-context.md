@@ -18,8 +18,13 @@ They remain separate. `entities.scenario_id` seeds
 `current_context["scenarios"]` only when no scenario is already selected.
 `entities.territory` seeds the session's territory only when it is in the
 authenticated user's allowed-territory list; a territory change clears cached
-territory-scoped data. Other page entities do not change business context. Not
-to be confused with the pre-existing, unrelated `state.integrated_context` field.
+territory-scoped data. A user can explicitly name another allowed territory in
+a request; that territory takes precedence for lookup even in integrated mode,
+and data cached for the previous territory is cleared. The snapshot continues
+to describe the page currently shown, so its entity IDs must not be reused for
+lookups in the newly requested territory. Other page entities do not change
+business context. Not to be confused with the pre-existing, unrelated
+`state.integrated_context` field.
 
 ## 2. New `AgentState` attributes
 

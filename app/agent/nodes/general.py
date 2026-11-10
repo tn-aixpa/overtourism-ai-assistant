@@ -8,6 +8,7 @@ from app.utils.common import GraphError
 from app.utils.common import truncate_for_prompt, render_agent_message
 from app.utils.entity_lists import ENTITY_TYPES
 from app.prompts.answer_generation import generate_answer
+from app.utils.territory import analyze_page_links, territory_conflict_note
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,14 @@ def generate_output_message_node(state: AgentState) -> Command:
     except Exception as e:
         logger.error(f"Error {e}")
         output_message = "System error"
+    # Always recomputed (None when the answer has no page link) so a flag from
+    # a previous turn can never leak into this one. If the page links cannot
+    # be tied to a single territory, no territory is signalled and the answer
+    # tells the user to select it manually first.
+    signal_territory, territory_conflict = analyze_page_links(state, output_message)
+    if territory_conflict:
+        output_message = f"{output_message}\n\n{territory_conflict_note(state)}"
+    state.signal_territory = signal_territory
     state.add_assistant_message(output_message)
 
     logger.info(f"Output message: {output_message}")
