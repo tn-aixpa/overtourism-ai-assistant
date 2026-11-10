@@ -200,8 +200,18 @@ def _agent_messages_directive(tier: AgentTier) -> str:
     )
 
 
+_CREATION_CONFIRMATION_WAITS = (
+    AgentState.WaitingFor.PROBLEM_CONFIRMATION,
+    AgentState.WaitingFor.PROPOSAL_CONFIRMATION,
+    AgentState.WaitingFor.SCENARIO_CONFIRMATION,
+)
+
+
 def _generate_control_message(
-    state: AgentState, messages_to_include: list[str], language: str
+    state: AgentState,
+    messages_to_include: list[str],
+    language: str,
+    pending_confirmation: bool = False,
 ) -> str:
     """Relay a system/control-plane message (currently: tier-access consent
     requests) to the user, translated into their language, without applying
@@ -210,6 +220,14 @@ def _generate_control_message(
     so no tier's rules about what it may/may not say should apply to them.
     """
     formatted_messages = "\n".join(f"- {msg}" for msg in messages_to_include)
+    confirmation_rule = (
+        "- This message asks the user to CONFIRM data before it is saved. NOTHING has "
+        "been saved yet. Show every listed field with its exact value, then end with "
+        "the yes/no question asking whether to proceed. Never say or imply that the "
+        "item was already registered, created, saved or submitted.\n"
+        if pending_confirmation
+        else ""
+    )
 
     prompt = f"""You are relaying a short system message to the user, verbatim in meaning.
 
@@ -219,7 +237,7 @@ def _generate_control_message(
 ## Instructions
 - Preserve the message's exact intent and meaning. If it asks a yes/no question, your output must also clearly ask a yes/no question — do not turn it into a request for other information, and do not answer or reason about the user's original question here. If it lists numbered options, keep every option (names untranslated) and its number.
 - Do not add interpretation, caveats, or content beyond what the message says.
-- Write your response in: **{language}**
+{confirmation_rule}- Write your response in: **{language}**
 - Be concise.
 - Start your response immediately with the content. Do not begin with any heading, label, or prefix.
 
@@ -261,6 +279,17 @@ def generate_answer(state: AgentState) -> str:
         AgentState.WaitingFor.TERRITORY_SELECTION,
     ):
         answer = _generate_control_message(state, messages_to_include, language)
+        return _capitalize_territory_names(answer, state.allowed_territories)
+
+    # Create-problem/proposal/scenario confirmations are control-plane too: the
+    # recap is a QUESTION ("shall I proceed?"), nothing is saved until the user
+    # says yes. Through the tier persona ("report data only") the question was
+    # rewritten as "the problem has been registered" and the user never
+    # confirmed, so nothing was saved. Relay it plainly instead.
+    if state.waiting_for in _CREATION_CONFIRMATION_WAITS:
+        answer = _generate_control_message(
+            state, messages_to_include, language, pending_confirmation=True
+        )
         return _capitalize_territory_names(answer, state.allowed_territories)
 
     tier = state.active_agent

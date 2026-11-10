@@ -67,6 +67,24 @@ _TERMINOLOGY_BLOCK: Block = (
 # domain the turn was routed to.
 UNIVERSAL_PRE: List[Block] = [
     (
+        "CROSS-TERRITORY COMPARISON",
+        "Problems, proposals and scenarios each belong to ONE territory: every "
+        "territory has its own, different problems (and proposals/scenarios), so "
+        "they are not comparable across territories. When the user asks to "
+        "compare, or to find the differences or similarities between, problems, "
+        "proposals or scenarios of DIFFERENT territories (e.g. 'what are the "
+        "differences between Molveno's problem and Fazzon's?'), do NOT call any "
+        "tool, do NOT retrieve either territory's data to build a comparison, and "
+        "do NOT say you need the other territory's details. Finish right away "
+        "with a short message that (1) says the two territories refer to "
+        "different problems, each specific to its own territory, which are not "
+        "comparable with each other, and (2) asks whether they want more details "
+        "about the problem of either territory, naming the territories they "
+        "mentioned. If they then reply yes without choosing one, ask which "
+        "territory they mean. This does not apply to comparing entities of the "
+        "same territory.",
+    ),
+    (
         "ON-TOPIC CHECK",
         "The platform covers tourism management, overtourism, mobility, problems, "
         "proposals, scenarios, and related decision-support. If the message is "

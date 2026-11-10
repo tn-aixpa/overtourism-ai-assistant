@@ -67,8 +67,9 @@ def _wait_instructions(state: AgentState) -> str:
             if proposal_id:
                 fields["proposal"] = _resolve_proposal_name(state, proposal_id)
         return (
-            "Before I submit this, please confirm the details below are correct:\n"
-            f"{_format_fields(fields)}\n\nShall I proceed?"
+            "Nothing has been saved yet. Before I submit this, please confirm "
+            "the details below are correct:\n"
+            f"{_format_fields(fields)}\n\nShall I proceed and save it?"
         )
 
     return "Please confirm to proceed."
