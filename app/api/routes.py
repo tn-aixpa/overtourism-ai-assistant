@@ -124,7 +124,6 @@ def _result(
     signal_territory: str | None = None,
 ) -> dict:
 
-    logger.warning(f"AAAAAAAAAAAAAAAAAAAAAAAAAA {signal_territory}")
     out = {
         "response": response,
         "session_id": session_id,
