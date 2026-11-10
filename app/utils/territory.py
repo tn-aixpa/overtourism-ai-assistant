@@ -234,7 +234,9 @@ def territory_switch_note(state: AgentState) -> str:
 _INDEX_ROUTE = "/indici"
 # Same-app Markdown links in an answer: "[text](/path...)". Absolute URLs
 # (web-search sources, https://...) never start with "/" so they don't match.
-_SAME_APP_LINK_RE = re.compile(r"\]\((/[^)\s]*)\)")
+# Markdown allows whitespace and <...> around the destination, and the model
+# does produce "]( /problems/...)" (leading space), so both are tolerated.
+_SAME_APP_LINK_RE = re.compile(r"\]\(\s*<?(/[^)\s>]*)>?\s*\)")
 SIGNAL_TERRITORY_NONE = "none"
 # Page where the user selects the territory by hand (same-app route).
 TERRITORY_SELECTION_ROUTE = "/problems"

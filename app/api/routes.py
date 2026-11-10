@@ -123,6 +123,8 @@ def _result(
     assistant_action_data=None,
     signal_territory: str | None = None,
 ) -> dict:
+
+    logger.warning(f"AAAAAAAAAAAAAAAAAAAAAAAAAA {signal_territory}")
     out = {
         "response": response,
         "session_id": session_id,
