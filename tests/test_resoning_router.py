@@ -19,7 +19,11 @@ from app.agent.nodes import route_groups
 from app.agent.state import AgentState, ReActStep
 from app.prompts import answer_generation as answer_generation_module
 from app.prompts import react_reasoning as react_reasoning_module
-from app.prompts.react_guidelines import GUIDELINE_BLOCKS, UNIVERSAL_POST
+from app.prompts.react_guidelines import (
+    GUIDELINE_BLOCKS,
+    NAVIGATION_POST,
+    UNIVERSAL_POST,
+)
 from app.tools.definitions.analysis import (
     create_get_configuration_parameters_tool,
     create_get_context_tool,
@@ -127,7 +131,7 @@ def test_broad_scenario_list_uses_page_territory_without_relationship_target():
 
 def test_navigation_requests_return_verified_frontend_links():
     navigation_policy = next(
-        body for title, body in UNIVERSAL_POST
+        body for title, body in NAVIGATION_POST
         if title == "LINK TO A PAGE WHEN THE USER WANTS TO NAVIGATE"
     )
     assert "`/indici`" in navigation_policy

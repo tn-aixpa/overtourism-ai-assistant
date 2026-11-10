@@ -132,7 +132,7 @@ class TestWaitInstructions:
         assert "Name: Overtourism" in msg
         assert "Description: Too many tourists" in msg
         assert "Objective" not in msg  # None values are skipped
-        assert "Shall I proceed?" in msg
+        assert "Shall I proceed and save it?" in msg
 
     def test_creation_tool_with_no_fields(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_proposal"
@@ -179,7 +179,7 @@ class TestWaitUserInputNode:
         assert result.goto == "generate_output_message"
         assert fresh_state.waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION
         assert len(fresh_state.cognitive.messages_to_include) == 1
-        assert "Shall I proceed?" in fresh_state.cognitive.messages_to_include[0]
+        assert "Shall I proceed and save it?" in fresh_state.cognitive.messages_to_include[0]
 
     def test_first_pass_unknown_tool_defaults_to_context_input(
         self, fresh_state: AgentState
@@ -225,7 +225,7 @@ class TestWaitUserInputNode:
         # The pending tool itself is preserved so tool_executor can run it.
         assert fresh_state.cognitive.selected_tool == "create_new_problem"
 
-    def test_ambiguous_reply_asks_for_clarification_and_keeps_pending_action(
+    def test_long_reply_abandons_pending_action_and_starts_a_new_request(
         self, fresh_state: AgentState
     ):
         fresh_state.cognitive.selected_tool = "create_new_problem"
@@ -236,15 +236,11 @@ class TestWaitUserInputNode:
 
         result = wait_user_input_node(fresh_state)
 
-        assert result.goto == "generate_output_message"
-        assert fresh_state.cognitive.selected_tool == "create_new_problem"
-        assert fresh_state.cognitive.tool_arguments == {"name": "N"}
-        assert fresh_state.waiting_for == AgentState.WaitingFor.PROBLEM_CONFIRMATION
-        assert fresh_state.cognitive.tool_confirmation_needed is True
-        assert any(
-            word in fresh_state.cognitive.messages_to_include[0].lower()
-            for word in ("clarify", "clear", "please", "reply")
-        )
+        assert result.goto == "initialize_tools"
+        assert fresh_state.cognitive.selected_tool is None
+        assert fresh_state.cognitive.tool_arguments == {}
+        assert fresh_state.waiting_for is None
+        assert fresh_state.cognitive.tool_confirmation_needed is False
 
     def test_user_input_stripped_of_whitespace(self, fresh_state: AgentState):
         fresh_state.cognitive.selected_tool = "create_new_problem"

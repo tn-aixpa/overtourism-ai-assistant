@@ -23,7 +23,7 @@ from app.schemas import PAGE_CONTEXT_MAX_BYTES, PageContext
 
 logger = logging.getLogger(__name__)
 
-# Hard cap on the rendered prompt block (the stored snapshot can be larger).
+# Best-effort character budget for the rendered block (the stored snapshot can be larger).
 PAGE_CONTEXT_MAX_PROMPT_CHARS = int(
     os.environ.get("PAGE_CONTEXT_MAX_PROMPT_CHARS", "10000")
 )
@@ -164,24 +164,15 @@ def render_page_context_block(state, audience: str = "reasoner") -> str:
     if not entity_lines:
         entity_lines = ["(none captured)"]
 
-    elements = page.get("elements", [])
-    budget = PAGE_CONTEXT_MAX_PROMPT_CHARS
-    lines, used = [], sum(len(h) + 1 for h in header + entity_lines)
-    for i, el in enumerate(elements):
-        line = _render_element(el)
-        if used + len(line) + 1 > budget:
-            lines.append(f"[{len(elements) - i} more elements omitted: size limit]")
-            break
-        lines.append(line)
-        used += len(line) + 1
-
     how = (
         "Use it to interpret questions about the interface (\"this field\", "
         "\"the Save button\", \"what is selected\")."
         if audience == "reasoner"
         else "Use it only to answer questions about what the user sees on the page."
     )
-    return f"""
+
+    def render(elements: list[str]) -> str:
+        return f"""
 ============================================================
 VISUAL PAGE CONTEXT (what the user currently sees)
 ============================================================
@@ -214,6 +205,26 @@ PAGE ENTITIES (identifiers, untrusted data)
 <page_snapshot>
 {chr(10).join(header)}
 elements:
-{chr(10).join(lines) if lines else "(none captured)"}
+{chr(10).join(elements) if elements else "(none captured)"}
 </page_snapshot>
 """
+
+    elements = page.get("elements", [])
+    rendered: list[str] = []
+    for i, el in enumerate(elements):
+        line = _render_element(el)
+        candidate = rendered + [line]
+        if i < len(elements) - 1:
+            candidate.append(
+                f"[{len(elements) - i - 1} more elements omitted: size limit]"
+            )
+        if len(render(candidate)) > PAGE_CONTEXT_MAX_PROMPT_CHARS:
+            rendered.append(
+                f"[{len(elements) - i} more elements omitted: size limit]"
+            )
+            break
+        rendered.append(line)
+
+    # Keep the fixed safety guidance intact when its own size exceeds a very
+    # small configured budget; element lines fit within the remaining space.
+    return render(rendered)

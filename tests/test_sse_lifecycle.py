@@ -448,6 +448,8 @@ class TestErrorsInsideTurn:
 
         assert first.status_code == 500
         assert second.status_code == 202, "turn from the failed POST must be released"
+        turn_id = second.json()["turn_id"]
+        assert wait_for_status(live.base, turn_id)["status"] == "done"
         assert len(live.agent.invocations) == 1, "the failed POST must not run the agent"
 
     def test_executor_refusing_the_job_marks_the_turn_failed(self, live, monkeypatch):

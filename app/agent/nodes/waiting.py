@@ -130,6 +130,8 @@ def _is_cancellation(user_input: str) -> bool:
         return True
     if not _contains_any_phrase(normalized, _CANCELLATION_PHRASES):
         return False
+    if "cancel" in normalized.split():
+        return True
     # Mirror of _is_confirmation: a cancellation word inside a longer reply is
     # a cancellation ONLY when nothing else of substance is said ("no,
     # grazie", "annulla tutto", "no, lascia stare"). "No, prima confrontalo
@@ -176,7 +178,7 @@ _CONFIRMATION_FILLER_WORDS = {
     "avanti", "salva", "salvalo", "salvala", "crea", "crealo", "creala",
     "invia", "inviala", "inviamo", "salviamo", "creiamo", "pure",
     "please", "thanks", "thank", "you", "then", "now", "it", "do", "go",
-    "ahead", "great", "perfect", "definitely", "absolutely",
+    "ahead", "great", "perfect", "definitely", "absolutely", "to", "me",
 }
 
 # Words that may accompany a cancellation without changing its meaning.
@@ -184,7 +186,7 @@ _CANCELLATION_FILLER_WORDS = {
     "grazie", "per", "favore", "pure", "allora", "tutto", "lascia", "stare",
     "lascialo", "lasciamo", "perdere", "importa", "niente", "davvero",
     "assolutamente", "certo", "ora", "adesso", "thanks", "thank", "you",
-    "please", "it", "all", "then", "really", "just",
+    "please", "it", "all", "then", "really", "just", "not", "sure",
 }
 
 _CANCELLATION_PHRASES = {

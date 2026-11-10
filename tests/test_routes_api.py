@@ -293,6 +293,7 @@ class TestHelpers:
             "response": "hi",
             "session_id": "s",
             "assistant_action_data": None,
+            "territory": None,
         }
 
     def test_result_with_agent_type_and_actions(self, api_env):
@@ -642,6 +643,7 @@ class TestGetTurn:
                 "response": "answer-to:hi",
                 "session_id": sid,
                 "assistant_action_data": None,
+                "territory": None,
                 "agent_type": "executor",
             },
         }
