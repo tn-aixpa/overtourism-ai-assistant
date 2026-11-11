@@ -334,9 +334,10 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             "municipalities — or how many — have an index above/below a given value "
             "(e.g. 'quali comuni hanno turisticità superiore a 0.5 a giugno 2023?', "
             "'quanti comuni sono sotto 0.2?'), or the N municipalities with the "
-            "highest/lowest values for an index in a period. Also use it when the user asks such a "
-            "question about what a map shows. To only SEE the distribution, use "
-            "show_territorial_index_map instead."
+            "highest/lowest values for an index in a period. Also use it to explain "
+            "an existing map's values: query_type='summary' returns the value range "
+            "and the five highest/lowest areas from the same data used by the map. "
+            "To only SEE the distribution, use show_territorial_index_map instead."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
@@ -345,6 +346,9 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             "The index_id must be resolved first — if it hasn't been listed yet this "
             "session, call get_territorial_index_list first and use the matching "
             "index's index_id, never a guessed or typed string. "
+            "For a general explanation of a visible map, use query_type='summary'; "
+            "it returns the number of areas with values, the actual minimum and "
+            "maximum, and the five highest and lowest areas. "
             "Additional labels can be combined with a concrete index: for "
             "'tasso-variazione', use that label as index_id and provide indicator plus "
             "both comparison dates; for 'incidenza-periodo', use that label as index_id "
@@ -396,13 +400,14 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
             ToolParameter(
                 name="query_type",
                 description=(
-                    "'values' = values for listed municipalities; 'threshold' = "
-                    "municipalities above/below a threshold; 'ranking' = the N "
-                    "municipalities with the highest or lowest values."
+                   "'summary' = summarize the values on the current map; 'values' "
+                   "= values for listed municipalities; 'threshold' = "
+                   "municipalities above/below a threshold; 'ranking' = the N "
+                   "municipalities with the highest or lowest values."
                 ),
                 type="string",
                 required=True,
-                schema={"enum": ["values", "threshold", "ranking"]},
+                schema={"enum": ["summary", "values", "threshold", "ranking"]},
             ),
             ToolParameter(
                 name="municipalities",
@@ -536,9 +541,96 @@ def create_query_territorial_index_values_tool() -> ToolDefinition:
     )
 
 
+def create_query_territorial_index_plot_tool() -> ToolDefinition:
+    return ToolDefinition(
+        name="query_territorial_index_plot",
+        description=(
+            "Retrieve a compact, factual summary of an existing territorial-index "
+            "line/bar plot without displaying another chart. Use this when the user "
+            "asks to explain or interpret a plot they are viewing."
+        ),
+        category=ToolCategory.DATA_RETRIEVAL,
+        long_description=(
+            "Fetches the same time-series data used to draw the territorial index "
+            "plot, then computes each series' minimum, maximum, average, first/last "
+            "values, overall direction and peaks. For multiple series it also "
+            "summarizes comparisons. No raw plot arrays or widget are returned. "
+            "Resolve index_id via get_territorial_index_list first; use the dates, "
+            "granularity and selected territories from the current page snapshot "
+            "when available. selected_territories may contain municipalities OR "
+            "macro-areas, and may include 'Provincia' to include the province "
+            "series. Omit it for a province-only plot. Do not mix municipalities "
+            "and macro-areas. If the period or index cannot be resolved from the "
+            "page or conversation, ask the user rather than guessing."
+        ),
+        parameters=[
+            ToolParameter(
+                name="index_id",
+                description="Index id resolved using get_territorial_index_list.",
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="start_date",
+                description=(
+                    "First day of the first month in the plotted period (YYYY-MM-DD)."
+                ),
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="end_date",
+                description=(
+                    "Date of the last month in the plotted period (YYYY-MM-DD), "
+                    "as used by the plot."
+                ),
+                type="string",
+                required=True,
+            ),
+            ToolParameter(
+                name="granularity",
+                description=(
+                    "Plot time interval: annuale, mensile, settimanale, or giornaliero."
+                ),
+                type="string",
+                required=False,
+                default="mensile",
+                schema={"enum": ["annuale", "mensile", "settimanale", "giornaliero"]},
+            ),
+            ToolParameter(
+                name="selected_territories",
+                description=(
+                    "Territories shown in the plot (names from the page snapshot); "
+                    "omit for the whole province."
+                ),
+                type="array",
+                required=False,
+                schema={"items": {"type": "string"}},
+            ),
+            ToolParameter(
+                name="include_provincia",
+                description=(
+                    "Include the province series alongside selected territories."
+                ),
+                type="boolean",
+                required=False,
+                default=False,
+            ),
+        ],
+        output_description=(
+            "Compact summary of the existing plot's time-series data; no chart widget."
+        ),
+        enabled=True,
+        tags=["data", "read-only", "territorial-index", "plot"],
+        agent_tier="executor",
+        allowed_modes=("standalone", "internal"),
+    )
+
+
 __all__ = [
     "create_get_territorial_index_list_tool",
     "create_show_territorial_index_map_tool",
     "create_show_territorial_index_plot_tool",
     "create_query_territorial_index_values_tool",
+    "create_query_territorial_index_plot_tool",
 ]

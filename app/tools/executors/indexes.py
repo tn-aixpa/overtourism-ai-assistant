@@ -823,6 +823,114 @@ def _summarize_plot_series(raw: Any) -> Dict[str, Any] | None:
         return None
 
 
+def execute_query_territorial_index_plot(
+    state: AgentState,
+    index_id: str,
+    start_date: str,
+    end_date: str,
+    granularity: str = _DEFAULT_GRANULARITY,
+    selected_territories: list | None = None,
+    include_provincia: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Fetch and summarize an existing index plot without returning a widget."""
+    from app.tools.executor_backend_tools import (
+        get_spatial_areas,
+        get_territorial_index_plot_data,
+    )
+
+    granularity = (granularity or _DEFAULT_GRANULARITY).strip().lower()
+    if granularity not in {"annuale", "mensile", "settimanale", "giornaliero"}:
+        raise ValueError(
+            "Unknown plot granularity: use annuale, mensile, settimanale, or giornaliero"
+        )
+
+    spatial_areas = get_spatial_areas.invoke({})
+    selection = _resolve_selected_territories(
+        selected_territories, include_provincia, spatial_areas
+    )
+    params = {
+        "index": index_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+    }
+
+    raw = _fetch_plot(
+        get_territorial_index_plot_data,
+        {
+            **params,
+            "spatial_granularity": selection["spatial_granularity"],
+            "selected_territories": selection["codes"],
+        },
+        state,
+    )
+
+    if (
+        selection["include_provincia"]
+        and selection["spatial_granularity"] != _LEVEL_PROVINCIA
+    ):
+        province = _fetch_plot(
+            get_territorial_index_plot_data,
+            {
+                **params,
+                "spatial_granularity": _LEVEL_PROVINCIA,
+                "selected_territories": [],
+            },
+            state,
+        )
+        existing = {
+            str(series.get("label"))
+            for series in (raw.get("series") or [])
+            if isinstance(series, dict)
+        }
+        raw["series"] = list(raw.get("series") or []) + [
+            series
+            for series in (province.get("series") or [])
+            if isinstance(series, dict) and str(series.get("label")) not in existing
+        ]
+
+    series_summary = _summarize_plot_series(raw)
+    if not series_summary:
+        return {
+            "success": False,
+            "response": (
+                "The backend returned no readable series for this index plot "
+                "and period."
+            ),
+            "plot_summary": {
+                **params,
+                "spatial_granularity": selection["spatial_granularity"],
+                "selected_territories": selection["names"],
+                "include_provincia": selection["include_provincia"],
+            },
+        }
+
+    comparison = series_summary.get("comparison")
+    if isinstance(comparison, dict):
+        comparison.pop("shape_correlation", None)
+
+    returned = {
+        _normalize_name(str(series.get("label")))
+        for series in (raw.get("series") or [])
+        if isinstance(series, dict) and series.get("label") is not None
+    }
+    missing = [
+        name for name in selection["names"] if _normalize_name(name) not in returned
+    ]
+    return {
+        "success": True,
+        "plot_summary": {
+            **params,
+            "spatial_granularity": selection["spatial_granularity"],
+            "selected_territories": selection["names"],
+            "include_provincia": selection["include_provincia"],
+            "territories_without_data": missing,
+        },
+        "series_summary": series_summary,
+    }
+
+
 def execute_show_territorial_index_plot(
     state: AgentState,
     index_id: str,
@@ -1095,6 +1203,8 @@ def execute_query_territorial_index_values(
     values, from the same endpoint (and the same INDICE/AREA_NAME fields) the
     map widget uses — but WITHOUT producing a widget:
 
+    - query_type="summary": the count, range and five highest/lowest areas
+      represented by the map.
     - query_type="values": the index value of each requested municipality
       over the period (names are matched tolerantly; unknown names are
       reported, with suggestions, instead of being dropped silently).
@@ -1111,9 +1221,10 @@ def execute_query_territorial_index_values(
     numbers in the answer are exactly what the backend returned.
     """
     query_type = (query_type or "").strip().lower()
-    if query_type not in {"values", "threshold", "ranking"}:
+    if query_type not in {"summary", "values", "threshold", "ranking"}:
         raise ValueError(
-            f"Unknown query_type '{query_type}': use 'values', 'threshold', or 'ranking'"
+            f"Unknown query_type '{query_type}': use 'summary', 'values', "
+            "'threshold', or 'ranking'"
         )
 
     # Validate BEFORE the backend call so a malformed request costs nothing.
@@ -1142,7 +1253,7 @@ def execute_query_territorial_index_values(
             raise ValueError(
                 f"Unknown operator '{operator}': use one of {sorted(_OPERATORS)}"
             )
-    else:
+    elif query_type == "ranking":
         ranking_order = (ranking_order or "").strip().lower()
         if ranking_order not in {"highest", "lowest"}:
             raise ValueError(
@@ -1207,6 +1318,12 @@ def execute_query_territorial_index_values(
                 "The backend returned no municipality values for this index "
                 "and period."
             ),
+        }
+
+    if query_type == "summary":
+        return {
+            **base,
+            **_summarize_map_features(features),
         }
 
     if query_type == "values":
@@ -1298,4 +1415,5 @@ EXECUTORS = {
     "show_territorial_index_map": execute_show_territorial_index_map,
     "show_territorial_index_plot": execute_show_territorial_index_plot,
     "query_territorial_index_values": execute_query_territorial_index_values,
+    "query_territorial_index_plot": execute_query_territorial_index_plot,
 }

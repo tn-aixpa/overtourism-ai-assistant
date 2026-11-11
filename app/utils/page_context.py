@@ -191,9 +191,12 @@ those at capture time and the user may have changed them since. {how}
   `search`/`category` from `active_tab`. Report the tool's label, unit, current
   value and allowed range; compare snapshot value with stored current. Never
   guess a label.
-- For on-screen indexes, query `query_territorial_index_values` with
-  `entities.index_id` and dates. For max/min use ranking, highest/lowest,
-  top_n=1. Ask the user only if identifiers are missing or tools cannot answer.
+- For a visible index map use `query_territorial_index_values` (`summary`); for
+  a plot use `query_territorial_index_plot`. Take index/period from page
+  `entities` or the matching chart; include plot granularity and selected
+  territories. Explain from retrieved data and the index description; do not
+  ask for a map legend or area when identifiers are present. For map max/min
+  use ranking, highest/lowest, top_n=1. Ask the user only if identifiers are missing or tools cannot answer.
 - For scenario charts, use captured `chart_type`/`chart_subsystem`; never infer
   the mode (`sustainability` vs `tourist_load`).
 - Combine sources when relevant.

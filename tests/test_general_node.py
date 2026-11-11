@@ -68,6 +68,23 @@ class TestBuildMessagesFromToolResult:
         msgs = gn._build_messages_from_tool_result("get_context_details", result)
         assert "Here are the requested details" in msgs[0]
 
+    def test_territorial_index_plot_query_surfaces_computed_summary(self):
+        result = {
+            "success": True,
+            "output": {
+                "plot_summary": {"granularity": "mensile"},
+                "series_summary": {"series": [{"label": "Albiano", "trend": "increasing"}]},
+            },
+        }
+
+        msgs = gn._build_messages_from_tool_result(
+            "query_territorial_index_plot", result
+        )
+
+        assert "use ONLY these figures" in msgs[0]
+        assert "Albiano" in msgs[0]
+        assert "increasing" in msgs[0]
+
     def test_analyze_scenario_results_returns_message(self):
         result = {"success": True, "output": {"message": "The answer is 42."}}
         msgs = gn._build_messages_from_tool_result("analyze_scenario_results", result)

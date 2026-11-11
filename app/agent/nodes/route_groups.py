@@ -164,6 +164,7 @@ _INDEXES_SUBGROUPS: Dict[str, Set[str]] = {
     SUB_INDEX_QUERY: {
         "get_territorial_index_list",
         "query_territorial_index_values",
+        "query_territorial_index_plot",
     },
     SUB_INDEX_METHODOLOGY: {"explain_workflow"},
 }

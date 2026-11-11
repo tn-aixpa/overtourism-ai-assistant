@@ -323,6 +323,19 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
                 f"{truncate_for_prompt(output, max_chars=9000)}"
             ]
 
+        case "query_territorial_index_plot":
+            if not output.get("success", True):
+                return [
+                    output.get(
+                        "response", "No plot data was returned for this query."
+                    )
+                ]
+            return [
+                "Territorial index plot summary (computed from the plotted data; "
+                "use ONLY these figures): "
+                f"{truncate_for_prompt(output, max_chars=5000)}"
+            ]
+
         case "get_configuration_parameters":
             # Bounded, fixed-size payload (not territory data), so give it a
             # much larger budget than the generic default — see

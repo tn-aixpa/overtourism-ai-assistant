@@ -3,7 +3,10 @@ from unittest.mock import patch
 import pytest
 
 from app.tools import executor_backend_tools as backend_tools
-from app.tools.definitions.indexes import create_query_territorial_index_values_tool
+from app.tools.definitions.indexes import (
+    create_query_territorial_index_plot_tool,
+    create_query_territorial_index_values_tool,
+)
 from app.tools.executors import indexes as index_executors
 
 
@@ -77,6 +80,89 @@ class TestAdditionalTerritorialIndexParams:
 
         assert mock_get.call_args.kwargs["params"]["granularity"] == "mensile"
         assert result["plot_summary"]["granularity"] == "mensile"
+
+    def test_plot_query_summarizes_selected_series_and_province_without_widget(self):
+        spatial_areas = {
+            "comuni": [
+                {"code": "-1", "name": "Provincia"},
+                {"code": "1", "name": "Albiano"},
+            ],
+            "areas": [{"code": "-1", "name": "Provincia"}],
+        }
+        local_series = {
+            "labels": ["Gen 2024", "Feb 2024", "Mar 2024"],
+            "series": [{
+                "label": "Albiano",
+                "data": [
+                    {"x": "Gen 2024", "y": 0.1},
+                    {"x": "Feb 2024", "y": 0.3},
+                    {"x": "Mar 2024", "y": 0.2},
+                ],
+            }],
+        }
+        province_series = {
+            "labels": ["Gen 2024", "Feb 2024", "Mar 2024"],
+            "series": [{
+                "label": "Provincia",
+                "data": [
+                    {"x": "Gen 2024", "y": 0.2},
+                    {"x": "Feb 2024", "y": 0.25},
+                    {"x": "Mar 2024", "y": 0.3},
+                ],
+            }],
+        }
+
+        with (
+            patch.object(backend_tools, "get_spatial_areas") as mock_spatial_areas,
+            patch.object(
+                backend_tools,
+                "get_data",
+                side_effect=[local_series, province_series],
+            ) as mock_get,
+        ):
+            mock_spatial_areas.invoke.return_value = spatial_areas
+            result = index_executors.execute_query_territorial_index_plot(
+                state=None,
+                index_id="ricettivita",
+                start_date="2024-01-01",
+                end_date="2024-12-31",
+                granularity="mensile",
+                selected_territories=["Provincia", "Albiano"],
+            )
+
+        assert result["success"] is True
+        assert result["plot_summary"]["selected_territories"] == ["Albiano"]
+        assert result["plot_summary"]["include_provincia"] is True
+        assert result["series_summary"]["series"][0]["label"] == "Albiano"
+        assert result["series_summary"]["series"][0]["min"] == {
+            "period": "Gen 2024",
+            "value": 0.1,
+        }
+        assert result["series_summary"]["series"][1]["max"] == {
+            "period": "Mar 2024",
+            "value": 0.3,
+        }
+        assert "shape_correlation" not in result["series_summary"]["comparison"]
+        assert "assistant_action_data" not in result
+        assert mock_get.call_count == 2
+        assert (
+            mock_get.call_args_list[0].kwargs["params"]["selected_territories"]
+            == ["1"]
+        )
+        assert (
+            mock_get.call_args_list[1].kwargs["params"]["spatial_granularity"]
+            == "provincia"
+        )
+
+    def test_plot_query_rejects_unknown_granularity(self):
+        with pytest.raises(ValueError, match="Unknown plot granularity"):
+            index_executors.execute_query_territorial_index_plot(
+                state=None,
+                index_id="ricettivita",
+                start_date="2024-01-01",
+                end_date="2024-12-31",
+                granularity="quarterly",
+            )
 
     def test_map_executor_passes_incidenza_arguments_to_backend(self):
         response = {"geo_data": {"data": {"features": []}}}
@@ -234,6 +320,32 @@ class TestTerritorialIndexRanking:
             }
         }
 
+    def test_summary_returns_same_map_values_as_ranked_areas(self, index_response):
+        with patch.object(backend_tools, "get_data", return_value=index_response):
+            result = index_executors.execute_query_territorial_index_values(
+                state=None,
+                index_id="ricettivita",
+                start_date="2023-01-01",
+                end_date="2023-12-31",
+                query_type="summary",
+            )
+
+        assert result["areas_with_value"] == 4
+        assert result["lowest_value"] == 1
+        assert result["highest_value"] == 9
+        assert result["top_areas"] == [
+            {"area_name": "Trento", "index_value": 9},
+            {"area_name": "Ala", "index_value": 9},
+            {"area_name": "Cembra", "index_value": 4},
+            {"area_name": "Molveno", "index_value": 1},
+        ]
+        assert result["bottom_areas"] == [
+            {"area_name": "Molveno", "index_value": 1},
+            {"area_name": "Cembra", "index_value": 4},
+            {"area_name": "Ala", "index_value": 9},
+            {"area_name": "Trento", "index_value": 9},
+        ]
+
     def test_returns_requested_highest_municipalities_with_values(self, index_response):
         with patch.object(backend_tools, "get_data", return_value=index_response):
             result = index_executors.execute_query_territorial_index_values(
@@ -385,11 +497,12 @@ class TestTerritorialIndexRanking:
                 **arguments,
             )
 
-    def test_tool_schema_exposes_ranking_mode(self):
+    def test_tool_schema_exposes_summary_and_ranking_modes(self):
         tool = create_query_territorial_index_values_tool()
         parameters = {parameter.name: parameter for parameter in tool.parameters}
 
         assert parameters["query_type"].schema["enum"] == [
+            "summary",
             "values",
             "threshold",
             "ranking",
@@ -397,3 +510,9 @@ class TestTerritorialIndexRanking:
         assert parameters["ranking_order"].schema["enum"] == ["highest", "lowest"]
         assert parameters["top_n"].type == "integer"
         assert parameters["top_n"].default == 5
+
+    def test_plot_query_tool_is_available_in_integrated_mode(self):
+        tool = create_query_territorial_index_plot_tool()
+
+        assert tool.name == "query_territorial_index_plot"
+        assert tool.is_allowed_for("viewer", "internal")

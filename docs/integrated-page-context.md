@@ -86,6 +86,7 @@ Models: `PageContext` / `PageElement` in `app/schemas.py`.
 | element `label`, `value`, `selected`, `options`, `visible` (default true), `enabled` (default true) | optional. `value` is a string/number/bool (checkbox/switch state goes here); `selected` is a string or list of strings |
 | element `param_name` | optional backend parameter key (the `name` returned by `get_configuration_parameters`) |
 | chart `index_id`, `start_date`, `end_date`, `granularity` | optional territorial-index identifiers describing what is plotted |
+| `entities.selected_territories` | optional selected municipalities or macro-areas in the current territorial-index plot; include `"Provincia"` when the provincial series is shown alongside them |
 | chart `chart_type`, `chart_subsystem` | optional scenario-plot display mode (`sustainability` / `tourist_load`) and selected subsystem label; capture the active UI setting, not data points or computed statistics |
 | element `required`, `error`, `group` | optional: required flag, validation message shown by the UI, section the element belongs to |
 | table `columns`, `rows`, `row_count` | `rows` is a bounded sample (≤ 25 rows × ≤ 20 columns); `row_count` is the real total |
@@ -96,6 +97,10 @@ Adding an element type requires extending the `PageElementType` literal.
 
 > The frontend source is not part of the backend repository: the frontend must be
 > aligned with this schema (field names above are authoritative).
+
+For questions about an already visible territorial-index plot, the chatbot uses
+these identifiers to re-fetch and summarize its time-series data without drawing
+a duplicate chart. The snapshot itself must not include computed chart points.
 
 ## 4. `POST /agent/init`
 

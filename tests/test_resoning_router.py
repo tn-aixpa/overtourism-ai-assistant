@@ -19,6 +19,7 @@ from app.agent.nodes import route_groups
 from app.agent.state import AgentState, ReActStep
 from app.prompts import answer_generation as answer_generation_module
 from app.prompts import react_reasoning as react_reasoning_module
+from app.prompts import routing as routing_module
 from app.prompts.react_guidelines import (
     GUIDELINE_BLOCKS,
     NAVIGATION_POST,
@@ -31,6 +32,7 @@ from app.tools.definitions.analysis import (
 from app.tools.definitions.analysis_widgets import create_analysis_widget_tool
 from app.tools.definitions.indexes import (
     create_get_territorial_index_list_tool,
+    create_query_territorial_index_plot_tool,
     create_query_territorial_index_values_tool,
     create_show_territorial_index_map_tool,
     create_show_territorial_index_plot_tool,
@@ -168,6 +170,10 @@ def test_territorial_index_guidelines_do_not_import_modelling_territories():
         for _, body in GUIDELINE_BLOCKS["indexes"]
     )
 
+    assert "query_type='summary'" in index_guidelines
+    assert "do not ask for a named municipality or the colour legend" in index_guidelines
+    assert "query_territorial_index_plot" in index_guidelines
+    assert "never claim the values or trend are unreadable" in index_guidelines
     assert "Keep index geography separate from the active modelling/scenario territory" in index_guidelines
     assert "Do not introduce place names from modelling context" in index_guidelines
     assert "Molveno" not in index_guidelines
@@ -189,11 +195,13 @@ def test_internal_route_exposes_page_enrichment_tools_but_not_map_widgets():
     assert {
         "get_territorial_index_list",
         "query_territorial_index_values",
+        "query_territorial_index_plot",
     }.issubset(index_tools)
     assert create_get_configuration_parameters_tool().is_allowed_for("viewer", "internal")
     assert create_get_context_tool().is_allowed_for("viewer", "internal")
     assert create_get_territorial_index_list_tool().is_allowed_for("viewer", "internal")
     assert create_query_territorial_index_values_tool().is_allowed_for("viewer", "internal")
+    assert create_query_territorial_index_plot_tool().is_allowed_for("viewer", "internal")
     assert not create_show_territorial_index_map_tool().is_allowed_for("viewer", "internal")
     assert not create_show_territorial_index_plot_tool().is_allowed_for("viewer", "internal")
 
@@ -424,6 +432,31 @@ class TestInitializeTools:
 
 
 class TestTopicRouter:
+    def test_route_classifier_uses_integrated_page_route_for_map_references(
+        self, fresh_state: AgentState
+    ):
+        fresh_state.integrated_mode = True
+        fresh_state.page_context = {"route": "/indici", "elements": []}
+        fresh_state.add_user_message(
+            "Puoi aiutarmi ad interpretare i dati su questa mappa?"
+        )
+        response = json.dumps({
+            "top_level": route_groups.TOP_INDEXES,
+            "topic_changed": True,
+            "second_level": route_groups.SUB_INDEX_QUERY,
+        })
+
+        with patch.object(
+            routing_module, "llm_interaction", return_value=response
+        ) as interact:
+            result = routing_module.classify_route(fresh_state, None, None)
+
+        prompt = interact.call_args.args[1]
+        assert '"route": "/indici"' in prompt
+        assert 'second_level "index_query"' in prompt
+        assert result["top_level"] == route_groups.TOP_INDEXES
+        assert result["second_level"] == route_groups.SUB_INDEX_QUERY
+
     def test_unclear_top_level_pauses_for_clarification(
         self, fresh_state: AgentState
     ):

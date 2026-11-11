@@ -246,6 +246,25 @@ class TestSchema:
         assert "chart_subsystem=\"Parcheggi\"" in rendered
         assert "never infer" in rendered
 
+    def test_prompt_queries_visible_index_map_for_a_summary(self):
+        state = AgentState(integrated_mode=True)
+        state.page_context = parse_page_context(j(page(
+            route="/indici",
+            entities={
+                "index_id": "densita-turistica",
+                "start_date": "2025-01-01",
+                "end_date": "2025-12-31",
+            },
+            elements=[],
+        )))
+
+        rendered = pc.render_page_context_block(state)
+
+        assert "query_territorial_index_values` (`summary`)" in rendered
+        assert "query_territorial_index_plot" in rendered
+        assert "do not" in rendered
+        assert "map legend" in rendered
+
     def test_prompt_uses_selected_territory_for_broad_scenario_lists(self):
         state = AgentState(integrated_mode=True)
         state.page_context = parse_page_context(j(page(
