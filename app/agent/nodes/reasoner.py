@@ -292,12 +292,15 @@ def react_reasoner_node(state: AgentState) -> Command:
     # trusts it as "tool data". So it must not be a back door for answers the
     # model wrote from its own knowledge (the pizza-recipe leak). The model
     # declares what kind of finish it is; the two non-answer kinds are
-    # handled deterministically here, and an "answer from data" with no data
+    # handled deterministically here ("clarification" and "unavailable" — a
+    # permission / mode limit on an ON-topic request — are relayed as they are
+    # because they claim no knowledge), and an "answer from data" with no data
     # behind it on a tool-only route is treated as needing general knowledge.
     finish_type = str(response_json.get("finish_type") or "").strip()
     if finish_type not in {
         "answer_from_data",
         "clarification",
+        "unavailable",
         "decline",
         "needs_general_knowledge",
     }:

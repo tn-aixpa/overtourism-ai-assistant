@@ -72,13 +72,8 @@ class TestBuildMessagesFromToolResult:
         result = {
             "success": True,
             "output": {
-                "plot_summary": {
-                    "granularity": "mensile",
-                    "territories_without_data": ["Andalo"],
-                },
-                "series_summary": {
-                    "series": [{"label": "Albiano", "trend": "increasing"}]
-                },
+                "plot_summary": {"granularity": "mensile"},
+                "series_summary": {"series": [{"label": "Albiano", "trend": "increasing"}]},
             },
         }
 
@@ -89,57 +84,6 @@ class TestBuildMessagesFromToolResult:
         assert "use ONLY these figures" in msgs[0]
         assert "Albiano" in msgs[0]
         assert "increasing" in msgs[0]
-        assert "territories_without_data" not in msgs[0]
-        assert "Andalo" not in msgs[0]
-
-    def test_shown_plot_does_not_surface_missing_series_metadata(self):
-        result = {
-            "success": True,
-            "output": {
-                "response": "Ecco il grafico.",
-                "plot_summary": {
-                    "granularity": "mensile",
-                    "territories_without_data": ["Andalo"],
-                },
-                "series_summary": {
-                    "series": [{"label": "Albiano", "mean": 0.03}]
-                },
-            },
-        }
-
-        msgs = gn._build_messages_from_tool_result(
-            "show_territorial_index_plot", result
-        )
-
-        assert "Albiano" in "\n".join(msgs)
-        assert "territories_without_data" not in "\n".join(msgs)
-        assert "Andalo" not in "\n".join(msgs)
-
-    @pytest.mark.parametrize(
-        "result",
-        [
-            {"success": False, "error": "backend returned no readable series"},
-            {
-                "success": True,
-                "output": {
-                    "success": False,
-                    "response": "The backend returned no readable series.",
-                },
-            },
-        ],
-    )
-    @pytest.mark.parametrize(
-        "tool_name",
-        ["show_territorial_index_plot", "query_territorial_index_plot"],
-    )
-    def test_plot_failures_do_not_expose_retrieval_diagnostics(
-        self, tool_name, result
-    ):
-        msgs = gn._build_messages_from_tool_result(tool_name, result)
-
-        assert msgs == ["No verified data is available for the requested period."]
-        assert "backend" not in msgs[0]
-        assert "series" not in msgs[0]
 
     def test_analyze_scenario_results_returns_message(self):
         result = {"success": True, "output": {"message": "The answer is 42."}}

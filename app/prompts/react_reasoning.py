@@ -211,11 +211,13 @@ To take an action:
 {{"thought": "<your brief reasoning for this single next step>", "action": "tool", "tool_name": "<name>", "arguments": {{}}}}
 
 To finish the turn (covers: answers grounded in data, clarifications, out-of-scope, tool-unavailable):
-{{"thought": "<your brief reasoning>", "action": "finish", "finish_type": "<answer_from_data | clarification | decline | needs_general_knowledge>", "message": "<message for the user>"}}
+{{"thought": "<your brief reasoning>", "action": "finish", "finish_type": "<answer_from_data | clarification | unavailable | decline | needs_general_knowledge>", "message": "<message for the user>"}}
 
 finish_type (see the FINISH MESSAGES guideline): "answer_from_data" = the message only restates
 Observations of this turn / prior tool results / the context lines above; "clarification" = the
-message only asks the user something; "decline" = the request is not about tourism management
+message only asks the user something; "unavailable" = the request IS on-topic but a tool, role or
+mode limit above prevents it (the message says which; never use "decline" for this);
+"decline" = the request is not about tourism management
 (leave "message" empty); "needs_general_knowledge" = the request is on-topic but NO tool or
 document above can ground the answer (leave "message" empty).
 
