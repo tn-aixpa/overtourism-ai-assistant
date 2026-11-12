@@ -10,8 +10,10 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
             "List the concrete territorial indexes available on the platform (e.g. "
             "'Indice di ricettività', 'Indice di turisticità'), with a description and "
             "the years each is available for. Also lists additional indicators that "
-            "can be combined with any concrete index. Call this whenever the user asks what "
-            "indices/indicators exist, or needs to pick one by name before analyzing it."
+            "can be combined with any concrete index. Call this whenever the user asks "
+            "what an existing named index means or measures, asks for its definition/"
+            "description, asks what indices exist, or needs to pick one by name before "
+            "analyzing it — even if they omit the words 'index' or 'indicator'."
         ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
@@ -29,8 +31,10 @@ def create_get_territorial_index_list_tool() -> ToolDefinition:
                 name="index_id",
                 description=(
                     "Optional. The index_id of ONE index (taken from a previous call "
-                    "of this tool) to get its FULL description, sources and method. "
-                    "Omit it to get the complete list of all indexes."
+                    "of this tool) to get its FULL description, sources and method "
+                    "(use this after matching a named index when the user asks for "
+                    "its definition or details). Omit it to get the complete list of "
+                    "all indexes."
                 ),
                 type="string",
                 required=False,

@@ -157,10 +157,16 @@ prefer the most specific: e.g. a question about a named territorial index
 is "indexes", not "system_info", even though indexes are technically part
 of the system.
 
-Within "indexes", distinguish requests about existing index data from
+Within "indexes", distinguish requests about existing indexes from
 methodology questions. Requests to define, design, construct, choose
-variables for, interpret, or validate a new territorial index belong to
-second_level "index_methodology". Requests for which indexes exist, their
+variables for, or validate a NEW territorial index belong to
+second_level "index_methodology". By contrast, when the user asks what an
+EXISTING named index means, measures, or how it is defined, route to
+second_level "index_list" — even if they omit the words "index" or
+"indicator" and ask only for the named measure (e.g. "definizione di
+Carico antropico", "cos'è il Carico antropico"). This is a lookup of live
+platform data, not glossary vocabulary, general knowledge, or index-design
+methodology. Requests for which indexes exist, their descriptions or
 available periods, maps, or charts belong to index_list, index_map, or
 index_plot respectively. Numeric questions about index values — the value
 of an index for one or more named municipalities, or which/how many
@@ -191,8 +197,10 @@ decide by the NEAREST CONTEXT:
 1. If there is a current route or the recent conversation is about one of the
    two, stay in it (set "topic_changed" to false).
 2. Otherwise choose modelling ("location") unless the message itself names an
-   index/indicator ("indice", "indicatore", one of the index names),
-   municipalities/macro-areas/the province, or a territorial map/ranking.
+   index/indicator ("indice", "indicatore", one of the index names), asks for
+   the meaning/definition of a named territorial measure (even without saying
+   it is an index), mentions municipalities/macro-areas/the province, or asks
+   for a territorial map/ranking.
 The same holds the other way round: while the conversation is about
 territorial indexes, an ambiguous word or a bare "grafico" stays in "indexes".
 

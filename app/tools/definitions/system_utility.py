@@ -9,10 +9,10 @@ def create_lookup_glossary_tool() -> ToolDefinition:
         description=(
             "Look up definitions, aliases, and relationships for domain terms "
             "(e.g. 'problem', 'proposal', 'scenario', 'overtourism', 'digital twin', "
-            "'territorial index'). Use this to answer user questions about terminology "
-            "or to clarify ambiguous intent before selecting another tool. To list the "
-            "concrete, individual territorial indexes that actually exist (e.g. 'what "
-            "indices are there?', 'which territorial indices exist?'), use "
+            "'territorial index' as a platform concept). Use this for glossary "
+            "terminology or to clarify ambiguous intent. For definitions or details "
+            "of a concrete, named territorial index (e.g. 'Carico antropico'), or "
+            "to list the indexes that actually exist, use "
             "get_territorial_index_list instead — that data comes from the backend, not "
             "the glossary."
         ),
@@ -22,13 +22,15 @@ def create_lookup_glossary_tool() -> ToolDefinition:
             "Matching is fuzzy: it checks the query against term names, aliases, and "
             "related_terms fields. "
             "Returns definitions, aliases, and related concepts for all matching entries. "
-            "Call this whenever: (a) the user asks what a term means, "
-            "(b) the user uses unfamiliar vocabulary that might map to a platform concept, "
+            "Call this whenever: (a) the user asks what a glossary/platform concept "
+            "means, (b) the user uses unfamiliar vocabulary that might map to a "
+            "platform concept, "
             "or (c) you need to clarify whether the user is referring to a Problem, "
             "Proposal, or Scenario before proceeding. "
             "This tool does NOT enumerate the concrete territorial indexes available on "
-            "the platform (e.g. 'Indice di ricettività') — those are backend data, not "
-            "glossary vocabulary; call get_territorial_index_list for that instead."
+            "the platform or define a specific index (e.g. 'Indice di ricettività', "
+            "'Carico antropico') — those are backend data, not glossary vocabulary; "
+            "call get_territorial_index_list for that instead."
         ),
         parameters=[
             ToolParameter(

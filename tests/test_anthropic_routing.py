@@ -82,6 +82,18 @@ GOLDEN_CASES = [
         id="glossary_lookup",
     ),
     pytest.param(
+        "Puoi darmi la definizione di Carico antropico per gli indici territoriali?",
+        "get_territorial_index_list",
+        [],
+        id="territorial_index_definition_in_context",
+    ),
+    pytest.param(
+        "Puoi darmi la definizione di Carico antropico?",
+        "get_territorial_index_list",
+        [],
+        id="territorial_index_definition_without_context",
+    ),
+    pytest.param(
         "What can this system do?",
         "get_system_capabilities",
         [],

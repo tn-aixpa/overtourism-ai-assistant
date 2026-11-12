@@ -161,7 +161,7 @@ SUB_INDEX_QUERY = "index_query"
 SUB_INDEX_METHODOLOGY = "index_methodology"
 
 INDEXES_SUBLEVEL_LABELS: Dict[str, str] = {
-    SUB_INDEX_LIST: "Which territorial indexes exist and what they cover",
+    SUB_INDEX_LIST: "Existing territorial indexes: definitions, descriptions and covered periods",
     SUB_INDEX_MAP: "Visualize a specific territorial index on the map for a period",
     SUB_INDEX_PLOT: "Plot a territorial index as a line/bar chart (trend over time, compare areas)",
     SUB_INDEX_QUERY: "Numeric questions about an index's values: the value for named municipalities, or which/how many municipalities are above/below a value",

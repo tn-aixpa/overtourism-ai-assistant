@@ -170,6 +170,12 @@ def test_territorial_index_guidelines_do_not_import_modelling_territories():
         for _, body in GUIDELINE_BLOCKS["indexes"]
     )
 
+    assert "definizione di Carico antropico" in index_guidelines
+    assert "do not use lookup_glossary or web_search" in index_guidelines
+    assert (
+        "do not substitute the short summary for a requested definition"
+        in index_guidelines
+    )
     assert "query_type='summary'" in index_guidelines
     assert "do not ask for a named municipality or the colour legend" in index_guidelines
     assert "query_territorial_index_plot" in index_guidelines
@@ -456,6 +462,39 @@ class TestTopicRouter:
         assert 'second_level "index_query"' in prompt
         assert result["top_level"] == route_groups.TOP_INDEXES
         assert result["second_level"] == route_groups.SUB_INDEX_QUERY
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Puoi darmi la definizione di Carico antropico per gli indici territoriali?",
+            "Puoi darmi la definizione di Carico antropico?",
+        ],
+    )
+    def test_existing_index_definition_is_routed_to_catalog_not_glossary(
+        self, fresh_state: AgentState, message: str
+    ):
+        fresh_state.add_user_message(message)
+        response = json.dumps({
+            "top_level": route_groups.TOP_INDEXES,
+            "topic_changed": True,
+            "second_level": route_groups.SUB_INDEX_LIST,
+        })
+
+        with patch.object(
+            routing_module, "llm_interaction", return_value=response
+        ) as interact:
+            result = routing_module.classify_route(fresh_state, None, None)
+
+        prompt = interact.call_args.args[1]
+        assert '"index_list": Existing territorial indexes: definitions' in prompt
+        assert "EXISTING named index means, measures" in prompt
+        assert "even if they omit the words \"index\" or" in prompt
+        assert "NEW territorial index belong to" in prompt
+        assert result["top_level"] == route_groups.TOP_INDEXES
+        assert result["second_level"] == route_groups.SUB_INDEX_LIST
+        assert route_groups.resolve_allowed_tools(
+            result["top_level"], result["second_level"]
+        ) == {"get_territorial_index_list"}
 
     def test_unclear_top_level_pauses_for_clarification(
         self, fresh_state: AgentState
