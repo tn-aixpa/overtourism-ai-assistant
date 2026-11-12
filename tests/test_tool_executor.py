@@ -319,9 +319,7 @@ class TestGetToolExecutor:
         "tool_name",
         [
             "get_system_capabilities",
-            "list_available_problems",
-            "list_available_proposals",
-            "list_available_scenarios",
+            "list_available_entities",
             "get_context_ids",
             "get_context_details",
             "get_base_scenario",

@@ -80,10 +80,10 @@ class TestListAvailableEntities:
         assert set(out) == {"problems"}
         assert fakes["proposals"].calls == [] and fakes["scenarios"].calls == []
 
-    def test_singular_and_legacy_names_are_understood(self, monkeypatch, state):
+    def test_singular_and_plural_names_are_understood(self, monkeypatch, state):
         self._fakes(monkeypatch)
         out = entities_exec.execute_list_available_entities(
-            state, entity_types=["proposal", "list_available_scenarios"]
+            state, entity_types=["proposal", "scenarios"]
         )
         assert set(out) == {"proposals", "scenarios"}
 
@@ -104,12 +104,16 @@ class TestListAvailableEntities:
         with pytest.raises(RuntimeError, match="Could not retrieve"):
             entities_exec.execute_list_available_entities(state)
 
-    def test_legacy_tool_names_go_through_the_same_wrapper(self, monkeypatch, state):
-        """A persisted session may still call list_available_problems."""
-        _ensure_tool_registry()
-        self._fakes(monkeypatch)
-        result = te.execute_selected_tool("list_available_problems", {}, state)
-        assert result["success"] is True
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "list_available_problems",
+            "list_available_proposals",
+            "list_available_scenarios",
+        ],
+    )
+    def test_retired_tool_names_have_no_executor(self, tool_name):
+        assert te.get_tool_executor(tool_name) is None
 
 
 # ---------------------------------------------------------------------------

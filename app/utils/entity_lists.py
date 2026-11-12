@@ -19,9 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Union
 
 ENTITY_TYPES: tuple[str, ...] = ("problems", "proposals", "scenarios")
 LIST_TOOL_NAME = "list_available_entities"
-
-# Result keys used before the three list tools were merged.
-_LEGACY_LIST_TOOLS: Dict[str, str] = {
+_LEGACY_LIST_RESULT_TYPES = {
     "list_available_problems": "problems",
     "list_available_proposals": "proposals",
     "list_available_scenarios": "scenarios",
@@ -29,13 +27,10 @@ _LEGACY_LIST_TOOLS: Dict[str, str] = {
 
 
 def _entity_type_from_token(token: Any) -> Optional[str]:
-    """Map 'problem', 'Problems', 'list_available_problems', ... to the
-    canonical plural entity type, or None if it isn't recognised."""
+    """Map a singular or plural entity type to its canonical plural form."""
     if not isinstance(token, str):
         return None
     text = token.strip().lower()
-    if text in _LEGACY_LIST_TOOLS:
-        return _LEGACY_LIST_TOOLS[text]
     if text in ENTITY_TYPES:
         return text
     if text + "s" in ENTITY_TYPES:
@@ -50,9 +45,9 @@ def normalize_entity_types(
     list of canonical types.
 
     Accepts None, a single string or an iterable of strings, tolerating
-    singular/plural and the legacy tool names. ``None`` / empty means "all
-    three" when ``default_all`` is true. Raises ValueError for anything
-    unrecognised, naming the valid values so the model can correct itself.
+    singular/plural forms. ``None`` / empty means "all three" when
+    ``default_all`` is true. Raises ValueError for anything unrecognised,
+    naming the valid values so the model can correct itself.
     """
     if value is None or value == [] or value == "":
         return list(ENTITY_TYPES) if default_all else []
@@ -107,8 +102,8 @@ def collect_listed_entities(
                     and isinstance(items, list)
                 ):
                     found[entity_type] = items
-        elif base_name in _LEGACY_LIST_TOOLS and isinstance(output, list):
-            entity_type = _LEGACY_LIST_TOOLS[base_name]
+        elif base_name in _LEGACY_LIST_RESULT_TYPES and isinstance(output, list):
+            entity_type = _LEGACY_LIST_RESULT_TYPES[base_name]
             if entity_type in wanted and entity_type not in found:
                 found[entity_type] = output
 

@@ -24,12 +24,8 @@ from app.agent.state import TIERS_REQUIRING_CONSENT
 from app.tools.tool_registry import _ensure_tool_registry
 from app.tools.tool_schema import ALL_SESSION_MODES, ALL_USER_ROLES
 
-# Registered and enabled, but deliberately not part of any route group: they
-# only exist for backward compatibility (persisted state / old prompts) and
-# share an executor with list_available_entities. If you add a NEW tool and
-# forget its route group this test fails; if you retire one of these, delete
-# it from here.
-LEGACY_UNROUTED = {
+# Retired aliases replaced by list_available_entities.
+RETIRED_LIST_TOOLS = {
     "list_available_problems",
     "list_available_proposals",
     "list_available_scenarios",
@@ -79,20 +75,16 @@ class TestRegistryConsistency:
 
     def test_every_enabled_tool_is_reachable_from_some_route(self, tools):
         unrouted = {n for n in tools if n not in _routed_tool_names()}
-        assert unrouted == LEGACY_UNROUTED, (
-            f"Unrouted tools changed. New (unreachable by the reasoner): "
-            f"{sorted(unrouted - LEGACY_UNROUTED)}; no longer unrouted: "
-            f"{sorted(LEGACY_UNROUTED - unrouted)}"
-        )
+        assert not unrouted, f"Unrouted tools: {sorted(unrouted)}"
 
     def test_every_enabled_tool_has_an_executor(self, tools):
         missing = [n for n in tools if get_tool_executor(n) is None]
         assert not missing, f"tools without an executor: {missing}"
 
-    def test_legacy_list_tools_share_the_entities_executor(self):
-        shared = get_tool_executor("list_available_entities")
-        for name in LEGACY_UNROUTED:
-            assert get_tool_executor(name) is shared
+    def test_retired_list_tools_are_not_registered_or_executable(self, tools):
+        for name in RETIRED_LIST_TOOLS:
+            assert name not in tools
+            assert get_tool_executor(name) is None
 
     def test_tool_names_descriptions_and_categories_are_filled_in(self, tools):
         for name, tool in tools.items():

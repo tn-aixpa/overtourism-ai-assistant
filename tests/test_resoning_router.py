@@ -986,12 +986,12 @@ class TestToolSelectionTable:
         "tool_name,arguments",
         [
             ("get_system_capabilities", {}),
-            ("list_available_problems", {}),
+            ("list_available_entities", {"entity_types": ["problems"]}),
             (
                 "get_context_ids",
                 {
                     "user_intent": "overtourism",
-                    "source_tools": ["list_available_problems"],
+                    "source_tools": ["list_available_entities"],
                 },
             ),
             ("analyze_scenario_results", {"query": "what is the KPI?"}),
