@@ -38,7 +38,7 @@ else:
 # STARTUP VALIDATION
 # ---------------------------------------------------------------------------
 # Config the app cannot function without.
-REQUIRED_ENV_VARS = ["BACKEND_URL", "ANTHROPIC_API_KEY"]
+REQUIRED_ENV_VARS = ["BACKEND_URL"]
 
 
 def validate_environment() -> None:
