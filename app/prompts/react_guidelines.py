@@ -88,7 +88,29 @@ UNIVERSAL_PRE: List[Block] = [
         "ON-TOPIC CHECK",
         "The platform covers tourism management, overtourism, mobility, problems, "
         "proposals, scenarios, and related decision-support. If the message is "
-        "clearly about something else, finish with a message saying so.",
+        "clearly about something else (a recipe, sport, trivia, programming, "
+        "weather, personal trip planning...), do NOT answer any part of it, not "
+        "even briefly or as a courtesy: finish with finish_type 'decline' and an "
+        "empty message. A previously on-topic conversation does not make an "
+        "unrelated request acceptable.",
+    ),
+    (
+        "FINISH MESSAGES ARE NEVER A SOURCE OF KNOWLEDGE",
+        "Your finish message may ONLY (a) restate what Observations of this turn, "
+        "prior tool results or the context lines literally contain, (b) ask the "
+        "user a clarifying question, or (c) briefly say something is unavailable. "
+        "It must NEVER contain facts, explanations, definitions, advice or "
+        "instructions taken from your own knowledge — that content is produced "
+        "only by tools. When the request is on-topic but nothing above can "
+        "ground it, follow this ladder and stop at the first step that fits: "
+        "(1) lookup_glossary for a term or concept; (2) explain_workflow for a "
+        "process, methodology or how-to (methodological tier, grounded in the "
+        "workflow document); (3) if the glossary/workflow don't cover it, or the "
+        "user wants a broader explanation, idea or clarification of what a "
+        "concept means, call general_question_response when it is listed (or "
+        "web_search for verifiable external facts); (4) if none of these tools "
+        "is listed, finish with finish_type 'needs_general_knowledge' and an "
+        "empty message — never write the answer yourself.",
     ),
     (
         "TOOL AVAILABILITY",

@@ -33,6 +33,7 @@ from langgraph.types import Command
 
 from app.agent.state import AgentState
 from app.agent.nodes import route_groups as rg
+from app.agent.nodes.guardrail import decline_off_topic
 from app.prompts.routing import classify_route
 from app.tools.tool_registry import get_tool_registry
 
@@ -238,6 +239,8 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
 
         classification = classify_route(state, None, None)
         top_level = classification["top_level"]
+        if top_level == rg.TOP_OFF_TOPIC:
+            return decline_off_topic(state, "ROUTE_CLARIFICATION", "off_topic reply")
         if top_level in rg.TOP_LEVEL_LABELS:
             state.cognitive.pending_route_clarification = None
             state.waiting_for = None
@@ -262,6 +265,8 @@ def resolve_clarification_reply(state: AgentState, level: str) -> Command:
 
     classification = classify_route(state, current_top, None)
     classified_top = classification["top_level"]
+    if classified_top == rg.TOP_OFF_TOPIC:
+        return decline_off_topic(state, "ROUTE_CLARIFICATION", "off_topic reply")
     if (
         classification["topic_changed"]
         and classified_top in rg.TOP_LEVEL_LABELS
@@ -357,6 +362,14 @@ def top_level_router_node(state: AgentState) -> Command:
     top_level = classification["top_level"]
     topic_changed = classification["topic_changed"]
     second_level = classification["second_level"]
+
+    # TOPIC GUARDRAIL. Checked before anything else and independently of
+    # topic_changed / the persisted route: a message is judged by its own
+    # subject, so an on-topic conversation never makes an off-topic request
+    # (a pizza recipe) acceptable. The persisted route is left untouched, so
+    # the user can pick the on-topic conversation back up on the next message.
+    if top_level == rg.TOP_OFF_TOPIC:
+        return decline_off_topic(state, "TOP_LEVEL_ROUTER", "classifier: off_topic")
 
     # No persisted route yet, or the classifier says this message doesn't
     # belong to the current one anymore: (re)decide top_level from the

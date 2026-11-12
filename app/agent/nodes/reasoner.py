@@ -28,6 +28,11 @@ from app.tools.tool_registry import (
 )
 from app.prompts.react_reasoning import react_step
 from app.utils.territory import switch_territory_if_requested
+from app.agent.nodes import route_groups as rg
+from app.agent.nodes.guardrail import (
+    decline_off_topic,
+    escalate_to_general_knowledge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +137,7 @@ def initialize_tools(state: AgentState) -> Command:
     state.cognitive.pending_thought = ""
     state.cognitive.tool_confirmation_needed = False
     state.cognitive.tool_confirmed = False
+    state.cognitive.guardrail_decline = False
     # A forced role determines this turn's response tier; otherwise
     # active_agent starts at EXECUTOR and rises to the highest-tier tool
     # actually used. This is reset every fresh turn so a previous turn's
@@ -148,6 +154,25 @@ def initialize_tools(state: AgentState) -> Command:
     # across turns — see top_level_router_node for when it re-asks vs.
     # keeps the session's current route.
     return Command(update=state, goto="top_level_router")
+
+
+# Routes whose answers can ONLY come from a tool call this turn. In
+# location/indexes a finish may legitimately restate prior tool results or
+# the context lines (e.g. the territory list), so those are not enforced here.
+_TOOL_ONLY_ROUTES = {rg.TOP_SYSTEM_INFO, rg.TOP_GENERAL}
+
+
+def message_preview(response_json: dict, limit: int = 200) -> str:
+    return str(response_json.get("message") or "")[:limit]
+
+
+def _has_grounding_observation(state: AgentState) -> bool:
+    """True if at least one tool ran successfully earlier in THIS turn."""
+    for step in state.cognitive.scratchpad:
+        obs = step.observation
+        if step.tool_name and obs is not None and obs.get("success") is not False:
+            return True
+    return False
 
 
 def react_reasoner_node(state: AgentState) -> Command:
@@ -262,6 +287,52 @@ def react_reasoner_node(state: AgentState) -> Command:
         return Command(update=state, goto="tool_executor")
 
     # action == "finish" (or anything else we don't recognise -> finish safely)
+    #
+    # A finish message is relayed to the user by the EXECUTOR persona, which
+    # trusts it as "tool data". So it must not be a back door for answers the
+    # model wrote from its own knowledge (the pizza-recipe leak). The model
+    # declares what kind of finish it is; the two non-answer kinds are
+    # handled deterministically here, and an "answer from data" with no data
+    # behind it on a tool-only route is treated as needing general knowledge.
+    finish_type = str(response_json.get("finish_type") or "").strip()
+    if finish_type not in {
+        "answer_from_data",
+        "clarification",
+        "decline",
+        "needs_general_knowledge",
+    }:
+        # Missing/unknown label (older prompt, model slip): a message that
+        # only asks something is a clarification, anything else is an answer
+        # and must therefore be grounded like one.
+        finish_type = (
+            "clarification"
+            if str(response_json.get("message") or "").rstrip().endswith("?")
+            else "answer_from_data"
+        )
+
+    if finish_type == "decline":
+        return decline_off_topic(state, "REACT_REASONER", "reasoner: decline")
+
+    if finish_type == "needs_general_knowledge":
+        return escalate_to_general_knowledge(state, "REACT_REASONER", thought)
+
+    if (
+        finish_type == "answer_from_data"
+        and state.cognitive.top_level_route in _TOOL_ONLY_ROUTES
+        and not _has_grounding_observation(state)
+        and not state.cognitive.last_failed_action
+    ):
+        logger.warning(
+            "Ungrounded finish on a tool-only route; discarding the drafted "
+            "message and escalating instead of relaying it"
+        )
+        state.add_trace(
+            "guardrail_ungrounded_finish",
+            "react_reasoner",
+            {"route": state.cognitive.top_level_route, "dropped": message_preview(response_json)},
+        )
+        return escalate_to_general_knowledge(state, "REACT_REASONER", thought)
+
     message = response_json.get("message") or "Could you clarify your request?"
     state.cognitive.messages_to_include = [message]
     logger.info(f"ReAct loop finishing: {message}")

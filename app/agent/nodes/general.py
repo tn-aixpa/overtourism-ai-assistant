@@ -166,6 +166,7 @@ def generate_output_message_node(state: AgentState) -> Command:
         state.cognitive.tool_result = None
 
     state.cognitive.messages_to_include = []
+    state.cognitive.guardrail_decline = False
 
     return Command(update=state, goto=END)
 

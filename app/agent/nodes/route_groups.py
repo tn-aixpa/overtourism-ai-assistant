@@ -35,6 +35,10 @@ TOP_SYSTEM_INFO = "system_info"
 TOP_LOCATION = "location"
 TOP_INDEXES = "indexes"
 TOP_GENERAL = "general"
+# Guardrail verdict, NOT a routable domain: it is deliberately absent from
+# TOP_LEVEL_LABELS (so it never shows up in a clarification menu) and from
+# every tool table. The router short-circuits on it and declines the turn.
+TOP_OFF_TOPIC = "off_topic"
 
 TOP_LEVEL_LABELS: Dict[str, str] = {
     TOP_SYSTEM_INFO: "General system information (what the platform can do, glossary/terminology, analysis workflow/methodology)",
@@ -44,16 +48,23 @@ TOP_LEVEL_LABELS: Dict[str, str] = {
     ),
     TOP_INDEXES: "Territorial indexes/indicators for the whole region",
     TOP_GENERAL: (
-        "An on-topic question needing external facts or a broad answer, "
-        "not covered by platform data"
+        "An on-topic (tourism management) question that no platform tool, "
+        "glossary entry or workflow document covers: broader explanations, "
+        "concepts, ideas, or external facts"
     ),
 }
 
 # ---- Level 1: SYSTEM_INFO -------------------------------------------------
+# system_info may ESCALATE to the exploitative tier when the glossary and the
+# workflow document don't cover what was asked (the system_info guideline
+# already tells the reasoner to "fall back to general_question_response").
+# Without it in the allowlist that fallback was impossible, so the reasoner
+# ended up writing the answer itself in a plain "finish" message.
 _SYSTEM_INFO_TOOLS: Set[str] = {
     "get_system_capabilities",
     "lookup_glossary",
     "explain_workflow",
+    "general_question_response",
 }
 
 # ---- Level 1: GENERAL (delegate to the exploitative tier) -----------------

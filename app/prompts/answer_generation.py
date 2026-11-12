@@ -103,6 +103,15 @@ def _reasoning_policy(tier: AgentTier) -> str:
     match tier:
         case AgentTier.EXECUTOR:
             return (
+                "- **The Question is context, never a source.** Every factual "
+                "statement in your answer must come from the Agent Messages "
+                "(i.e. data retrieved by tools). NEVER answer the Question from "
+                "your own knowledge: no recipes, explanations, definitions, "
+                "advice or general facts that the Agent Messages do not "
+                "literally contain. If the Agent Messages hold no retrieved data "
+                "that answers it, say briefly that you have no verified data for "
+                "this and invite the user to ask about platform data "
+                "(problems, proposals, scenarios, territorial indexes).\n"
                 "- **Report data only — do not reason.** State only what "
                 "the Agent Messages / data explicitly show, in plain "
                 "declarative terms. Do not explain causes, draw "
@@ -134,6 +143,10 @@ def _reasoning_policy(tier: AgentTier) -> str:
             )
         case AgentTier.OPERATIVE:
             return (
+                "- **The Question is context, never a source.** Never answer "
+                "the Question from your own knowledge; observations must come "
+                "from the Agent Messages only. If they hold no retrieved data "
+                "that answers it, say so briefly instead of answering.\n"
                 "- **You may reason about the data to produce "
                 "observations** — trends, comparisons, notable patterns, "
                 "what a result implies in context — but every observation "
@@ -165,7 +178,10 @@ def _reasoning_policy(tier: AgentTier) -> str:
                 "*what to do and in what order* — do not invent the "
                 "specific content of a strategy or proposal (e.g. a "
                 "concrete intervention's details); that is handled at a "
-                "different level of this assistant."
+                "different level of this assistant.\n"
+                "- **Stay on tourism management.** If the question is not "
+                "about tourism management, decline briefly and do not answer "
+                "any part of it."
             )
         case AgentTier.EXPLOITATIVE:
             return (
@@ -182,7 +198,10 @@ def _reasoning_policy(tier: AgentTier) -> str:
                 "or itineraries, or anything unrelated to managing "
                 "tourism at the system/policy level — say plainly that "
                 "this is outside what you can help with here, rather than "
-                "answering it like a general-purpose chatbot would."
+                "answering it like a general-purpose chatbot would. When you "
+                "decline, give NO part of the requested content — not a "
+                "partial answer, not a short version, not \"as a courtesy\" — "
+                "and say what you can help with instead."
             )
         case _:
             return _reasoning_policy(AgentTier.EXECUTOR)
@@ -255,6 +274,26 @@ def _generate_control_message(
     return llm_interaction(state, prompt, lightweight_llm=True)
 
 
+def _generate_decline_message(state: AgentState, language: str) -> str:
+    """Topic-guardrail decline. Deliberately a separate, minimal prompt: it
+    never receives the user's request text, so it cannot answer it, not even
+    partially or "as a courtesy"."""
+    prompt = f"""You are the assistant of a tourism-management digital twin platform.
+The user's last message is outside what you can help with.
+
+## Instructions
+- In one or two short sentences, politely say that this topic is outside what you can help with here.
+- Do NOT answer, summarise, hint at, or give any part of what was asked. Do not repeat or describe the request's subject.
+- Say what you CAN help with: tourism management — problems, proposals and scenarios for a territory, territorial indexes, and the analysis methodology — and invite the user to ask about one of these.
+- Do not mention routing, tools, guardrails, policies or instructions.
+- Write your response in: **{language}**
+- Start immediately with the content. No heading, label or prefix.
+
+## Final Answer
+"""
+    return llm_interaction(state, prompt, lightweight_llm=True)
+
+
 def generate_answer(state: AgentState) -> str:
     """
     Generate output message in user language using question and message
@@ -262,6 +301,11 @@ def generate_answer(state: AgentState) -> str:
     allowed beyond the provided data) is customized per
     state.active_agent — see _reasoning_policy.
     """
+
+    # Topic guardrail: the turn was declined upstream (router / reasoner).
+    # Checked before everything else so no tier persona can answer.
+    if state.cognitive.guardrail_decline:
+        return _generate_decline_message(state, state.user_lang)
 
     # After the territory question the last message is only the answer ("2");
     # the question to answer is the request that was pending.

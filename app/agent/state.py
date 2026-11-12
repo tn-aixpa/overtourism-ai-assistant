@@ -268,6 +268,12 @@ class CognitiveState:
     # "second" — tells WAIT_USER_INPUT which menu (and matching logic) to
     # resume with. None the rest of the time.
     pending_route_clarification: Optional[str] = None
+    # True for the current turn only when the topic guardrail decided the
+    # message is outside tourism management (see agent/nodes/guardrail.py).
+    # generate_answer then produces a plain decline in the user's language
+    # and no tier persona gets a chance to answer the question. Reset at the
+    # start of every fresh turn (initialize_tools) and after the output is built.
+    guardrail_decline: bool = False
     # True while the turn is paused asking the user which territory to use
     # (see tool_executor_node's territory gate and waiting.py's
     # _handle_territory_wait). The tool that triggered the question stays in
