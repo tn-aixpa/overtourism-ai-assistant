@@ -9,20 +9,12 @@ dependencies = [
     "fastapi>=0.128.0",
     "httpx>=0.28.1",
     "langchain>=1.2.0",
-    "langchain-community>=0.4.1",
-    "langchain-openai>=1.1.11",
     "langgraph>=1.0.5",
     "openai>=2.26.0",
-    "pandas>=2.3.3",
-    "pillow>=12.1.1",
-    "plotly>=6.6.0",
     "pyjwt>=2.13.0",
-    "pytest>=9.0.2",
+    "python-dotenv>=1.2.4",
     "python-multipart>=0.0.22",
-    "reportlab>=5.0.0",
     "requests>=2.32.5",
-    "streamlit>=1.54.0",
-    "typing-extensions>=4.15.0",
     "uvicorn>=0.40.0",
 ]
 [project.optional-dependencies]
@@ -34,4 +26,9 @@ log = [
     "opentelemetry-instrumentation-httpx==0.66b2",
     "opentelemetry-instrumentation-requests==0.66b2",
     "opentelemetry-instrumentation-logging==0.66b2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
 ]
