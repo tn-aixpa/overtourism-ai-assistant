@@ -193,6 +193,11 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
     """Translate a tool result into messages for the output generator."""
 
     if not tool_result.get("success", True):
+        if tool_name in {
+            "show_territorial_index_plot",
+            "query_territorial_index_plot",
+        }:
+            return ["No verified data is available for the requested period."]
         error = tool_result.get("error", "An unknown error occurred.")
         return [f"The operation failed: {error}"]
 
@@ -298,9 +303,18 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
             return lines
 
         case "show_territorial_index_plot":
+            if not output.get("success", True):
+                return ["No verified data is available for the requested period."]
+            # Missing-series diagnostics are useful internally, but should not
+            # be presented as part of the chart interpretation.
             lines = [output.get("response", "The requested chart was shown.")]
             summary = output.get("plot_summary")
             if summary:
+                summary = {
+                    key: value
+                    for key, value in summary.items()
+                    if key != "territories_without_data"
+                }
                 lines.append(
                     f"Chart parameters: {truncate_for_prompt(summary, max_chars=1000)}"
                 )
@@ -326,15 +340,19 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
 
         case "query_territorial_index_plot":
             if not output.get("success", True):
-                return [
-                    output.get(
-                        "response", "No plot data was returned for this query."
-                    )
-                ]
+                return ["No verified data is available for the requested period."]
+            summary = dict(output)
+            plot_summary = summary.get("plot_summary")
+            if isinstance(plot_summary, dict):
+                summary["plot_summary"] = {
+                    key: value
+                    for key, value in plot_summary.items()
+                    if key != "territories_without_data"
+                }
             return [
                 "Territorial index plot summary (computed from the plotted data; "
                 "use ONLY these figures): "
-                f"{truncate_for_prompt(output, max_chars=5000)}"
+                f"{truncate_for_prompt(summary, max_chars=5000)}"
             ]
 
         case "get_configuration_parameters":

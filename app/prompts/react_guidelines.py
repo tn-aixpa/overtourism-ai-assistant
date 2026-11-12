@@ -463,7 +463,11 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "constant series, trend, and how series differ). After the chart, "
             "describe the result using ONLY the figures in series_summary; never "
             "invent values, months or trends that are not in it. If "
-            "series_summary is absent, only describe what was plotted.\n\n"
+            "series_summary is absent, only describe what was plotted. Never "
+            "include data-retrieval diagnostics, backend responses, readability "
+            "checks, missing-series metadata, or a section summarizing retrieval "
+            "messages in the user-facing answer. If successful series are present, "
+            "do not mention failed auxiliary retrievals.\n\n"
             "  - show_territorial_index_plot is disabled outside standalone mode. "
             'Only treat it as absent if it appears under "Tools that exist but are '
             'NOT available in this execution mode"; otherwise do not claim a mode '
