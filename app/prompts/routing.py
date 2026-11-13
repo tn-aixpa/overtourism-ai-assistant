@@ -152,6 +152,25 @@ than one. Only use an array when each named sub-area is individually
 unambiguous; if even one part is vague, use "unclear" for the whole field
 instead of guessing which sub-areas were meant.
 
+ASSISTANT AGENTS. Questions about the assistant itself - which agents/levels/
+modes it has (esecutore/executor, operativo, metodologico, esplorativo,
+automatico), what each one does, how they differ - are "system_info" (they are
+about what the assistant can do), never "general" and never "off_topic".
+
+METHODOLOGY FOR A NEW DESTINATION. Questions about HOW to approach, model or set
+up the analysis of a NEW tourist destination/locality/territory, or about the
+steps to follow to model a tourism problem (e.g. "se volessi effettuare la
+modellazione di una nuova destinazione turistica cosa dovrei fare?", "come si
+modella una nuova località?", "da dove parto per analizzare una nuova
+destinazione?") are process/methodology questions: top_level "system_info"
+(second_level null), NOT "location" and NOT "general". The word "destinazione"
+there does not refer to existing platform data, it refers to the modelling
+process. Choose "location" only when the user wants to see, create or change
+actual problems, proposals or scenarios of a territory that already exists on
+the platform. Choose "general" for modelling-related questions only when they
+are clearly not about this platform's workflow (e.g. external facts, other
+tools).
+
 If the message clearly fits more than one top-level domain heuristically,
 prefer the most specific: e.g. a question about a named territorial index
 is "indexes", not "system_info", even though indexes are technically part

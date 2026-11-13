@@ -165,6 +165,28 @@ def strip_assistant_action_data(result: Any) -> Any:
     return clean
 
 
+# Tools whose result the reasoner must be able to read in full WHILE the turn
+# that produced it is in progress (e.g. to judge whether a workflow document
+# covers the question and, if not, escalate), but which should not keep that
+# size once the turn is over. Applied only to the current turn's scratchpad
+# (see _max_chars_for_scratchpad); the long-term "prior results" block keeps the
+# normal, smaller budget so this never adds to the size of later turns' prompts.
+_SCRATCHPAD_ONLY_BUDGET_TOOLS = {
+    # modeling workflow document is ~7.2k chars; the index-design one is ~22k
+    # and is cut (boundary-aware, with an explicit note) at this budget.
+    "explain_workflow": 8000,
+}
+
+
+def _max_chars_for_scratchpad(tool_name: str | None, default: int) -> int:
+    """Budget for a result shown in the CURRENT turn's scratchpad."""
+    if tool_name:
+        base_name = tool_name.split("__", 1)[0]
+        if base_name in _SCRATCHPAD_ONLY_BUDGET_TOOLS:
+            return _SCRATCHPAD_ONLY_BUDGET_TOOLS[base_name]
+    return _max_chars_for_tool(tool_name, default)
+
+
 def _max_chars_for_tool(tool_name: str | None, default: int) -> int:
     """Look up the prompt-injection char budget for a given tool/result key,
     stripping any '__N' collision suffix (see tool_executor's result_key)."""
@@ -350,6 +372,7 @@ def build_prior_results_block(
     tool_results: Dict[str, Any],
     max_entries: int = DEFAULT_MAX_RESULT_ENTRIES,
     max_chars_per_entry: int = DEFAULT_MAX_CHARS_PER_ENTRY,
+    exclude_keys: Optional[List[str]] = None,
 ) -> str:
     """Render `tool_results` for prompt injection with a hard size cap.
 
@@ -369,6 +392,12 @@ def build_prior_results_block(
     identically, so retry requests were being treated as already-satisfied.
     Failed keys are called out separately and explicitly marked retryable.
     """
+    # exclude_keys: results already shown elsewhere in the same prompt (the
+    # current turn's results are rendered in the scratchpad). Every result is
+    # stored in tool_results the moment it is produced, so without this each
+    # observation of the turn was sent to the LLM twice on every ReAct step.
+    excluded = set(exclude_keys or [])
+    tool_results = {k: v for k, v in tool_results.items() if k not in excluded}
     if not tool_results:
         return "None"
 

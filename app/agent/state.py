@@ -231,6 +231,12 @@ class CognitiveState:
     # which now passes); the router will set it to whatever node actually
     # starts that tier's reasoning loop once tiers exist as separate nodes.
     tier_consent_resume_goto: Optional[str] = None
+    # active_agent as it was before a consent request was shown. While the
+    # consent question is on screen the response is stamped with the gated
+    # tier (the user is being asked about THAT agent); this lets the previous
+    # tier be restored once the user answers, so a declined consent can never
+    # leave the rest of the turn answering under the gated tier's persona.
+    agent_before_consent: Optional[str] = None
 
     def has_valid_tier_consent(self, tier: str) -> bool:
         """Whether `tier` may be used without asking the user again right

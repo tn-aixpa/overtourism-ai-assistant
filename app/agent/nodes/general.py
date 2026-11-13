@@ -211,7 +211,12 @@ def _build_messages_from_tool_result(tool_name: str, tool_result: dict) -> list[
     match tool_name:
 
         case "get_system_capabilities":
-            return [output.get("system_description", "System description unavailable.")]
+            parts = [
+                output[key]
+                for key in ("system_description", "agents_description")
+                if output.get(key)
+            ]
+            return parts or ["System description unavailable."]
 
         case "explain_workflow":
             return [output.get("workflow_document", "Workflow document unavailable.")]

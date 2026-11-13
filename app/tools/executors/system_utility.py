@@ -178,16 +178,29 @@ def execute_web_search(
     return native_web_search(state, query)
 
 
-def execute_get_system_capabilities(state: AgentState, **kwargs) -> Dict[str, Any]:
-    """Execute get_system_capabilities tool."""
-    from app.utils.system_capabilities import SYSTEM_DESCRIPTION
+def execute_get_system_capabilities(
+    state: AgentState, topic: str = "overview", **kwargs
+) -> Dict[str, Any]:
+    """Execute get_system_capabilities tool.
+
+    topic="overview" (default): what the platform does.
+    topic="agents": what the assistant's capability levels (agents) are.
+    topic="all": both.
+    """
+    from app.utils.system_capabilities import AGENTS_DESCRIPTION, SYSTEM_DESCRIPTION
 
     logger.info("Executing get_system_capabilities tool")
 
-    return {
-        "success": True,
-        "system_description": SYSTEM_DESCRIPTION,
-    }
+    topic = (topic or "overview").strip().lower()
+    if topic not in {"overview", "agents", "all"}:
+        topic = "overview"
+
+    result: Dict[str, Any] = {"success": True, "topic": topic}
+    if topic in {"overview", "all"}:
+        result["system_description"] = SYSTEM_DESCRIPTION
+    if topic in {"agents", "all"}:
+        result["agents_description"] = AGENTS_DESCRIPTION
+    return result
 
 
 def execute_explain_workflow(

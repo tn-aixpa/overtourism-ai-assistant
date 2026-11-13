@@ -1026,8 +1026,6 @@ def execute_show_territorial_index_plot(
         state,
     )
 
-    logger.info(raw)
-
     missing = []
     if spatial_granularity != _LEVEL_PROVINCIA:
         # The backend silently drops territories it has no series for.

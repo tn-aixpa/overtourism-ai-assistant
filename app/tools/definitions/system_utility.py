@@ -62,14 +62,34 @@ def create_lookup_glossary_tool() -> ToolDefinition:
 def create_get_system_capabilities_tool() -> ToolDefinition:
     return ToolDefinition(
         name="get_system_capabilities",
-        description="Retrieve a description of the system and its capabilities",
+        description=(
+            "Retrieve a description of the system and its capabilities, or of the "
+            "assistant's capability levels (agents: esecutore, operativo, "
+            "metodologico, esplorativo, automatico)"
+        ),
         category=ToolCategory.DATA_RETRIEVAL,
         long_description=(
             "Returns a description of the system, its core concepts (problems, proposals, scenarios), "
             "allowed operations per context level, and which tools are available in each context. "
-            "Call this at startup or whenever clarification about system capabilities is needed."
+            "Call this at startup or whenever clarification about system capabilities is needed. "
+            "Use topic='agents' when the user asks what the different agents/levels/modes of the "
+            "assistant are (esecutore/executor, operativo, metodologico, esplorativo, automatico) "
+            "or what each of them can do."
         ),
-        parameters=[],
+        parameters=[
+            ToolParameter(
+                name="topic",
+                description=(
+                    "'overview' (default) for what the platform can do; 'agents' for the "
+                    "assistant's capability levels (agents) and the functionality of each; "
+                    "'all' for both."
+                ),
+                type="string",
+                required=False,
+                default="overview",
+                schema={"enum": ["overview", "agents", "all"]},
+            ),
+        ],
         output_description="System description, context rules, and available tools per context",
         tags=["data", "read-only", "system", "navigation"],
         agent_tier="operative",

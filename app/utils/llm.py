@@ -370,5 +370,20 @@ def llm_interaction(
 # =========================
 # UTILITIES
 # =========================
-def format_messages(messages):
-    return "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
+# Conversation history is re-sent in full on every LLM call of a turn (router,
+# each ReAct step, ...). Final answers are normally short, but nothing else
+# bounds them, so one very long earlier message would be repeated in every call.
+MAX_HISTORY_MESSAGE_CHARS = 1500
+
+
+def _cap_history_message(content: str, max_chars: int) -> str:
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars] + f"... [{len(content) - max_chars} chars omitted]"
+
+
+def format_messages(messages, max_chars_per_message: int = MAX_HISTORY_MESSAGE_CHARS):
+    return "\n".join(
+        f"{m['role'].upper()}: {_cap_history_message(str(m['content']), max_chars_per_message)}"
+        for m in messages
+    )

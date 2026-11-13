@@ -68,7 +68,14 @@ _SYSTEM_INFO_TOOLS: Set[str] = {
 }
 
 # ---- Level 1: GENERAL (delegate to the exploitative tier) -----------------
+# explain_workflow (methodological tier) is deliberately part of this domain
+# too: methodology questions are answered from the workflow documents first
+# (methodological agent preferred), and general_question_response (exploitative)
+# is only the fallback when those documents do not cover the question. Without
+# it, a methodology question that the router happened to label "general" could
+# only ever reach the exploitative tier.
 _GENERAL_TOOLS: Set[str] = {
+    "explain_workflow",
     "general_question_response",
     "web_search",
 }

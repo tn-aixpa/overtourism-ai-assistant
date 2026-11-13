@@ -2,7 +2,7 @@ from langgraph.types import Command
 import logging
 import re
 
-from app.agent.state import AgentState, ReActStep
+from app.agent.state import AgentState, AgentTier, ReActStep
 from app.agent.nodes.router import resolve_clarification_reply
 from app.utils.entity_lists import collect_listed_entities
 from app.utils.territory import match_territories, territory_question
@@ -341,6 +341,25 @@ def _handle_territory_wait(state: AgentState):
     return Command(update=state, goto="generate_output_message")
 
 
+def _stamp_consent_agent(state: AgentState, tier: str) -> None:
+    """Show the gated tier (e.g. explorative) as the agent of the consent
+    question itself, remembering the previous tier for _restore_agent_after_consent."""
+    try:
+        gated = AgentTier(tier)
+    except ValueError:
+        return
+    if state.cognitive.agent_before_consent is None:
+        state.cognitive.agent_before_consent = state.active_agent.value
+    state.active_agent = gated
+
+
+def _restore_agent_after_consent(state: AgentState) -> None:
+    previous = state.cognitive.agent_before_consent
+    state.cognitive.agent_before_consent = None
+    if previous:
+        state.active_agent = AgentTier(previous)
+
+
 def _handle_tier_consent_wait(state: AgentState):
     """
     Wait node for gated-tier access consent.
@@ -363,6 +382,7 @@ def _handle_tier_consent_wait(state: AgentState):
     if not state.user_input:
         state.cognitive.messages_to_include = [_tier_consent_instructions()]
         state.waiting_for = AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION
+        _stamp_consent_agent(state, tier)
         state.add_trace(
             "human_wait",
             node="WAIT_USER_INPUT",
@@ -376,6 +396,7 @@ def _handle_tier_consent_wait(state: AgentState):
     if _is_confirmation(user_input):
         logger.info(f"User granted access to tier '{tier}'")
         state.cognitive.grant_tier_consent(tier)
+        _restore_agent_after_consent(state)
         resume_goto = state.cognitive.tier_consent_resume_goto or "tool_executor"
         state.cognitive.pending_tier_consent = None
         state.cognitive.tier_consent_resume_goto = None
@@ -385,6 +406,7 @@ def _handle_tier_consent_wait(state: AgentState):
 
     if _is_cancellation(user_input):
         logger.info(f"User declined access to tier '{tier}' — continuing without it")
+        _restore_agent_after_consent(state)
         state.cognitive.scratchpad.append(
             ReActStep(
                 thought=state.cognitive.pending_thought,
@@ -419,6 +441,7 @@ def _handle_tier_consent_wait(state: AgentState):
         "whether I should use it?"
     ]
     state.waiting_for = AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION
+    _stamp_consent_agent(state, tier)
     state.user_input = None
     return Command(update=state, goto="generate_output_message")
 

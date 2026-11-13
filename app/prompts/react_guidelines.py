@@ -284,6 +284,17 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "no tool has been called yet this turn, call get_system_capabilities.",
         ),
         (
+            "ASSISTANT AGENTS / CAPABILITY LEVELS",
+            "If the user asks what the different agents, levels, roles or modes of "
+            'the assistant are (e.g. "quali sono i diversi agenti?", "che differenza c\'è '
+            'tra esecutore, operativo, metodologico, esplorativo e automatico?", '
+            '"cosa fa l\'agente operativo?"), or what each of them can do, call '
+            "get_system_capabilities with topic='agents' and nothing else: it returns "
+            "the complete description of every level and its functionality. This is "
+            "NOT a glossary lookup and NOT a general-knowledge question. Do not "
+            "answer it with finish.",
+        ),
+        (
             "DEFINITIONS",
             "If the user asks what a term means or uses vocabulary that might be a "
             'platform concept (e.g. "what is a scenario?", "what is a territorial '
@@ -312,9 +323,18 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "question is NOT the greeting/small-talk case above. Prefer "
             "explain_workflow over general_question_response whenever the "
             "question is about methodology/process/strategy-for-modelling-a-"
-            "problem, since it is grounded in the workflow reference document; "
-            "only fall back to general_question_response if explain_workflow's "
-            "document turns out not to cover what was asked.\n\n"
+            "problem, since it is grounded in the workflow reference document. "
+            "This explicitly includes questions about how to model, set up or "
+            "start the analysis of a NEW tourist destination/locality/territory "
+            '(e.g. "se volessi effettuare la modellazione di una nuova destinazione '
+            'turistica cosa dovrei fare?"): they are methodology questions, not '
+            "requests for platform data, so use explain_workflow "
+            "(workflow_type='modeling') FIRST. Only AFTER explain_workflow has run "
+            "and its document, as shown in the Observation, clearly does not cover "
+            "the specific aspect the user asked about, call "
+            "general_question_response as the fallback (it needs the user's "
+            "consent, which is requested automatically). If the document covers "
+            "the question, finish without calling it.\n\n"
             "When describing how the concepts are organised, use exactly this "
             "structure: Problema (also called 'ambito di analisi' — the same "
             "entity, not two steps) -> Proposta -> Scenario. A Scenario IS the "
@@ -855,7 +875,12 @@ GUIDELINE_BLOCKS: Dict[str, List[Block]] = {
             "general_question_response only for broad, creative, or opinion-based "
             "answers that do not need external verification. Before either, "
             "double-check the request is not better answered by platform data, "
-            "explain_workflow, or lookup_glossary.",
+            "explain_workflow, or lookup_glossary. If the question is about how "
+            "to approach, model or set up the analysis of a destination or "
+            "tourism problem (methodology/process), call explain_workflow FIRST "
+            "(workflow_type='modeling'): it is the preferred, grounded source. "
+            "Call general_question_response only if that document does not "
+            "cover what was asked.",
         ),
     ],
 }

@@ -15,7 +15,7 @@ from app.utils.common import (
     build_prior_results_block,
     condense_for_matching,
     truncate_for_prompt,
-    _max_chars_for_tool,
+    _max_chars_for_scratchpad,
 )
 from app.utils.territory import (
     display_territory,
@@ -94,7 +94,7 @@ def _format_scratchpad(scratchpad: List[ReActStep]) -> str:
             # "note" field, so the model knows more exist instead of
             # silently seeing less than what's really there.
             condensed = condense_for_matching(step.observation)
-            max_chars = _max_chars_for_tool(step.tool_name, 1200)
+            max_chars = _max_chars_for_scratchpad(step.tool_name, 1200)
             obs = truncate_for_prompt(condensed, max_chars)
             lines.append(f"Observation {i}: {obs}")
         elif step.status:
@@ -138,7 +138,12 @@ def react_step(
     role_unavailable_tool_names = role_unavailable_tool_names or []
 
     # Long-term memory (results from earlier turns this session).
-    prior_results_block = build_prior_results_block(state.cognitive.tool_results)
+    # Results produced by THIS turn are already in the scratchpad below: leave
+    # them out here so they are not sent twice.
+    prior_results_block = build_prior_results_block(
+        state.cognitive.tool_results,
+        exclude_keys=state.cognitive.current_turn_result_keys(),
+    )
     available_territories = (
         ", ".join(display_territory(name) for name in state.allowed_territories)
         if state.allowed_territories
