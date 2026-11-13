@@ -358,6 +358,52 @@ class TestGenerateOutputMessageNode:
             "No glossary entries found.",
         ]
 
+    def test_waiting_for_tier_consent_does_not_append_tool_results_or_sources(
+        self, fresh_state: AgentState
+    ):
+        prompt = "Do you want me to continue using unverified sources?"
+        fresh_state.waiting_for = AgentState.WaitingFor.TIER_ACCESS_CONFIRMATION
+        fresh_state.cognitive.messages_to_include = [prompt]
+        fresh_state.cognitive.tool_results.update(
+            {
+                "lookup_glossary": {
+                    "success": True,
+                    "output": {
+                        "matches": [
+                            {
+                                "term": "territorial index",
+                                "definition": "A glossary answer that must wait.",
+                            }
+                        ]
+                    },
+                },
+                "web_search": {
+                    "success": True,
+                    "output": {
+                        "answer": "A web answer that must wait.",
+                        "sources": [
+                            {"title": "Source", "url": "https://example.test"}
+                        ],
+                    },
+                },
+            }
+        )
+        fresh_state.cognitive.scratchpad = [
+            ReActStep(tool_name="lookup_glossary", observation_key="lookup_glossary"),
+            ReActStep(tool_name="web_search", observation_key="web_search"),
+        ]
+        captured = {}
+
+        def fake_generate_answer(state):
+            captured["messages"] = list(state.cognitive.messages_to_include)
+            return prompt
+
+        with patch.object(gn, "generate_answer", side_effect=fake_generate_answer):
+            gn.generate_output_message_node(fresh_state)
+
+        assert captured["messages"] == [prompt]
+        assert fresh_state.conversation.messages[-1].content == prompt
+
     def test_appends_messages_for_every_current_turn_result(
         self, fresh_state: AgentState
     ):

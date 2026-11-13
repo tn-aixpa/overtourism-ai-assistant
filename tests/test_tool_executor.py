@@ -544,6 +544,22 @@ class TestExecuteLookupGlossary:
         result = te.execute_lookup_glossary(fresh_state, query="scenario")
         assert "scenario" in _terms(result)
 
+    @pytest.mark.skipif(
+        not (_KNOWLEDGE_DIR / "glossary").exists(),
+        reason="knowledge/glossary bundle is not part of this checkout",
+    )
+    def test_real_glossary_distinguishes_territorial_granularity(
+        self, fresh_state: AgentState
+    ):
+        result = te.execute_lookup_glossary(
+            fresh_state, query="Granularità territororiale"
+        )
+        assert _terms(result) == {"territorial granularity"}
+        definition = result["matches"][0]["definition"]
+        assert "municipality (comune)" in definition
+        assert "tourism macro-area (APT)" in definition
+        assert "whole province (Provincia)" in definition
+
 
 # ---------------------------------------------------------------------------
 # tool_executor_node — high-level flow

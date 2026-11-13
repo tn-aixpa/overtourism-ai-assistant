@@ -16,8 +16,8 @@ This bundle is a single flat glossary — [glossary/](glossary/index.md) —
 read by one agent tool, `lookup_glossary`
 (`app.agent.nodes.tool_executor.execute_lookup_glossary`). Every concept is
 a `GlossaryTerm`: platform concepts (Problem, Proposal, Scenario, ...) and
-the territorial-indices framework's own vocabulary (currently just
-Territorial Index) are treated identically and cross-link via
+the territorial-indices framework's own vocabulary (Territorial Index and
+Territorial Granularity) are treated identically and cross-link via
 `related_terms`. Terms belonging to the territorial-indices framework carry
 a `territorial-index` tag if you need to filter to just those.
 

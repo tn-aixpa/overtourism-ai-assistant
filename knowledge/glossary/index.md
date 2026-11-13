@@ -26,3 +26,4 @@ other via `related_terms`.
 - [Scenario](scenario.md)
 - [Uncertainty](uncertainty.md)
 - [Territorial Index](territorial-index.md)
+- [Territorial Granularity](territorial-granularity.md)

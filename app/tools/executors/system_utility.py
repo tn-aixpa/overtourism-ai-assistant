@@ -98,8 +98,11 @@ def execute_lookup_glossary(
         )
         searchable_lower = " ".join(s.lower() for s in searchable)
 
-        if any(_token_matches(tok, searchable_lower) for tok in tokens):
-            matches[term] = entry
+        matched_tokens = {
+            token for token in tokens if _token_matches(token, searchable_lower)
+        }
+        if matched_tokens:
+            matches[term] = (len(matched_tokens), entry)
 
     if not matches:
         return {
@@ -110,6 +113,16 @@ def execute_lookup_glossary(
             ),
             "matches": [],
         }
+
+    # Keep the most specific entries while retaining ties (including related
+    # terms). This avoids returning a broad one-word overlap when the query
+    # names a more precise multiword concept.
+    best_score = max(score for score, _ in matches.values())
+    matches = {
+        term: entry
+        for term, (score, entry) in matches.items()
+        if score == best_score
+    }
 
     # Format for readability in the output generator
     formatted = []

@@ -11,6 +11,6 @@ tags: [glossary, platform-concept, territorial-index]
 
 # Territorial Index
 
-Territorial indexes represent different touristic metrics in the whole Trentino region. Each territorial index combines different measurable phenomena (e.g. touristic presences, number of beds, population, etc.), furthermore, indexes can also be combined among them to provide richer phenomenon descriptions.
+Territorial indexes represent different touristic metrics in the whole Trentino region. Each territorial index combines different measurable phenomena (e.g. touristic presences, number of beds, population, etc.), furthermore, indexes can also be combined among them to provide richer phenomenon descriptions. An index can be viewed at different territorial granularities — the geographic level at which its values are grouped — such as a municipality, a tourism macro-area (APT), or the whole province.
 
 The concrete list of available indexes (with their descriptions and the years each covers) is not static: it comes from the backend and is retrieved with the `get_territorial_index_list` tool, not from this glossary entry.

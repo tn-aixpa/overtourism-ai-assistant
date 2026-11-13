@@ -103,11 +103,12 @@ def generate_output_message_node(state: AgentState) -> Command:
     # calling it alongside analyze_scenario_results in the same turn (as
     # the scenario_analysis guideline requires) needs BOTH the widget
     # confirmation and the actual analysis text to reach the user — losing
-    # the latter defeated the pairing. Building these unconditionally and
-    # appending them (instead of replacing the wrap-up line) keeps that
-    # lead-in while restoring the actual data behind it.
+    # the latter defeated the pairing. On a normal response path, appending
+    # these (instead of replacing the wrap-up line) keeps that lead-in while
+    # restoring the actual data behind it. During a human wait, however, only
+    # the control message is shown; observations remain available after resume.
     current_turn_result_keys = state.cognitive.current_turn_result_keys()
-    if current_turn_result_keys:
+    if current_turn_result_keys and not state.waiting_for:
         messages: list[str] = list(state.cognitive.messages_to_include)
         turn_tools = [k.split("__", 1)[0] for k in current_turn_result_keys]
         # get_territorial_index_list is only a lookup step when the turn also
@@ -135,7 +136,9 @@ def generate_output_message_node(state: AgentState) -> Command:
 
     try:
         output_message = generate_answer(state)
-        sources = _current_turn_web_search_sources(state)
+        sources = (
+            _current_turn_web_search_sources(state) if not state.waiting_for else []
+        )
         if sources:
             output_message = f"{output_message}\n\nSources:\n" + "\n".join(
                 f"- [{source.get('title') or source['url']}]({source['url']})"
