@@ -283,7 +283,8 @@ def react_reasoner_node(state: AgentState) -> Command:
         state.cognitive.tool_arguments = arguments
         state.cognitive.pending_thought = thought
 
-        logger.info(f"ReAct action decided: {tool_name}({arguments})")
+        logger.info(f"ReAct action decided: {tool_name}")
+        logger.debug(f"ReAct action arguments: {tool_name}({arguments})")
         return Command(update=state, goto="tool_executor")
 
     # action == "finish" (or anything else we don't recognise -> finish safely)

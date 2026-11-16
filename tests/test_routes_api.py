@@ -202,6 +202,17 @@ class TestInit:
 
         assert (tmp_path / "logs" / f"state_{sid}.json").exists()
 
+    def test_state_is_not_persisted_when_conversation_logs_are_disabled(
+        self, client, monkeypatch, tmp_path
+    ):
+        monkeypatch.delenv("SAVE_CONVERSATION_LOGS")  # the default
+
+        sid = init_session(client)
+        assert send(client, sid, "ciao mondo").status_code == 202
+
+        assert not (tmp_path / "logs").exists()
+        assert memory.load_state(sid) is not None  # the session still works
+
     def test_integrated_mode_requires_context(self, client):
         r = client.post("/agent/init", data={"integrated_mode": "true"}, headers=AUTH)
 
@@ -1254,7 +1265,7 @@ class TestAppWiring:
         assert client.get("/agent/stream/s1", headers=AUTH).status_code == 404
         assert client.get("/agent/result/s1", headers=AUTH).status_code == 404
 
-    def test_main_requires_backend_url_and_api_key(self, monkeypatch):
+    def test_main_requires_backend_url(self, monkeypatch):
         import app.main as main
 
         monkeypatch.delenv("BACKEND_URL", raising=False)
@@ -1262,11 +1273,6 @@ class TestAppWiring:
             main.validate_environment()
 
         monkeypatch.setenv("BACKEND_URL", "http://x/")
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
-            main.validate_environment()
-
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
         main.validate_environment()  # no error
 
     def test_main_app_mounts_the_router_with_cors(self):

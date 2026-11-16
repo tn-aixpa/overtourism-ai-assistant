@@ -286,7 +286,7 @@ def get_single_scenario(scenario_id: str, territory, cleaned: bool = True) -> di
     if not cleaned:
         return extracted_data
 
-    logger.info(extracted_data)
+    logger.debug(extracted_data)
 
     cleaned_data = {
         "scenario_id": extracted_data["scenario_id"],
@@ -380,12 +380,12 @@ def create_temp_scenario(
     eval_url = f"{territory}/sessions/{creation_session}/evaluations/{created_eval["evaluation_id"]}/data"
     raw_data = get_data(eval_url)
 
-    logger.info(f"Step 3.1 Raw eval results {raw_data}")
+    logger.debug(f"Step 3.1 Raw eval results {raw_data}")
 
     cleaned = clean_scenario(raw_data)
     cleaned["creation_session"] = creation_session
 
-    logger.info(f"Step 3.2 cleaned {cleaned}")
+    logger.debug(f"Step 3.2 cleaned {cleaned}")
 
     return cleaned
 
@@ -727,7 +727,7 @@ def edit_scenario(
         "extras": existing.get("extras", {"additionalProp1": {}}),
     }
 
-    logger.info(body)
+    logger.debug(body)
 
     return put_data(url, json=body)
 

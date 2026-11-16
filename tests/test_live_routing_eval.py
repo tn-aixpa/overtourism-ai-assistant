@@ -440,7 +440,7 @@ live = pytest.mark.skipif(
 @pytest.fixture
 def real_llm(monkeypatch, tmp_path):
     (tmp_path / "logs").mkdir(exist_ok=True)
-    monkeypatch.chdir(tmp_path)  # llm_interaction writes logs/temp.txt
+    monkeypatch.chdir(tmp_path)  # token accounting writes logs/tokens_usage.csv
     monkeypatch.setenv("ANTHROPIC_API_KEY", LIVE_KEY)
     from app.utils import llm as llm_module
 

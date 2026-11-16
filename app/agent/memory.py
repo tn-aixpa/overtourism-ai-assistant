@@ -4,6 +4,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from app.agent.state import AgentState
+from app.utils.settings import save_conversation_logs_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,13 @@ def remember_state(state: AgentState) -> None:
 
 
 def persist_state(state: AgentState) -> None:
-    """Slow disk dump (debug/audit copy). Never call on the event loop or before the turn is finished (store.finish)."""
+    """Slow disk dump (debug/audit copy). Never call on the event loop or before the turn is finished (store.finish).
+
+    A no-op unless SAVE_CONVERSATION_LOGS is enabled (see app.utils.settings):
+    the in-memory state (remember_state) is what the app actually relies on.
+    """
+    if not save_conversation_logs_enabled():
+        return
     state.dump_to_file(f"logs/state_{state.session_id}.json")
 
 

@@ -304,7 +304,8 @@ def _handle_territory_wait(state: AgentState):
         return Command(update=state, goto="generate_output_message")
 
     user_input = state.user_input.strip()
-    logger.info(f"User replied to territory question: '{user_input}'")
+    logger.info("User replied to territory question")
+    logger.debug(f"Territory question reply: '{user_input}'")
 
     matches = match_territories(user_input, allowed)
     if len(matches) == 1:
@@ -391,7 +392,8 @@ def _handle_tier_consent_wait(state: AgentState):
         return Command(update=state, goto="generate_output_message")
 
     user_input = state.user_input.strip()
-    logger.info(f"User replied to tier-consent request ('{tier}'): '{user_input}'")
+    logger.info(f"User replied to tier-consent request ('{tier}')")
+    logger.debug(f"Tier-consent reply: '{user_input}'")
 
     if _is_confirmation(user_input):
         logger.info(f"User granted access to tier '{tier}'")

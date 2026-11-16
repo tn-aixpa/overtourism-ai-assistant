@@ -10,6 +10,12 @@ ENV UV_CACHE_DIR=/app/.cache/uv
 ENV UV_PYTHON_INSTALL_DIR=/app/.uv/python
 ENV UV_PYTHON=3.12
 
+# Runtime switches (override at run time, e.g. `docker run -e LOG_LEVEL=DEBUG`).
+# Save conversations to /app/logs (state_<session>.json): true | false
+ENV SAVE_CONVERSATION_LOGS=false
+# Console log verbosity: DEBUG | INFO | WARNING | ERROR | CRITICAL
+ENV LOG_LEVEL=INFO
+
 # Install system dependencies required to compile Python packages
 RUN apk add --no-cache \
     build-base \

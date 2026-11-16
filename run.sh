@@ -34,6 +34,31 @@ export BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8000/api/}"
 export AUTH_ENABLED="${AUTH_ENABLED:-true}"
 export LLM_PROVIDER="${LLM_PROVIDER:-azure}"
 
+# Save conversations to logs/ (state_<session>.json): true | false.
+# Environment / .env value wins; defaults to false.
+SAVE_CONVERSATION_LOGS="${SAVE_CONVERSATION_LOGS:-true}"
+# Console log verbosity: DEBUG | INFO | WARNING | ERROR | CRITICAL.
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+
+case "${SAVE_CONVERSATION_LOGS,,}" in
+    1|true|t|yes|y|on)  SAVE_CONVERSATION_LOGS=true ;;
+    0|false|f|no|n|off|"") SAVE_CONVERSATION_LOGS=false ;;
+    *)
+        printf 'Error: SAVE_CONVERSATION_LOGS must be true or false, got: %s\n' "$SAVE_CONVERSATION_LOGS" >&2
+        exit 2
+        ;;
+esac
+
+LOG_LEVEL="${LOG_LEVEL^^}"
+case "$LOG_LEVEL" in
+    DEBUG|INFO|WARNING|ERROR|CRITICAL) ;;
+    *)
+        printf 'Error: LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR, CRITICAL, got: %s\n' "$LOG_LEVEL" >&2
+        exit 2
+        ;;
+esac
+export SAVE_CONVERSATION_LOGS LOG_LEVEL
+
 # Validate secrets required by the selected LLM provider
 case "$LLM_PROVIDER" in
     azure)

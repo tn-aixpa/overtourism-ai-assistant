@@ -1,7 +1,7 @@
 """
 Shared pytest fixtures.
 
-Required env vars (BACKEND_URL, ANTHROPIC_API_KEY) are set here, at session
+The required env var (BACKEND_URL) is set here, at session
 start, before anything under `app` is imported — several modules
 (app.tools.backend_tools) read them at import time.
 """
@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 os.environ.setdefault("BACKEND_URL", "http://backend.test/")
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -29,6 +28,26 @@ def _reset_tool_registry():
     tool_registry_module.reset_tool_registry()
     yield
     tool_registry_module.reset_tool_registry()
+
+
+@pytest.fixture(autouse=True)
+def _clean_runtime_env(monkeypatch):
+    """SAVE_CONVERSATION_LOGS / LOG_LEVEL (app.utils.settings) are read from the
+    environment. Start every test from the defaults (conversation logs off, no
+    explicit level) so a developer's shell or .env can't change the outcome.
+    Tests that need a switch set it themselves (see `save_logs`)."""
+    monkeypatch.delenv("SAVE_CONVERSATION_LOGS", raising=False)
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    # No test needs a provider key (LLM clients are mocked); make sure a real
+    # one from the developer's shell can never reach a test.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_API_KEY", raising=False)
+
+
+@pytest.fixture
+def save_logs(monkeypatch):
+    """Enable SAVE_CONVERSATION_LOGS for the test."""
+    monkeypatch.setenv("SAVE_CONVERSATION_LOGS", "true")
 
 
 @pytest.fixture
@@ -68,6 +87,9 @@ def api_env(monkeypatch, tmp_path):
 
     # state dumps (logs/state_<sid>.json) must not pollute the repo
     monkeypatch.chdir(tmp_path)
+    # These tests exercise the on-disk dump, which is off by default. Tests of
+    # the disabled case unset the variable themselves.
+    monkeypatch.setenv("SAVE_CONVERSATION_LOGS", "true")
 
     ns = types.SimpleNamespace(
         auth_delay=0.0,

@@ -42,7 +42,7 @@ class TestSaveState:
         with pytest.raises(ValueError, match="must have a session_id"):
             memory.save_state(state)
 
-    def test_save_state_persists_and_dumps_to_file(self, tmp_path):
+    def test_save_state_persists_and_dumps_to_file(self, tmp_path, save_logs):
         cwd = os.getcwd()
         os.chdir(tmp_path)
         try:
@@ -102,7 +102,7 @@ class TestRememberVsPersist:
             memory.remember_state(AgentState(session_id=""))
 
     def test_persist_state_writes_the_file_but_does_not_register_the_state(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, save_logs
     ):
         monkeypatch.chdir(tmp_path)
         state = AgentState(session_id="s1")
@@ -130,7 +130,7 @@ class TestRememberVsPersist:
         assert memory.load_state("a") is None
         assert memory.load_state("b") is b
 
-    def test_persisted_state_contains_the_conversation(self, tmp_path, monkeypatch):
+    def test_persisted_state_contains_the_conversation(self, tmp_path, monkeypatch, save_logs):
         monkeypatch.chdir(tmp_path)
         state = AgentState(session_id="s1")
         state.add_user_message("ciao mondo")
@@ -138,3 +138,52 @@ class TestRememberVsPersist:
         memory.persist_state(state)
 
         assert "ciao mondo" in (tmp_path / "logs" / "state_s1.json").read_text()
+
+
+class TestSaveConversationLogsFlag:
+    """SAVE_CONVERSATION_LOGS gates the disk dump only; the in-memory state the
+    app relies on is always kept."""
+
+    @pytest.mark.parametrize("value", [None, "", "false", "0", "no", "off", "garbage"])
+    def test_nothing_is_written_unless_enabled(self, tmp_path, monkeypatch, value):
+        monkeypatch.chdir(tmp_path)
+        if value is not None:
+            monkeypatch.setenv("SAVE_CONVERSATION_LOGS", value)
+        state = AgentState(session_id="s1")
+        state.add_user_message("ciao mondo")
+
+        memory.save_state(state)
+        memory.persist_state(state)
+
+        assert not (tmp_path / "logs").exists()
+        assert memory.load_state("s1") is state  # still remembered in memory
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "1", "yes", "on"])
+    def test_written_when_enabled(self, tmp_path, monkeypatch, value):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("SAVE_CONVERSATION_LOGS", value)
+        state = AgentState(session_id="s1")
+        state.add_user_message("ciao mondo")
+
+        memory.persist_state(state)
+
+        assert "ciao mondo" in (tmp_path / "logs" / "state_s1.json").read_text()
+
+    def test_switch_is_read_on_every_call(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        state = AgentState(session_id="s1")
+
+        memory.persist_state(state)
+        assert not (tmp_path / "logs").exists()
+
+        monkeypatch.setenv("SAVE_CONVERSATION_LOGS", "true")
+        memory.persist_state(state)
+        assert (tmp_path / "logs" / "state_s1.json").exists()
+
+    def test_disabled_does_not_even_build_the_dump(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(AgentState, "dump_to_file", lambda self, p: calls.append(p))
+
+        memory.persist_state(AgentState(session_id="s1"))
+
+        assert calls == []

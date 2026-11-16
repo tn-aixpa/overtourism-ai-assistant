@@ -30,9 +30,9 @@ def _merge_auth_headers(headers: dict | None) -> dict:
 def _log_response(response: requests.Response) -> None:
     logger.info(f"Response status: {response.status_code}")
     try:
-        logger.info(f"Response body: {response.json()}")
+        logger.debug(f"Response body: {response.json()}")
     except Exception:
-        logger.info(f"Response text: {response.text}")
+        logger.debug(f"Response text: {response.text}")
 
 
 def get_data(url_string, headers=None, params=None):

@@ -275,7 +275,7 @@ def execute_summary_generation(
     )
 
     answer = generate_summary(state, scenario_ids, glossary_matches)
-    logger.info(f"Answer: {answer}")
+    logger.debug(f"Answer: {answer}")
     return {
         "success": True,
         "message": answer,

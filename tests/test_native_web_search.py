@@ -104,3 +104,25 @@ def test_native_search_rejects_unsupported_provider(monkeypatch):
     monkeypatch.setattr(llm, "LLM_PROVIDER", "unknown")
     with pytest.raises(llm.RequestHandlingException, match="not supported"):
         llm.native_web_search(AgentState(session_id="search-session"), "query")
+
+
+class TestNoPromptDumpOnDisk:
+    """llm_interaction used to write every prompt to logs/temp.txt (a debug
+    leftover). Prompts are conversation content: they must never hit the disk,
+    whatever SAVE_CONVERSATION_LOGS says."""
+
+    @pytest.mark.parametrize("flag", [None, "false", "true"])
+    def test_llm_interaction_writes_no_files(self, monkeypatch, tmp_path, flag):
+        monkeypatch.chdir(tmp_path)
+        if flag is not None:
+            monkeypatch.setenv("SAVE_CONVERSATION_LOGS", flag)
+        monkeypatch.setattr(llm, "LLM_PROVIDER", "anthropic")
+        monkeypatch.setattr(
+            llm, "_call_primary_anthropic", lambda *a, **k: ("an answer", "model-x")
+        )
+        state = AgentState(session_id="s")
+
+        assert llm.llm_interaction(state, "SECRET PROMPT") == "an answer"
+
+        assert not (tmp_path / "logs").exists()
+        assert list(tmp_path.iterdir()) == []
